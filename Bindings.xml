@@ -1,0 +1,16 @@
+<Bindings>
+	<Binding name="WANDERER_REVEAL" runOnUp="true" header="WANDERER">
+		Wanderer_Reveal(keystate)
+	</Binding>
+	<Binding name="WANDERER_JOURNAL">
+		Wanderer_ToggleJournal()
+	</Binding>
+	<Binding name="WANDERER_PHOTO">
+		Wanderer_TogglePhoto()
+	</Binding>
+	<Binding name="WANDERER_MESSAGES">
+		Wanderer_ToggleMessages()
+	</Binding>
+	<Binding name="CLICK WandererCampfire:LeftButton">
+	</Binding>
+</Bindings>

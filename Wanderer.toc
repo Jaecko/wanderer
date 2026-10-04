@@ -1,0 +1,72 @@
+## Interface: 16001
+## Title: Wanderer
+## Notes: Immersion and comfort for your journey: hidden names, a rich mouseover label, quiet conversation scenes, a travel journal and many small comforts.
+## Notes-frFR: Immersion et confort pour votre voyage : noms cachés, étiquette de survol, conversations en scènes, carnet de voyage et mille petits conforts.
+## Notes-deDE: Immersion und Komfort für deine Reise: verborgene Namen, ein reichhaltiges Mouseover-Schildchen, ruhige Gesprächsszenen, ein Reisetagebuch und viele kleine Annehmlichkeiten.
+## Notes-esES: Inmersión y comodidad para tu viaje: nombres ocultos, una etiqueta rica al pasar el ratón, conversaciones como escenas tranquilas, un diario de viaje y muchas pequeñas comodidades.
+## Notes-esMX: Inmersión y comodidad para tu viaje: nombres ocultos, una etiqueta rica al pasar el ratón, conversaciones como escenas tranquilas, un diario de viaje y muchas pequeñas comodidades.
+## Notes-itIT: Immersione e comodità per il tuo viaggio: nomi nascosti, un'etichetta ricca al passaggio del mouse, conversazioni come scene tranquille, un diario di viaggio e tante piccole comodità.
+## Notes-ptBR: Imersão e conforto para a sua jornada: nomes ocultos, uma etiqueta rica ao passar o mouse, conversas como cenas tranquilas, um diário de viagem e muitos pequenos confortos.
+## Notes-ruRU: Погружение и комфорт в вашем путешествии: скрытые имена, подробная метка при наведении, разговоры как спокойные сцены, путевой дневник и множество мелких удобств.
+## Notes-koKR: 여행을 위한 몰입과 편의: 숨겨진 이름, 풍부한 마우스오버 라벨, 조용한 장면으로 보는 대화, 여행 일지, 그리고 여러 작은 편의 기능.
+## Notes-zhCN: 为你的旅程带来沉浸与便利：隐藏姓名、丰富的鼠标悬停标签、安静的对话场景、旅行日志以及许多贴心的小功能。
+## Notes-zhTW: 為你的旅程帶來沉浸與便利：隱藏名稱、豐富的滑鼠懸停標籤、安靜的對話場景、旅行日誌以及許多貼心的小功能。
+## Category: Immersion
+## Category-frFR: Immersion
+## Version: 0.34.0
+## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
+## SavedVariables: WandererDB
+## AddonCompartmentFunc: Wanderer_OnAddonCompartmentClick
+
+Locales.lua
+Locales\frFR.lua
+Locales\deDE.lua
+Locales\esES.lua
+Locales\itIT.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\koKR.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+Util.lua
+Core.lua
+Quests.lua
+Skin.lua
+World.lua
+Toast.lua
+Session.lua
+Label.lua
+TargetLabel.lua
+Tagging.lua
+Plates.lua
+Threat.lua
+TargetInfo.lua
+Minimap.lua
+Cinema.lua
+Tooltips.lua
+Merchant.lua
+Mail.lua
+Loot.lua
+Trainer.lua
+Dialogues.lua
+Social.lua
+Screen.lua
+Sounds.lua
+Fishing.lua
+Gestures.lua
+Chat.lua
+Messages.lua
+Copy.lua
+GameFrames.lua
+Curtain.lua
+Away.lua
+Clean.lua
+Icons.lua
+Journal.lua
+Scene.lua
+Camera.lua
+Themes.lua
+Welcome.lua
+News.lua
+Preview.lua
+Options.lua
