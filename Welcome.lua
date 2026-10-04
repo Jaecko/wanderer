@@ -41,24 +41,44 @@ local TIPS = {
 	{ "Interface\\Icons\\INV_Misc_Note_01", "WELCOME_TIP_COMMAND" },
 }
 
--- Ways to play: each sets the names above heads and the options that go with
--- it; everything stays free to change afterwards.
+-- Ways to play: each one sets the same whole set of options (names, scenes,
+-- the interface fading, the ambiance while away, quest automations, gestures),
+-- so going from one to another never leaves something of the first behind.
+-- Merchants, loot, the label's content and the journal are everyone's: left
+-- as they are. Everything stays free to change afterwards.
+local function Way(preset, values)
+	local all = {
+		["combatEnemies"] = false, ["zones.dungeon"] = "balanced", ["zones.raid"] = "balanced",
+		["scene.enabled"] = true, ["scene.camera"] = true,
+		["cinema.enabled"] = false, ["cinema.combatOnly"] = true, ["cinema.alpha"] = 20,
+		["travel.enabled"] = true, ["away.enabled"] = false,
+		["world.cleanMinimap"] = false, ["world.cleanTracker"] = false, ["world.gatherIcons"] = false,
+		["quest.autoAccept"] = false, ["quest.autoTurnIn"] = false, ["quest.skipGossip"] = false,
+		["gestures.read"] = false, ["gestures.levelUp"] = false, ["gestures.greet"] = false,
+	}
+	for path, value in pairs(values) do all[path] = value end
+	return { preset = preset, values = all }
+end
+
 ns.PLAYSTYLES = {
-	immersion = { preset = "immersion", values = {
-		["cinema.enabled"] = true, ["cinema.combatOnly"] = true, ["scene.enabled"] = true, ["scene.camera"] = true,
-		["travel.enabled"] = true, ["label.enabled"] = true, ["world.cleanMinimap"] = true,
-		["world.cleanTracker"] = true } },
-	adventurer = { preset = "balanced", values = {
+	-- No names, face to face, an interface that steps aside, an ambiance while away.
+	immersion = Way("immersion", {
+		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "contemplation",
+		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true }),
+	-- Enemies named, quests without delay, the whole interface at hand.
+	adventurer = Way("balanced", {
+		["scene.enabled"] = false, ["scene.camera"] = false, ["cinema.combatOnly"] = false,
 		["quest.autoAccept"] = true, ["quest.autoTurnIn"] = true, ["quest.skipGossip"] = true,
-		["merchant.sellJunk"] = true, ["merchant.repair"] = true, ["loot.fast"] = true,
-		["scene.enabled"] = false, ["cinema.enabled"] = false } },
-	roleplay = { preset = "immersion", values = {
-		["scene.enabled"] = true, ["scene.camera"] = true, ["gestures.read"] = true, ["gestures.levelUp"] = true,
-		["gestures.greet"] = true, ["cinema.enabled"] = true, ["travel.enabled"] = true,
-		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true,
-		["quest.autoAccept"] = false, ["quest.autoTurnIn"] = false } },
-	dungeons = { preset = "balanced", values = {
-		["zones.dungeon"] = "all", ["zones.raid"] = "all", ["cinema.enabled"] = false } },
+		["merchant.sellJunk"] = true, ["merchant.repair"] = true, ["loot.fast"] = true }),
+	-- No names, quiet scenes, a character who lives, resting by the fire while away.
+	roleplay = Way("immersion", {
+		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "hearth",
+		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
+		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true }),
+	-- Every name in dungeons and raids, the whole interface, threat at a glance.
+	dungeons = Way("balanced", {
+		["zones.dungeon"] = "all", ["zones.raid"] = "all", ["cinema.combatOnly"] = false,
+		["scene.camera"] = false, ["threat.show"] = true, ["threat.alert"] = true }),
 }
 
 local function Path(path)
@@ -70,7 +90,7 @@ function ns.ApplyPlaystyle(key)
 	if not style then return end
 	for path, value in pairs(style.values) do
 		local section, field = Path(path)
-		ns.db[section][field] = value
+		if section then ns.db[section][field] = value else ns.db[path] = value end
 	end
 	ns.db.enabled = true
 	ns.SetPreset(style.preset) -- refreshes every module

@@ -901,6 +901,7 @@ end
 
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererJournal", "DIALOG")
+	ns.Skin.Sounds(window, "IG_SPELLBOOK_OPEN", "IG_SPELLBOOK_CLOSE") -- a book, as the game's
 	window:SetSize(WIDTH, HEIGHT)
 	window:SetPoint("CENTER")
 	window:EnableMouse(true)
@@ -937,6 +938,8 @@ local function CreateWindow()
 	end
 	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
+	-- Closed directly, never through the game's panel manager (locked during a fight).
+	close:SetScript("OnClick", function() window:Hide() end)
 	window.headerRule = window:CreateTexture(nil, "ARTWORK")
 	window.headerRule:SetColorTexture(1, 0.82, 0, 0.25)
 	window.headerRule:SetHeight(1)
@@ -977,7 +980,7 @@ local function CreateWindow()
 
 	-- Escape closes it, like the game's windows.
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererJournal") end
-	window:SetScript("OnShow", function(self)
+	window:HookScript("OnShow", function(self)
 		self:SetScale(ns.Skin.Scale())
 		FillHeader()
 		Fill()

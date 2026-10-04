@@ -2,9 +2,10 @@ local _, ns = ...
 local L = ns.L
 
 -- Copy the chat: the game's chat can't be selected. This window shows the
--- last lines of the chat tab in view as plain text (no colors, icons or link
--- codes), already selected: Ctrl+C copies them. Opened from Wanderer's menu
--- or /wanderer copy; Escape closes it. Lines the game keeps secret are left
+-- last lines of the chat tab in view (or of the tab whose copy button was
+-- clicked) as plain text (no colors, icons or link codes), already selected:
+-- Ctrl+C copies them. Opened from the chat's copy button, Wanderer's menu or
+-- /wanderer copy; Escape closes it. Lines the game keeps secret are left
 -- out.
 
 local U = ns.Util
@@ -22,8 +23,8 @@ local function Plain(text)
 	return text
 end
 
-local function ChatLines()
-	local frame = SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME or ChatFrame1
+local function ChatLines(frame)
+	frame = frame or SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME or ChatFrame1
 	local lines = {}
 	if not (frame and frame.GetNumMessages and frame.GetMessageInfo) then return lines end
 	local count = frame:GetNumMessages() or 0
@@ -36,6 +37,7 @@ end
 
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererCopy", "DIALOG")
+	ns.Skin.Sounds(window, "IG_CHARACTER_INFO_OPEN", "IG_CHARACTER_INFO_CLOSE")
 	window:SetSize(WIDTH, HEIGHT)
 	window:SetPoint("CENTER")
 	window:EnableMouse(true)
@@ -55,6 +57,8 @@ local function CreateWindow()
 	hint:SetText(L.COPY_HINT)
 	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
+	-- Closed directly, never through the game's panel manager (locked during a fight).
+	close:SetScript("OnClick", function() window:Hide() end)
 	local scroll = CreateFrame("ScrollFrame", "WandererCopyScroll", window, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
 	scroll:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin - 22, margin)
@@ -68,9 +72,9 @@ local function CreateWindow()
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererCopy") end
 end
 
-function ns.CopyChat()
+function ns.CopyChat(frame)
 	if not window then CreateWindow() end
-	box:SetText(table.concat(ChatLines(), "\n"))
+	box:SetText(table.concat(ChatLines(type(frame) == "table" and frame or nil), "\n"))
 	window:SetScale(ns.Skin.Scale())
 	window:Show()
 	ns.Skin.Get(window):Layout()

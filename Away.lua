@@ -6,14 +6,16 @@ local L = ns.L
 -- chat stays: someone may talk to you) and a quiet card names your character.
 --   contemplation  the camera turns slowly around your character;
 --   hearth         by the fire: your character sits and rests; the camera
---                  faces them, a little aside, a few yards away, down on the
---                  ground looking up. The game's own campfire can burn in
+--                  faces them, a little aside, a few yards away. The game's
+--                  own campfire can burn in
 --                  front of them: a key of Wanderer lights it (the game's
 --                  "Basic Campfire") and settles you there. Nothing added;
 --   panorama       the camera steps far back and turns over the landscape;
 --   journal        a page of the journal: what you lived today.
--- The camera is kept in the game's memory (view 5) when the absence begins,
--- once, and glides back there softly when the ambiance ends. Moving the
+-- The camera only turns around your character (the free camera, as with the
+-- left mouse button: your character never turns) and changes its distance;
+-- Wanderer counts every degree and every yard it moved, and when the
+-- ambiance ends it turns them back, softly, to the camera you had. Moving the
 -- camera yourself (holding a mouse button to turn it, the wheel to zoom) or a
 -- key ends the ambiance at once; a mouse simply moved does not. Still away
 -- and quiet for a while, it comes back. The mark gone (moving, acting, /afk), everything is back. Never during
@@ -24,8 +26,9 @@ local Safe, Clean = U.Safe, U.Clean
 
 ns.AWAY_STYLES = { "contemplation", "hearth", "panorama", "journal" }
 
-local VIEW = 5 -- the game's camera memory (SaveView/SetView)
 local TURN_SPEED = 0.025 -- of the game's camera turning speed: slow, like a film
+local BACK_SPEED = 0.6 -- of the game's camera turning speed: the way back, soft but quick
+local FOLLOW = "cameraSmoothStyle" -- the game swinging the camera behind you as you walk: held still meanwhile
 local STEP_BACK = { contemplation = 3, panorama = 18 } -- yards
 local TURNING = { contemplation = true, panorama = true }
 local RESUME_AFTER = 30 -- seconds of calm, still away, before the ambiance comes back
@@ -35,16 +38,13 @@ local FADE_IN, FADE_OUT = 1.5, 0.6
 local TODAY_LINES = 8
 local CHECK_EVERY = 1
 
--- By the fire: facing the character, a little aside, a few yards away, down
--- on the ground looking up. Every move ends at a fixed place, so the framing
--- is the same each time: the distance from all the way in, the turn by an
--- exact angle (FlipCameraYaw), the height at the ground (the camera goes
--- down until the ground stops it: the game's own limit).
+-- By the fire: facing the character, a little aside, a few yards away. The
+-- distance is the same each time (from all the way in), the turn an exact
+-- angle. The height is left as it is: the game stops a lowered camera at the
+-- ground, and a move it stopped could not be undone exactly.
 local CLOSE = 11 -- yards: far enough for the character to sit near the horizon, high on the screen
 local ALL_THE_WAY = 50 -- yards
 local TURN = 165 -- degrees: facing them, a little aside (the fire in front of them seen too)
-local DOWN_FOR = 1.5 -- seconds: long enough to reach the ground from anywhere
-local LIFT_FOR = 0.05 -- seconds: then lifted a hair, looking less at the sky (the game moves fast here)
 local MOVE = 0.5 -- of the game's camera speeds: a slow, smooth move
 local SIT_AFTER = 0.3 -- seconds
 local CAMPFIRE = 818 -- the game's "Basic Campfire" (cooking)
@@ -56,10 +56,12 @@ local style -- the ambiance running, or nil
 local since -- when the absence began
 local paused = false -- away, but you are here: the ambiance waits
 local lastSign = 0 -- the last time you gave a sign
-local turning, viewSaved, zoomBefore = false, false, nil
+local zoomBefore -- your distance when the ambiance began
+local yaw = 0 -- degrees the ambiance turned the camera (right is positive), moves ended
+local spin -- the turn going on: direction, degrees a second, start, end
+local followBefore -- your setting, while Wanderer holds the camera still
 local moves = 0
 local cardAlpha, sinceCheck = 0, 0
-local viewKept = false -- the camera of before the absence, in the game's memory
 local settleAt, settledZoom -- the zoom of the ambiance, watched for the wheel
 
 local function Settings()
@@ -113,49 +115,71 @@ local function CameraSpeed(cvar, default)
 	return tonumber(Clean(Safe(GetCVar, cvar)) or "") or default
 end
 
--- A camera move of the game for some time (the game turns at a known speed).
-local function Move(start, stop, degrees, speedCVar, default)
-	if not (start and stop) then return end
-	local token = moves
-	Safe(start, MOVE)
-	C_Timer.After(degrees / (CameraSpeed(speedCVar, default) * MOVE), function()
-		if token == moves then Safe(stop) end
-	end)
+-- The turn going on, in degrees so far (never past its planned end).
+local function Turned()
+	if not spin then return 0 end
+	local elapsed = math.min(GetTime(), spin.ends or math.huge) - spin.start
+	return spin.dir * spin.rate * math.max(0, elapsed)
+end
+
+local function StopSpin()
+	if not spin then return end
+	yaw = yaw + Turned()
+	Safe(spin.dir > 0 and MoveViewRightStop or MoveViewLeftStop)
+	spin = nil
+end
+
+-- The camera turns around your character (dir 1: right, -1: left), for some
+-- degrees or until stopped. Without the game's turning moves: one exact cut.
+local function Spin(dir, speed, degrees)
+	StopSpin()
+	local start = dir > 0 and MoveViewRightStart or MoveViewLeftStart
+	local stop = dir > 0 and MoveViewRightStop or MoveViewLeftStop
+	if not (start and stop) then
+		if degrees and FlipCameraYaw then
+			Safe(FlipCameraYaw, dir * degrees)
+			yaw = yaw + dir * degrees
+		end
+		return
+	end
+	local rate = CameraSpeed("cameraYawMoveSpeed", 180) * speed
+	Safe(start, speed)
+	local now = GetTime()
+	spin = { dir = dir, rate = rate, start = now, ends = degrees and now + degrees / rate or nil }
+	if degrees then
+		local this = spin
+		C_Timer.After(degrees / rate, function() if spin == this then StopSpin() end end)
+	end
+end
+
+-- The game's camera following you while you walk: held still while the
+-- ambiance owns the camera (every turn is counted), given back after.
+local function HoldFollow(on)
+	if on and not followBefore then
+		followBefore = Clean(Safe(GetCVar, FOLLOW))
+		if ns.root then ns.root.awayFollow = followBefore end -- given back even after a crash
+		if followBefore and ns.WriteCVar then ns.WriteCVar(FOLLOW, "0") end
+	elseif not on and followBefore then
+		if ns.WriteCVar then ns.WriteCVar(FOLLOW, followBefore) end
+		followBefore = nil
+		if ns.root then ns.root.awayFollow = nil end
+	end
 end
 
 local function CameraAway()
 	moves = moves + 1
-	-- Kept to come back exactly there: once for the whole absence (a camera
-	-- moved during a pause is not the one to come back to).
-	if not viewKept then
-		viewKept = true
-		viewSaved = SaveView ~= nil and SetView ~= nil
-		if viewSaved then Safe(SaveView, VIEW) end
-		zoomBefore = Clean(Safe(GetCameraZoom))
-	end
+	-- Counted from the camera you have now: it is the one to come back to.
+	StopSpin()
+	yaw = 0
+	zoomBefore = Clean(Safe(GetCameraZoom))
+	HoldFollow(true)
 	settleAt, settledZoom = GetTime() + ZOOM_SETTLES, nil
 	if style == "hearth" then
 		if CameraZoomIn and CameraZoomOut then
 			Safe(CameraZoomIn, ALL_THE_WAY)
 			Safe(CameraZoomOut, CLOSE)
 		end
-		if FlipCameraYaw then
-			Safe(FlipCameraYaw, TURN)
-		else
-			Move(MoveViewRightStart, MoveViewRightStop, TURN, "cameraYawMoveSpeed", 180)
-		end
-		-- Down to the ground, where the game stops the camera.
-		if MoveViewDownStart and MoveViewDownStop then
-			local down = moves
-			Safe(MoveViewDownStart, MOVE)
-			C_Timer.After(DOWN_FOR, function()
-				if down ~= moves then return end
-				Safe(MoveViewDownStop)
-				if not (MoveViewUpStart and MoveViewUpStop) then return end
-				Safe(MoveViewUpStart, MOVE)
-				C_Timer.After(LIFT_FOR, function() if down == moves then Safe(MoveViewUpStop) end end)
-			end)
-		end
+		Spin(1, MOVE, TURN)
 		-- Seated, resting (the game does it only when it marks you away itself).
 		local token = moves
 		C_Timer.After(SIT_AFTER, function()
@@ -164,28 +188,34 @@ local function CameraAway()
 	end
 	local back = STEP_BACK[style]
 	if back and CameraZoomOut then Safe(CameraZoomOut, back) end
-	if TURNING[style] and MoveViewLeftStart then
-		Safe(MoveViewLeftStart, TURN_SPEED)
-		turning = true
-	end
+	if TURNING[style] then Spin(-1, TURN_SPEED) end
 end
 
--- Back behind the character in one cut (the game's view blend set to instant
--- for that moment), never a slow drift.
--- Back to the camera of before the absence, gliding softly (the game's own
--- move between views).
+-- Back to your camera: every degree turned back the shortest way, softly,
+-- and your distance; the game's following given back once it is there.
 local function CameraBack()
 	moves = moves + 1
-	for _, stop in ipairs({ MoveViewRightStop, MoveViewDownStop, MoveViewUpStop, turning and MoveViewLeftStop or nil }) do Safe(stop) end
-	turning = false
+	StopSpin()
 	settleAt, settledZoom = nil, nil
-	if viewSaved then
-		Safe(SetView, VIEW)
-	elseif zoomBefore and GetCameraZoom then
+	local turned = yaw % 360
+	if turned > 180 then turned = turned - 360 end
+	local done = moves
+	local wait = 0
+	if math.abs(turned) > 0.5 then
+		Spin(turned > 0 and -1 or 1, BACK_SPEED, math.abs(turned))
+		wait = math.abs(turned) / (CameraSpeed("cameraYawMoveSpeed", 180) * BACK_SPEED)
+	end
+	if zoomBefore and GetCameraZoom then
 		local now = Clean(Safe(GetCameraZoom))
 		if now and now > zoomBefore and CameraZoomIn then Safe(CameraZoomIn, now - zoomBefore) end
 		if now and now < zoomBefore and CameraZoomOut then Safe(CameraZoomOut, zoomBefore - now) end
 	end
+	C_Timer.After(wait + 0.2, function()
+		if done ~= moves then return end
+		StopSpin()
+		yaw = 0
+		HoldFollow(false)
+	end)
 end
 
 -- The ambiance ------------------------------------------------------------------------------
@@ -229,7 +259,6 @@ local function Finish(pause)
 	if not paused then
 		since = nil
 		keys:Hide()
-		viewKept, viewSaved, zoomBefore = false, false, nil
 	end
 end
 
@@ -247,6 +276,11 @@ end
 
 function ns.InitAway()
 	ns.InitCampfire()
+	-- A camera left held by a crash: your following setting comes back.
+	if ns.root and ns.root.awayFollow then
+		if ns.WriteCVar then ns.WriteCVar(FOLLOW, ns.root.awayFollow) end
+		ns.root.awayFollow = nil
+	end
 	card = ns.Skin.CreateWindow("WandererAwayCard", "DIALOG")
 	card:EnableMouse(false)
 	local margin = ns.Skin.Margin() + 14

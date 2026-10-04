@@ -13,10 +13,13 @@
 ## Notes-zhTW: 為你的旅程帶來沉浸與便利：隱藏名稱、豐富的滑鼠懸停標籤、安靜的對話場景、旅行日誌以及許多貼心的小功能。
 ## Category: Immersion
 ## Category-frFR: Immersion
-## Version: 0.34.0
+## Version: 0.35.0
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 ## SavedVariables: WandererDB
 ## AddonCompartmentFunc: Wanderer_OnAddonCompartmentClick
+## X-Curse-Project-ID: 1720988
+## X-Wago-ID: b6XyRBKp
+## X-Website: https://wanderer-addon.com
 
 Locales.lua
 Locales\frFR.lua
@@ -57,7 +60,9 @@ Gestures.lua
 Chat.lua
 Messages.lua
 Copy.lua
+ChatComfort.lua
 GameFrames.lua
+BarSlots.lua
 Curtain.lua
 Away.lua
 Clean.lua

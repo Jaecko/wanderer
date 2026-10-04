@@ -135,7 +135,7 @@ function ns.InitIcons()
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererIconDrawer") end
 	-- Closes by itself once the mouse has left it a moment.
 	drawer:SetScript("OnUpdate", function(self, elapsed)
-		if MouseIsOver and MouseIsOver(self) then
+		if ns.Util.IsMouseOver(self) then
 			outside = 0
 		else
 			outside = outside + elapsed

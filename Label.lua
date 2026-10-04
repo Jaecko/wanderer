@@ -226,7 +226,7 @@ local function DetectRole(lines)
 		if text == _G[globalName] then return end
 	end
 	if World.IsFaction(text) then return end
-	text = text:gsub("^<", ""):gsub(">$", "")
+	text = U.Grammar(text):gsub("^<", ""):gsub(">$", "")
 	return "<" .. text .. ">"
 end
 

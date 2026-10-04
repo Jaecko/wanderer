@@ -233,6 +233,21 @@ end
 
 -- A Wanderer window: the game's tooltip frame (for the "Game interface" style)
 -- dressed by the engine. Returns the frame and its skin.
+-- A window that opens and closes with the game's own sounds (SOUNDKIT names),
+-- like the game's windows. window.quiet: this time, silently (it opened by
+-- itself: a message, a notice).
+function Skin.Sounds(window, open, close)
+	local function Play(key)
+		local sound = SOUNDKIT and SOUNDKIT[key]
+		if sound and PlaySound then pcall(PlaySound, sound) end
+	end
+	window:HookScript("OnShow", function(self) if not self.quiet then Play(open) end end)
+	window:HookScript("OnHide", function(self)
+		if not self.quiet then Play(close) end
+		self.quiet = nil
+	end)
+end
+
 function Skin.CreateWindow(name, strata, parent)
 	parent = parent or UIParent
 	local ok, created = pcall(CreateFrame, "Frame", name, parent, "TooltipBackdropTemplate")

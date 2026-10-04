@@ -14,6 +14,23 @@ function Util.IsSecret(value)
 end
 
 -- The value when it is usable (present and not secret), nil otherwise.
+-- The game's grammar codes, as its own frames render them: "|2 Name" is the
+-- French "de Name" ("d'Name" before a vowel), as in "Familier |2 Vixi".
+local function StartsWithVowel(word)
+	if word:find("^[AEIOUYaeiouy]") then return true end
+	-- An accented capital or small vowel (UTF-8 À to Ü, à to ü).
+	local first, second = word:byte(1, 2)
+	return first == 195 and second ~= nil and ((second >= 128 and second <= 156) or (second >= 160 and second <= 188))
+		and second ~= 135 and second ~= 167 -- never Ç or ç
+end
+
+function Util.Grammar(text)
+	if type(text) ~= "string" or Util.IsSecret(text) or not text:find("|2", 1, true) then return text end
+	return (text:gsub("|2%s*(%S+)", function(word)
+		return (StartsWithVowel(word) and "d'" or "de ") .. word
+	end))
+end
+
 function Util.Clean(value)
 	if Util.IsSecret(value) or value == nil or value == "" then return nil end
 	return value
@@ -70,6 +87,17 @@ end
 -- Frame under the mouse. Several modules ask on every frame: it is looked up
 -- once per frame (GetTime does not change within a frame).
 local focusTime, focus
+-- True when the mouse is over a frame (the game's own method; the old global
+-- MouseIsOver is gone from some clients).
+function Util.IsMouseOver(frame)
+	if not frame then return false end
+	if frame.IsMouseOver then
+		local ok, over = pcall(frame.IsMouseOver, frame)
+		return ok and over and true or false
+	end
+	return MouseIsOver ~= nil and MouseIsOver(frame) and true or false
+end
+
 function Util.MouseFocus()
 	local now = GetTime()
 	if now ~= focusTime then

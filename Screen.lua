@@ -6,6 +6,8 @@ local _, ns = ...
 -- * the talking heads (NPCs speaking in a frame) can be closed at once.
 -- (The action camera is driven by Core, as a managed console variable.)
 
+local Safe = ns.Util.Safe
+
 -- Names of the game's messages that are filtered.
 local FILTERED_ERRORS = {
 	"ERR_ABILITY_COOLDOWN", "ERR_SPELL_COOLDOWN", "ERR_ITEM_COOLDOWN", "SPELL_FAILED_NOT_READY",
@@ -29,7 +31,16 @@ end
 -- the others are passed to the game's own handler, unchanged.
 local relay = CreateFrame("Frame")
 relay:SetScript("OnEvent", function(_, event, errorType, message, ...)
-	if IsFiltered(message) then return end
+	if IsFiltered(message) then
+		-- The red text goes, its voice stays (the game's "Error Speech" option decides).
+		local _, soundKitID, voiceID = Safe(GetGameMessageInfo, errorType)
+		if voiceID and C_Sound and C_Sound.PlayVocalErrorSound then
+			Safe(C_Sound.PlayVocalErrorSound, voiceID)
+		elseif soundKitID and PlaySound then
+			Safe(PlaySound, soundKitID)
+		end
+		return
+	end
 	if gameHandler then gameHandler(UIErrorsFrame, event, errorType, message, ...) end
 end)
 

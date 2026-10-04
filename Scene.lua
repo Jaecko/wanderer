@@ -347,6 +347,13 @@ local function Build(event)
 	return s
 end
 
+-- The game's own sounds, as its dialogue and quest windows play them (they
+-- are kept closed while the scene shows): open, close, a choice, a refusal.
+local function GameSound(key)
+	local sound = SOUNDKIT and SOUNDKIT[key]
+	if sound and PlaySound then pcall(PlaySound, sound) end
+end
+
 -- Actions ----------------------------------------------------------------------------
 
 local function CloseConversation()
@@ -375,6 +382,7 @@ local function Continue()
 	elseif kind == "QUEST_COMPLETE" then
 		if scene.choiceCount <= 1 then Safe(GetQuestReward, scene.choiceCount) end
 	elseif #scene.choices == 1 then
+		GameSound("IG_QUEST_LIST_SELECT")
 		scene.choices[1].action()
 	elseif #scene.choices == 0 then
 		CloseConversation()
@@ -384,6 +392,7 @@ end
 -- Escape or the second button: a quest offered is declined, the rest closed.
 local function Leave()
 	if not scene then return end
+	GameSound("IG_QUEST_CANCEL")
 	if scene.declinable then Safe(DeclineQuest) else CloseConversation() end
 end
 
@@ -401,7 +410,10 @@ local function Choose(number)
 		return
 	end
 	local choice = scene.choices[number]
-	if choice then choice.action() end
+	if choice then
+		GameSound("IG_QUEST_LIST_SELECT")
+		choice.action()
+	end
 end
 
 -- Keys -------------------------------------------------------------------------------
@@ -734,6 +746,7 @@ local function Begin(event)
 		panel:SetAlpha(0)
 		panel:Show()
 		BindKeys(true)
+		GameSound("IG_QUEST_LIST_OPEN")
 	end
 	Render()
 end
@@ -743,6 +756,7 @@ local function Finish(closeConversation)
 	if closeConversation then CloseConversation() end
 	scene = nil
 	ns.sceneActive = false
+	GameSound("IG_QUEST_LIST_CLOSE")
 	if ns.RefreshCinema then ns.RefreshCinema() end
 	BindKeys(false)
 	GameTooltip:Hide()

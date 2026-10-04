@@ -58,7 +58,11 @@ local function AllConversations()
 	local all = {}
 	for key, talk in pairs(Store()) do all[#all + 1] = { key = key, talk = talk } end
 	for key, talk in pairs(session) do all[#all + 1] = { key = key, talk = talk } end
-	table.sort(all, function(a, b) return (a.talk.last or 0) > (b.talk.last or 0) end)
+	-- Pinned people first, then the most recent.
+	table.sort(all, function(a, b)
+		if (a.talk.pinned and true or false) ~= (b.talk.pinned and true or false) then return a.talk.pinned and true or false end
+		return (a.talk.last or 0) > (b.talk.last or 0)
+	end)
 	return all
 end
 
@@ -67,7 +71,9 @@ local function Trim()
 	local all = AllConversations()
 	for index = MAX_PEOPLE + 1, #all do
 		local key = all[index].key
-		if key:sub(1, 3) == "BN:" then session[key] = nil else Store()[key] = nil end
+		if not all[index].talk.pinned then -- a pinned conversation is never forgotten
+			if key:sub(1, 3) == "BN:" then session[key] = nil else Store()[key] = nil end
+		end
 	end
 end
 
@@ -156,6 +162,34 @@ local function ShowConversation(key)
 	ns.RefreshMessages()
 end
 
+local function Forget(key)
+	if key:sub(1, 3) == "BN:" then session[key] = nil else Store()[key] = nil end
+	if current == key then current = nil end
+	ns.RefreshMessages()
+end
+
+-- The menu of someone in the list (right click), the game's own menus.
+local function OpenMenu(row)
+	if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
+	local key = row.key
+	local talk = Conversation(key)
+	MenuUtil.CreateContextMenu(row, function(_, root)
+		root:CreateTitle(NameOf(talk, key))
+		root:CreateButton(talk.pinned and L.MESSAGES_UNPIN or L.MESSAGES_PIN, function()
+			talk.pinned = not talk.pinned or nil
+			ns.RefreshMessages()
+		end)
+		if (talk.unread or 0) > 0 then
+			root:CreateButton(L.MESSAGES_MARK_READ, function()
+				talk.unread = 0
+				ns.RefreshMessages()
+			end)
+		end
+		root:CreateDivider()
+		root:CreateButton("|cffff6060" .. L.MESSAGES_DELETE .. "|r", function() Forget(key) end)
+	end)
+end
+
 local function RowFor(index)
 	local row = rows[index]
 	if row then return row end
@@ -168,21 +202,27 @@ local function RowFor(index)
 	row.dot:SetSize(6, 6)
 	row.dot:SetPoint("RIGHT", row, "RIGHT", -6, 0)
 	row.dot:SetColorTexture(1, 0.82, 0, 1)
+	row.pin = row:CreateTexture(nil, "ARTWORK")
+	row.pin:SetSize(12, 12)
+	row.pin:SetPoint("RIGHT", row.dot, "LEFT", -4, 0)
+	local atlasOk, applied = false, false
+	if row.pin.SetAtlas then atlasOk, applied = pcall(row.pin.SetAtlas, row.pin, "PetJournal-FavoritesIcon") end
+	if not atlasOk or applied == false then
+		row.pin:SetTexture("Interface\\Common\\FavoritesIcon")
+	end
 	row.portrait = ns.Skin.RoundPortrait(row, ROW_PORTRAIT)
 	row.portrait:SetPoint("LEFT", row, "LEFT", 6, 0)
 	row.name = ns.Skin.CreateText(row, "GameTooltipText")
 	row.name:SetPoint("LEFT", row.portrait, "RIGHT", 8, 0)
-	row.name:SetPoint("RIGHT", row.dot, "LEFT", -4, 0)
+	row.name:SetPoint("RIGHT", row.pin, "LEFT", -4, 0)
 	if row.name.SetWordWrap then row.name:SetWordWrap(false) end
 	row:SetScript("OnClick", function(self, button)
 		if button == "RightButton" then
-			-- Forget this conversation.
-			if self.key:sub(1, 3) == "BN:" then session[self.key] = nil else Store()[self.key] = nil end
-			if current == self.key then current = nil end
+			OpenMenu(self)
 		else
 			ShowConversation(self.key)
+			ns.RefreshMessages()
 		end
-		ns.RefreshMessages()
 	end)
 	row:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -203,6 +243,7 @@ function ns.RefreshMessages()
 		row.name:SetText(NameOf(entry.talk, entry.key))
 		ShowPortrait(row.portrait, entry.talk)
 		row.dot:SetShown((entry.talk.unread or 0) > 0)
+		row.pin:SetShown(entry.talk.pinned and true or false)
 		local selected = entry.key == current
 		row.background:SetColorTexture(1, selected and 0.82 or 1, selected and 0 or 1, selected and 0.14 or 0)
 		row:ClearAllPoints()
@@ -221,20 +262,56 @@ function ns.RefreshMessages()
 	end
 end
 
+local sentAt -- /wanderer debug: when your last message left
+local fromWindow = false -- a message being sent by the window (not typed in the chat)
+
+-- /wanderer debug: a whisper handed to the game, timed until its confirmation.
+local function DebugSent(label)
+	local sent = GetTime()
+	sentAt = sent
+	ns.Print(label)
+	C_Timer.After(10, function()
+		if ns.debug and sentAt == sent then ns.Print(L.MESSAGES_DEBUG_NONE) end
+	end)
+end
+local ECHO_WAIT = 60 -- seconds: the game's confirmation of a message, recognised within this time
+
+-- Your message in the window at once, as you send it: never waiting for the
+-- game's confirmation (it may come late, or not reach Wanderer at all).
+local function Echo(key, text)
+	local talk = Conversation(key)
+	local entry = { t = time(), me = true, from = talk.name, text = text, echo = GetTime() }
+	talk.lines[#talk.lines + 1] = entry
+	while #talk.lines > MAX_LINES do table.remove(talk.lines, 1) end
+	talk.last = time()
+	if current == key and window and window:IsShown() then pcall(history.AddMessage, history, Line(entry)) end
+	ns.RefreshMessages()
+end
+
 local function Send()
 	local text = strtrim(input:GetText() or "")
 	if text == "" or not current then return end
 	input:SetText("")
+	Echo(current, text)
+	local ok, problem
 	if current:sub(1, 3) == "BN:" then
-		if BNSendWhisper then pcall(BNSendWhisper, tonumber(current:sub(4)), text) end
+		if BNSendWhisper then ok, problem = pcall(BNSendWhisper, tonumber(current:sub(4)), text) end
 	else
 		local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
-		if send then pcall(send, text, "WHISPER", nil, current) end
+		fromWindow = true
+		if send then ok, problem = pcall(send, text, "WHISPER", nil, current) end
+		fromWindow = false
+	end
+	-- /wanderer debug: how long the game takes to confirm it, or why it refused.
+	if ns.debug then
+		if ok == false then ns.Print(L.MESSAGES_DEBUG_FAILED:format(tostring(problem))) end
+		DebugSent(L.MESSAGES_DEBUG_SENT)
 	end
 end
 
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererMessages", "MEDIUM")
+	ns.Skin.Sounds(window, "IG_CHARACTER_INFO_OPEN", "IG_CHARACTER_INFO_CLOSE")
 	window:SetSize(WIDTH, HEIGHT)
 	local pos = ns.root.messagesPos
 	if pos then window:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3]) else window:SetPoint("LEFT", UIParent, "LEFT", 40, 60) end
@@ -251,6 +328,8 @@ local function CreateWindow()
 	local margin = ns.Skin.Margin() + 6
 	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
 	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
+	-- Closed directly, never through the game's panel manager (locked during a fight).
+	close:SetScript("OnClick", function() window:Hide() end)
 
 	-- The people, on the left.
 	list = CreateFrame("Frame", nil, window)
@@ -286,7 +365,10 @@ local function CreateWindow()
 	input.background:SetAllPoints()
 	input.background:SetColorTexture(0, 0, 0, 0.35)
 	input:SetScript("OnEnterPressed", Send)
-	input:SetScript("OnEscapePressed", input.ClearFocus)
+	input:SetScript("OnEscapePressed", function(self)
+		self:ClearFocus()
+		window:Hide()
+	end)
 	history = CreateFrame("ScrollingMessageFrame", "WandererMessagesHistory", window)
 	history:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -10)
 	history:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 0, 8)
@@ -302,7 +384,7 @@ local function CreateWindow()
 	end)
 
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererMessages") end
-	window:SetScript("OnShow", function(self)
+	window:HookScript("OnShow", function(self)
 		self:SetScale(ns.Skin.Scale())
 		if current then ShowConversation(current) else ns.RefreshMessages() end
 	end)
@@ -330,6 +412,9 @@ function ns.WhisperMyself()
 end
 
 -- Messages --------------------------------------------------------------------------------
+
+local SOUND_COOLDOWN = 3 -- seconds: a quick exchange rings once, as in the game
+local lastSound = 0
 
 local function Enabled()
 	return ns.db and ns.db.enabled and ns.db.messages.enabled
@@ -363,6 +448,16 @@ local function OnMessage(event, text, name, guid, bnID)
 		end
 	end
 	talk.last = time()
+	-- The confirmation of a message already shown when you sent it: nothing more.
+	if me then
+		for index = #talk.lines, math.max(1, #talk.lines - 10), -1 do
+			local line = talk.lines[index]
+			if line.echo and GetTime() - line.echo <= ECHO_WAIT and (U.IsSecret(text) or line.text == text) then
+				line.echo = nil
+				return
+			end
+		end
+	end
 	local entry = { t = time(), me = me or nil, from = talk.name }
 	-- A text the game keeps secret is shown but not kept.
 	if U.IsSecret(text) then
@@ -373,6 +468,13 @@ local function OnMessage(event, text, name, guid, bnID)
 		while #talk.lines > MAX_LINES do table.remove(talk.lines, 1) end
 	end
 	Trim()
+	-- The chat no longer shows it, so the game no longer rings: Wanderer rings
+	-- with the game's own whisper sound instead (never both).
+	if not me and ns.db.messages.sound and ns.db.messages.hideInChat and GetTime() - lastSound >= SOUND_COOLDOWN then
+		lastSound = GetTime()
+		local sound = SOUNDKIT and SOUNDKIT.TELL_MESSAGE
+		if sound and PlaySound then pcall(PlaySound, sound) end
+	end
 	if current == key and window and window:IsShown() then
 		if entry.text then pcall(history.AddMessage, history, Line(entry)) else pcall(history.AddMessage, history, text) end
 	elseif not me then
@@ -380,7 +482,13 @@ local function OnMessage(event, text, name, guid, bnID)
 	end
 	-- Opened by a message from someone, never over a fight or a scene, never taking the keyboard.
 	if not me and not InCombatLockdown() and not ns.sceneActive and ns.db.messages.popup then
-		if not (window and window:IsShown()) then ns.ToggleMessages(key) end
+		if not (window and window:IsShown()) then
+			-- Opened by the message itself: its own sound rings, not the window's.
+			if not window then CreateWindow() end
+			window.quiet = true
+			ns.ToggleMessages(key)
+			window.quiet = nil
+		end
 	end
 	ns.RefreshMessages()
 	if ns.RefreshMinimapButton then ns.RefreshMinimapButton() end
@@ -395,6 +503,12 @@ local function Filter(_, event, _, name, ...)
 end
 
 function ns.InitMessages()
+	-- /wanderer debug: whispers typed in the chat are timed too, to compare.
+	if C_ChatInfo and C_ChatInfo.SendChatMessage then
+		hooksecurefunc(C_ChatInfo, "SendChatMessage", function(_, kind)
+			if ns.debug and kind == "WHISPER" and not fromWindow then DebugSent(L.MESSAGES_DEBUG_SENT_CHAT) end
+		end)
+	end
 	local frame = CreateFrame("Frame")
 	for event in pairs(EVENTS) do frame:RegisterEvent(event) end
 	frame:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -407,12 +521,20 @@ function ns.InitMessages()
 		if event == "PLAYER_REGEN_ENABLED" then
 			-- Messages came during the fight: the window opens now, on the newest.
 			if Enabled() and ns.db.messages.popup and ns.UnreadMessages() > 0 and not (window and window:IsShown()) then
+				if not window then CreateWindow() end
+				window.quiet = true
 				ns.ToggleMessages(AllConversations()[1].key)
+				window.quiet = nil
 			end
 			return
 		end
-		if not Enabled() then return end
 		local text, name = ...
+		-- /wanderer debug: the game's confirmation of your message, as it arrives.
+		if ns.debug and EVENTS[event] == "me" then
+			ns.Print(L.MESSAGES_DEBUG_ARRIVED:format(sentAt and (GetTime() - sentAt) or -1, U.IsSecret(name) and "secret" or tostring(name)))
+			sentAt = nil
+		end
+		if not Enabled() then return end
 		local guid, bnID = select(12, ...), select(13, ...)
 		OnMessage(event, text, name, guid, bnID)
 	end)

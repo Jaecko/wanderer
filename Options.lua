@@ -457,6 +457,15 @@ local function InterfacePage()
 	TableCheckbox("world", "filterErrors", L.WORLD_ERRORS, L.WORLD_ERRORS_DESC, ns.RefreshScreen)
 	TableCheckbox("world", "hideTalkingHead", L.WORLD_TALKING_HEAD, L.WORLD_TALKING_HEAD_DESC)
 
+end
+
+-- The action bars: their slots, and the Edit Mode layouts that place them.
+local function ActionBarsPage()
+	Page(L.PAGE_ACTION_BARS)
+	Header(L.SECTION_SLOTS)
+	Slider("BARS_BORDER", L.BARS_BORDER, "bars.border", "%d %%", ns.RefreshBarSlots)
+	Slider("BARS_BACKGROUND", L.BARS_BACKGROUND, "bars.background", "%d %%", ns.RefreshBarSlots)
+
 	Header(L.SECTION_LAYOUT)
 	Button(L.LAYOUT_STACKED_OPTION, L.LAYOUT_MAKE_BUTTON, L.LAYOUT_STACKED_DESC, function() ns.MakeLayout("stacked") end)
 	Button(L.LAYOUT_CLEAN_OPTION, L.LAYOUT_MAKE_BUTTON, L.LAYOUT_CLEAN_DESC, function() ns.MakeLayout("clean") end)
@@ -581,12 +590,15 @@ local function SocialPage()
 	local messagesOn = IsOn("messages", "enabled")
 	Under(TableCheckbox("messages", "popup", L.MESSAGES_POPUP, L.MESSAGES_POPUP_DESC), messages, messagesOn)
 	Under(TableCheckbox("messages", "hideInChat", L.MESSAGES_HIDE_CHAT, L.MESSAGES_HIDE_CHAT_DESC), messages, messagesOn)
+	Under(TableCheckbox("messages", "sound", L.MESSAGES_SOUND, L.MESSAGES_SOUND_DESC), messages, messagesOn)
 	Under(Button(L.MESSAGES_OPEN, L.MESSAGES_OPEN_BUTTON, nil, function() ns.ToggleMessages() end), messages, messagesOn)
 
 	Header(L.SECTION_CHAT)
 	TableCheckbox("chat", "group", L.CHAT_TAB_GROUP, L.CHAT_TAB_GROUP_DESC)
 	TableCheckbox("chat", "guild", L.CHAT_TAB_GUILD, L.CHAT_TAB_GUILD_DESC)
 	TableCheckbox("chat", "whispers", L.CHAT_TAB_WHISPERS, L.CHAT_TAB_WHISPERS_DESC)
+	TableCheckbox("chat", "arrowHistory", L.CHAT_ARROWS, L.CHAT_ARROWS_DESC, ns.RefreshChatComfort)
+	TableCheckbox("chat", "copyButton", L.CHAT_COPY_BUTTON, L.CHAT_COPY_BUTTON_DESC, ns.RefreshChatComfort)
 	Button(L.CHAT_TABS, L.CHAT_TABS_BUTTON, L.CHAT_TABS_DESC, function() ns.CreateChatTabs() end)
 end
 
@@ -631,7 +643,7 @@ function ns.InitOptions()
 	HomePage()
 	-- First folded page: the predefined styles (cards with previews).
 	if ns.RegisterThemesPage and Settings.RegisterVerticalLayoutSubcategory then ns.RegisterThemesPage(mainCategory) end
-	for _, page in ipairs({ NamesPage, LabelPage, ContentPage, TooltipsPage, InterfacePage, ImmersionPage,
+	for _, page in ipairs({ NamesPage, LabelPage, ContentPage, TooltipsPage, InterfacePage, ActionBarsPage, ImmersionPage,
 		ConversationsPage, MerchantsPage, AdventurePage, SocialPage, ProfilesPage }) do
 		page()
 	end

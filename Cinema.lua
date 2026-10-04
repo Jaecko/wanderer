@@ -54,6 +54,12 @@ local managedList, managedSet = {}, {} -- frames to fade, looked for every FRAME
 local sceneOnly = {} -- frame -> true: faded during scenes only
 local present = {} -- reused: no new table at each look
 local framesAge = FRAMES_EVERY
+local wasScene = false
+-- Right after a conversation: the interface goes from the scene's opacity
+-- straight to the one the settings want, never back to full in between (the
+-- character you spoke to, still selected, does not count until you change
+-- target).
+local afterScene = false
 
 local function IsWindowOpen()
 	for _, name in ipairs(UISpecialFrames or {}) do
@@ -94,15 +100,21 @@ local function RefreshManagedFrames()
 	end
 end
 
--- True when the mouse is over one of the faded elements (or inside it).
-local function IsMouseOverFaded()
+-- True when the mouse is over one of the faded elements (or inside it). A
+-- protected frame of the game (pings, the store...) is never looked into: it
+-- is none of ours, and the game forbids an addon to climb its parents.
+local function FadedUnderMouse()
 	local focus = ns.Util.MouseFocus()
 	while focus do
-		if managedSet[focus] then return true end
-		focus = focus.GetParent and focus:GetParent()
+		if focus.IsForbidden and focus:IsForbidden() then return nil end
+		if managedSet[focus] then return focus end
+		local ok, parent = pcall(focus.GetParent, focus)
+		focus = ok and parent or nil
 	end
-	return false
+	return nil
 end
+
+local function IsMouseOverFaded() return FadedUnderMouse() ~= nil end
 
 local function InCombat()
 	return ns.inCombat or InCombatLockdown()
@@ -187,6 +199,11 @@ local function OnUpdate(_, elapsed)
 		frame:Hide()
 		return
 	end
+	if wasScene and not ns.sceneActive then
+		afterScene = true
+		quietTime, calmTime = math.max(quietTime, settings.delay), math.max(calmTime, settings.delay)
+	end
+	wasScene = ns.sceneActive and true or false
 	sinceCheck = sinceCheck + elapsed
 	if sinceCheck >= CHECK_DELAY then
 		framesAge = framesAge + sinceCheck
@@ -196,7 +213,7 @@ local function OnUpdate(_, elapsed)
 		end
 		local quiet = IsQuiet()
 		quietTime = quiet and (quietTime + sinceCheck) or 0
-		calmTime = (quiet and not Safe(UnitExists, "target")) and (calmTime + sinceCheck) or 0
+		calmTime = (quiet and (afterScene or not Safe(UnitExists, "target"))) and (calmTime + sinceCheck) or 0
 		recovering = level < 1 and not ns.sceneActive and Recovering() -- in a scene: everything aside
 		sinceCheck = 0
 	end
@@ -217,6 +234,7 @@ end
 local function OnEvent(_, event)
 	local settings = ns.db and ns.db.cinema
 	if not Active(settings) then return end
+	afterScene = false
 	calmTime = 0
 	if event == "PLAYER_REGEN_DISABLED" then
 		ns.inCombat = true

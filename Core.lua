@@ -159,9 +159,12 @@ local DEFAULTS = {
 		enabled = false, -- private messages in their own window: asked for
 		popup = true, -- the window opens on a new message (never in a fight)
 		hideInChat = true, -- and the chat no longer shows them
+		sound = true, -- the game's own whisper sound, which the chat no longer plays for them
 	},
 	chat = {
 		group = true, -- which tabs "Create the chat tabs" makes
+		arrowHistory = true, -- Up and Down bring back your sent messages, kept between sessions
+		copyButton = true, -- a discreet copy button in the corner of the chat
 		guild = true,
 		whispers = true,
 	},
@@ -181,6 +184,10 @@ local DEFAULTS = {
 		acceptInvites = false,
 		acceptResurrect = false,
 		acceptSummon = false,
+	},
+	bars = {
+		border = 100, -- the frame around each action button, % (100: as the game draws it, 0: gone)
+		background = 100, -- the background of each slot, %
 	},
 	world = {
 		actionCam = false,
@@ -206,6 +213,8 @@ ns.RANGES = {
 	["label.bgOpacity"] = { 0, 100, 5 },
 	["cinema.alpha"] = { 0, 80, 5 },
 	["cinema.delay"] = { 1, 15, 1 },
+	["bars.border"] = { 0, 100, 5 },
+	["bars.background"] = { 0, 100, 5 },
 	["session.breakEvery"] = { 0, 240, 30 },
 	["scene.textSize"] = { 12, 22, 1 },
 }
@@ -548,6 +557,8 @@ function ns.RefreshAll()
 	if ns.RefreshScene then ns.RefreshScene() end
 	if ns.RefreshClean then ns.RefreshClean() end
 	if ns.RefreshIcons then ns.RefreshIcons() end
+	if ns.RefreshBarSlots then ns.RefreshBarSlots() end
+	if ns.RefreshChatComfort then ns.RefreshChatComfort() end
 	if ns.RefreshGameFrames then ns.RefreshGameFrames() end
 	if ns.RefreshMail then ns.RefreshMail() end
 	if ns.RefreshTargetInfo then ns.RefreshTargetInfo() end
@@ -802,7 +813,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		if not ns.initialized then
 			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitCinema", "InitTooltips",
 				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen", "InitTargetLabel",
-				"InitTagging", "InitPlates", "InitToast", "InitSession", "InitSounds", "InitFishing", "InitJournal", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitNews", "InitPreview", "InitWelcome" }) do
+				"InitTagging", "InitPlates", "InitToast", "InitSession", "InitSounds", "InitFishing", "InitJournal", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
 				if ns[init] then ns[init]() end
 			end
 			ns.initialized = true

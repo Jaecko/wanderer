@@ -76,12 +76,12 @@ local function OnUpdate(_, elapsed)
 	elapsed, since = since, 0
 	local world = ns.db and ns.db.enabled and ns.db.world
 	if world and world.cleanMinimap and MinimapCluster then
-		local over = MouseIsOver and MouseIsOver(MinimapCluster) or false
+		local over = ns.Util.IsMouseOver(MinimapCluster)
 		hoverMinimap = minimapTween:Step(over and 1 or 0, elapsed, FADE_IN, FADE_OUT)
 		SetAlphas(MinimapButtons(), hoverMinimap)
 	end
 	if world and world.cleanTracker and ObjectiveTrackerFrame then
-		local over = MouseIsOver and ObjectiveTrackerFrame:IsShown() and MouseIsOver(ObjectiveTrackerFrame) or false
+		local over = ObjectiveTrackerFrame:IsShown() and ns.Util.IsMouseOver(ObjectiveTrackerFrame) or false
 		hoverTracker = trackerTween:Step(over and 1 or TRACKER_REST, elapsed, FADE_IN, FADE_OUT)
 		ObjectiveTrackerFrame:SetAlpha(hoverTracker)
 	end
@@ -129,11 +129,14 @@ end
 -- belong to the player: Edit Mode adjusts, copies or shares them like any
 -- other. Made again over themselves (same name), never over the player's.
 
-local ACTION_BAR_STEP = 44 -- height of a bar of 12 icons, with its gap
-local HALF_BAR = 270 -- half the width of a bar of 12 icons
+local ACTION_BAR_STEP = 47 -- height of a bar of 12 icons, and a breath of space between two bars
+local HALF_BAR = 281 -- half the width of a bar of 12 icons (45 each, 2 between)
+local BLOCK_GAP = 10 -- between the bottom bars and the blocks beside them
+local BLOCK_WIDTH, BLOCK_HEIGHT = 280, 92 -- a block of 6 icons by 2
+local BLOCK_X = HALF_BAR + BLOCK_GAP
+local SIDE_HEIGHT = BLOCK_HEIGHT * 2 + 4 -- two blocks on the left: bars 7 and 6
 local BLOCK = { rows = 2 } -- 6 icons by 2
 local COLUMN = { vertical = true } -- 12 icons one above the other
-local DOUBLE_COLUMN = { vertical = true, rows = 2 } -- 6 high, 2 wide
 
 local function BarIndex(name)
 	return Enum and Enum.EditModeActionBarSystemIndices and Enum.EditModeActionBarSystemIndices[name]
@@ -178,11 +181,20 @@ local function Bar(layout, name, y, visible)
 	return entry
 end
 
+-- Your portrait and your target's over the bars. The target's cast bar sits
+-- under its portrait (the game gives no other place): its auras go on top,
+-- so only the cast bar is under it, and the portraits stand high enough for
+-- it to stay clear of the bars.
+local TARGET_CAST_ROOM = 34 -- the target's cast bar and its spell name
 local function Portraits(layout, x, y)
 	local system, index = Enum.EditModeSystem.UnitFrame, Enum.EditModeUnitFrameSystemIndices
 	if not (system and index) then return end
+	y = y + TARGET_CAST_ROOM
 	Place(SystemEntry(layout, system, index.Player), "BOTTOMRIGHT", "BOTTOM", -x, y)
-	Place(SystemEntry(layout, system, index.Target), "BOTTOMLEFT", "BOTTOM", x, y)
+	local target = SystemEntry(layout, system, index.Target)
+	Place(target, "BOTTOMLEFT", "BOTTOM", x, y)
+	local setting = Enum.EditModeUnitFrameSetting
+	if setting and setting.BuffsOnTop then SetSetting(target, setting.BuffsOnTop, 1) end
 end
 
 -- No art around the main bar: its frame, its page arrows and the gryphons
@@ -201,10 +213,15 @@ end
 
 -- The game's menu and the bags at the bottom right, the bags over the menu;
 -- the experience and reputation bars at the top center.
-local function Corners(layout)
+local function Corners(layout, mainY)
 	local system = Enum.EditModeSystem
 	local menu = system.MicroMenu and SystemEntry(layout, system.MicroMenu, nil)
-	Place(menu, "BOTTOMRIGHT", "BOTTOMRIGHT", -6, 4)
+	-- Beside bar 8 when the screen is wide enough, over it otherwise.
+	local half = (tonumber(UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 1920) / 2
+	local menuWidth = tonumber(MicroMenuContainer and MicroMenuContainer.GetWidth and MicroMenuContainer:GetWidth()) or 0
+	if menuWidth < 200 then menuWidth = 320 end -- not measured yet: the menu's usual width
+	local room = half - 6 - menuWidth - (BLOCK_X + BLOCK_WIDTH)
+	Place(menu, "BOTTOMRIGHT", "BOTTOMRIGHT", -6, room >= BLOCK_GAP and 4 or mainY + BLOCK_HEIGHT + 8)
 	local bags = system.Bags and SystemEntry(layout, system.Bags, nil)
 	if bags and menu then
 		bags.anchorInfo = { point = "BOTTOMRIGHT", relativeTo = "MicroMenuContainer", relativePoint = "TOPRIGHT", offsetX = 0, offsetY = 4 }
@@ -242,15 +259,16 @@ local function BarAt(layout, name, visible, shape, point, relativePoint, x, y)
 end
 
 -- Bars 5 to 8 (and 4 when it is not in the stack): bar 5 (and 4) upright on
--- the right edge where the game puts them; bar 6 upright on the left edge,
--- over the chat; bars 7 and 8 in blocks of 6 by 2 on each side of the bottom
--- bars. Which ones show is still the game's choice (Options > Action Bars).
+-- the right edge where the game puts them; bars 6, 7 and 8 in blocks of 6 by 2
+-- beside the bottom bars (7 and 6 over it on the left, 8 on the right), never
+-- where the party frames or the chat are. Which ones show is still the game's
+-- choice (Options > Action Bars).
 local function OtherBars(layout, visible, mainY, fourth)
 	if fourth then BarAt(layout, "RightBar1", visible, COLUMN) end
 	BarAt(layout, "RightBar2", visible, COLUMN)
-	BarAt(layout, "ExtraBar1", visible, DOUBLE_COLUMN, "LEFT", "LEFT", 6, 60)
-	BarAt(layout, "ExtraBar2", visible, BLOCK, "BOTTOMRIGHT", "BOTTOM", -(HALF_BAR + 12), mainY)
-	BarAt(layout, "ExtraBar3", visible, BLOCK, "BOTTOMLEFT", "BOTTOM", HALF_BAR + 12, mainY)
+	BarAt(layout, "ExtraBar2", visible, BLOCK, "BOTTOMRIGHT", "BOTTOM", -BLOCK_X, mainY)
+	BarAt(layout, "ExtraBar1", visible, BLOCK, "BOTTOMRIGHT", "BOTTOM", -BLOCK_X, mainY + BLOCK_HEIGHT + 4)
+	BarAt(layout, "ExtraBar3", visible, BLOCK, "BOTTOMLEFT", "BOTTOM", BLOCK_X, mainY)
 end
 
 local function OverTheBars(layout, top, mainY)
@@ -266,12 +284,13 @@ local function OverTheBars(layout, top, mainY)
 		end
 	end
 	if system.ExtraAbilities then At(SystemEntry(layout, system.ExtraAbilities, nil), "BOTTOM", "BOTTOM", 0, top + 160) end
-	if system.EncounterBar then At(SystemEntry(layout, system.EncounterBar, nil), "BOTTOM", "BOTTOM", 0, top + 230) end
+	if system.EncounterBar then At(SystemEntry(layout, system.EncounterBar, nil), "BOTTOM", "BOTTOM", 0, top + 300) end
 	-- Over the block of bar 8, by the main bar.
 	if system.VehicleLeaveButton then
-		At(SystemEntry(layout, system.VehicleLeaveButton, nil), "BOTTOMLEFT", "BOTTOM", HALF_BAR + 12, mainY + ACTION_BAR_STEP * 2 + 8)
+		At(SystemEntry(layout, system.VehicleLeaveButton, nil), "BOTTOMLEFT", "BOTTOM", BLOCK_X, mainY + BLOCK_HEIGHT + 8)
 	end
-	if system.TotemActionBar then At(SystemEntry(layout, system.TotemActionBar, nil), "BOTTOMRIGHT", "BOTTOM", -4, top + 44) end
+	-- Totems on the left of the cast bar, over the stance bar: clear of both.
+	if system.TotemActionBar then At(SystemEntry(layout, system.TotemActionBar, nil), "BOTTOMRIGHT", "BOTTOM", -120, top + 44) end
 end
 
 local LAYOUTS = {
@@ -284,13 +303,14 @@ local LAYOUTS = {
 			top = top + ACTION_BAR_STEP
 		end
 		OtherBars(layout, "Always", 10, false)
+		local above = math.max(top, 10 + SIDE_HEIGHT) + 4
 		local system = Enum.EditModeSystem.ActionBar
-		Place(SystemEntry(layout, system, BarIndex("StanceBar")), "BOTTOMRIGHT", "BOTTOM", -4, top + 4)
-		Place(SystemEntry(layout, system, BarIndex("PetActionBar")), "BOTTOMLEFT", "BOTTOM", 4, top + 4)
+		Place(SystemEntry(layout, system, BarIndex("StanceBar")), "BOTTOMRIGHT", "BOTTOM", -4, above)
+		Place(SystemEntry(layout, system, BarIndex("PetActionBar")), "BOTTOMLEFT", "BOTTOM", 4, above)
 		HideMainBarArt(layout)
-		Corners(layout)
-		OverTheBars(layout, top, 10)
-		Portraits(layout, 180, top + 50)
+		Corners(layout, 10)
+		OverTheBars(layout, above - 4, 10)
+		Portraits(layout, 180, above + 46)
 	end,
 	-- For immersion: the main bar alone at the bottom; every other bar shown
 	-- only in fights, in its place (bars 2 and 3 over the main bar, the others
@@ -301,13 +321,13 @@ local LAYOUTS = {
 		Bar(layout, "Bar3", 40 + ACTION_BAR_STEP * 2, "InCombat")
 		OtherBars(layout, "InCombat", 40, true)
 		local system = Enum.EditModeSystem.ActionBar
-		local above = 40 + ACTION_BAR_STEP * 3 + 4
+		local above = math.max(40 + ACTION_BAR_STEP * 3, 40 + SIDE_HEIGHT) + 4
 		Place(SystemEntry(layout, system, BarIndex("StanceBar")), "BOTTOMRIGHT", "BOTTOM", -4, above)
 		Place(SystemEntry(layout, system, BarIndex("PetActionBar")), "BOTTOMLEFT", "BOTTOM", 4, above)
 		HideMainBarArt(layout)
-		Corners(layout)
-		OverTheBars(layout, above - 10, 40)
-		Portraits(layout, 160, above + 40)
+		Corners(layout, 40)
+		OverTheBars(layout, above - 4, 40)
+		Portraits(layout, 160, above + 46)
 	end,
 	-- The game's own default layout, as it is: to come back to it, or to start
 	-- from it in Edit Mode.
