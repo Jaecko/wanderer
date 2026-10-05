@@ -24,6 +24,9 @@ ns.CATEGORIES = {
 ns.PRESETS = {
 	immersion = {},
 	balanced = { enemyPlayers = true, hostileNPCs = true },
+	-- Dungeons and raids: your companions named, never yourself; enemies by
+	-- their health bars (names on them).
+	group = { friendlyPlayers = true, enemyPlayers = true, hostileNPCs = true, enemyPets = true },
 	all = { own = true, friendlyPlayers = true, enemyPlayers = true, friendlyNPCs = true, hostileNPCs = true,
 		critters = true, friendlyPets = true, enemyPets = true, guilds = true, titles = true },
 }
@@ -31,7 +34,7 @@ ns.PRESET_ORDER = { "immersion", "balanced", "all", "custom" }
 
 -- Places where a different preset can apply automatically.
 ns.ZONES = { "world", "city", "dungeon", "raid", "pvp" }
-ns.ZONE_CHOICES = { "default", "immersion", "balanced", "all" }
+ns.ZONE_CHOICES = { "default", "immersion", "balanced", "group", "all" }
 
 -- Settings stored in each profile.
 local DEFAULTS = {
@@ -40,13 +43,15 @@ local DEFAULTS = {
 	preset = "immersion",
 	show = {},
 	combatEnemies = false, -- enemy names in a fight: asked for (their health bars show anyway)
+	groupMarks = true, -- in the world, the name of each member of your group, small, over their head
 	hideUnitTooltip = true,
+	hideTargetTooltip = true, -- no game tooltip over your target's portrait (its auras keep theirs)
 	revealMode = "hold",
 	zones = {
 		world = "default",
 		city = "default",
-		dungeon = "balanced",
-		raid = "balanced",
+		dungeon = "group",
+		raid = "group",
 		pvp = "all",
 	},
 	label = {
@@ -58,6 +63,10 @@ local DEFAULTS = {
 		showRace = true,
 		showClass = true,
 		showSpec = true,
+		ownPortrait = true,
+		stickyTarget = true, -- your target stays described while nothing else is hovered (off: as before) -- over your portrait, the label shows you (the closer look included)
+		shiftDetails = true, -- Shift over a player: talents, item level, guild rank
+		showCasts = true,
 		showCreatureType = true,
 		showClassification = true,
 		showNPCRole = true,
@@ -165,6 +174,7 @@ local DEFAULTS = {
 		group = true, -- which tabs "Create the chat tabs" makes
 		arrowHistory = true, -- Up and Down bring back your sent messages, kept between sessions
 		copyButton = true, -- a discreet copy button in the corner of the chat
+		keepLog = true, -- each tab keeps its last lines from one session to the next
 		guild = true,
 		whispers = true,
 	},
@@ -273,8 +283,15 @@ local function DeepCopy(t)
 	return copy
 end
 
+-- In diagnostic mode, in the Wanderer chat tab (only Wanderer's lines there).
 function ns.Print(msg)
-	print("|cff9fb4ffWanderer|r " .. msg)
+	local line = "|cff9fb4ffWanderer|r " .. msg
+	local frame = ns.debug and ns.debugFrame
+	if frame and frame.AddMessage then
+		frame:AddMessage(line)
+	else
+		print(line)
+	end
 end
 
 -- Console variables ---------------------------------------------------------
@@ -352,10 +369,17 @@ local function AllHeads(db)
 	return db.label.allHeads and db.label.anchor == "head" and zone ~= "dungeon" and zone ~= "raid" and zone ~= "pvp"
 end
 
+-- In instances the health bars are the player's own choice (the game's
+-- Nameplates options, V and Shift+V): Wanderer only turns on, out of them,
+-- the plates the label needs.
+local function FriendlyPlates(db)
+	return AllHeads(db) and "1" or nil
+end
+
 local MANAGED_CVARS = {
 	nameplateShowAll = function(db) return AllHeads(db) and "1" or nil end,
-	nameplateShowFriendlyPlayers = function(db) return AllHeads(db) and "1" or nil end,
-	nameplateShowFriends = function(db) return AllHeads(db) and "1" or nil end, -- its older name
+	nameplateShowFriendlyPlayers = FriendlyPlates,
+	nameplateShowFriends = FriendlyPlates, -- its older name
 	nameplateShowFriendlyNPCs = function(db) return AllHeads(db) and "1" or nil end,
 	nameplateShowEnemyMinus = function(db) return AllHeads(db) and "1" or nil end,
 	-- Action camera (hidden settings of the game): pitch following the ground,
@@ -629,6 +653,20 @@ function ns.SetProfile(name, byPlace)
 		profile.combatEnemies = false
 		profile.styleVersion = 6
 	end
+	-- 0.36: dungeons and raids name your companions but never you, once for
+	-- every profile that had the earlier choices there; free after.
+	if (profile.styleVersion or 0) < 7 then
+		for _, zone in ipairs({ "dungeon", "raid" }) do
+			local rule = type(profile.zones) == "table" and profile.zones[zone]
+			if rule == "balanced" or rule == "all" then profile.zones[zone] = "group" end
+		end
+		profile.styleVersion = 7
+	end
+	-- 0.36: the label stays on your target, once for every profile; free after.
+	if (profile.styleVersion or 0) < 8 then
+		if type(profile.label) == "table" then profile.label.stickyTarget = true end
+		profile.styleVersion = 8
+	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
 	-- Not in DEFAULTS (nil means the game's own key): checked on its own.
@@ -780,6 +818,8 @@ BINDING_HEADER_WANDERER = L.ADDON_TITLE
 BINDING_NAME_WANDERER_REVEAL = L.BINDING_REVEAL
 BINDING_NAME_WANDERER_PHOTO = L.BINDING_PHOTO
 BINDING_NAME_WANDERER_MESSAGES = L.BINDING_MESSAGES
+BINDING_NAME_WANDERER_MARKERS = L.BINDING_MARKERS
+BINDING_NAME_WANDERER_TODO = L.BINDING_TODO
 _G["BINDING_NAME_CLICK WandererCampfire:LeftButton"] = L.BINDING_CAMPFIRE
 function Wanderer_ToggleMessages() ns.ToggleMessages() end
 
@@ -813,7 +853,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		if not ns.initialized then
 			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitCinema", "InitTooltips",
 				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen", "InitTargetLabel",
-				"InitTagging", "InitPlates", "InitToast", "InitSession", "InitSounds", "InitFishing", "InitJournal", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
+				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSession", "InitSounds", "InitFishing", "InitJournal", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
 				if ns[init] then ns[init]() end
 			end
 			ns.initialized = true
@@ -894,8 +934,21 @@ SlashCmdList.WANDERER = function(msg)
 		ns.ToggleJournal()
 	elseif msg == "bilan" or msg == "session" then
 		ns.PrintSession()
+	elseif msg == "talents" and ns.DebugTalents then
+		ns.DebugTalents()
+	elseif msg == "todo" or msg == "afaire" or msg == "à faire" then
+		ns.ToggleTodo()
+	elseif msg == "clear" or msg == "effacer" then
+		-- The tab shown (the Wanderer tab in diagnostic mode), and what it kept.
+		local frame = ns.debug and ns.debugFrame or SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME
+		if frame and frame.Clear then
+			frame:Clear()
+			if ns.ForgetChatLog then ns.ForgetChatLog(frame) end
+		end
 	elseif msg == "debug" then
 		ns.debug = not ns.debug
+		ns.debugFrame = ns.debug and ns.DebugFrame and ns.DebugFrame(true) or nil
+		if ns.debugFrame and FCF_SelectDockFrame then pcall(FCF_SelectDockFrame, ns.debugFrame) end
 		ns.Print(ns.debug and L.DEBUG_ON or L.DEBUG_OFF)
 		if ns.debug and ns.DebugEnvironment then ns.DebugEnvironment() end
 		if ns.debug then ns.Print(ns.Util.DebugNames()) end

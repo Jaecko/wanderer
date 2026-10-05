@@ -824,10 +824,15 @@ local function OnEvent(_, event, ...)
 		return
 	end
 	if event == "PLAYER_REGEN_DISABLED" then
-		-- A fight: the keys and the camera are given back at once.
+		-- A fight: the keys and the camera are given back at once, and the
+		-- game's windows hear their events themselves until it ends. Opened
+		-- by Wanderer in a fight, they would be refused by the game and the
+		-- conversation would stay stuck.
 		if scene then Finish(true) end
+		SetTaken(false)
 		return
 	end
+	if event == "PLAYER_REGEN_ENABLED" then return ns.RefreshScene() end
 	-- Scenes off: the game's windows hear their events themselves.
 	if not taken then return end
 	if GameHandlesAlone(event, ...) then
@@ -859,9 +864,32 @@ local function OnEvent(_, event, ...)
 	end
 end
 
+-- A game window still open (from a fight, or Shift): Wanderer takes the
+-- events back once it closes, never in the middle of its conversation.
+local function GameWindowOpen()
+	for _, name in ipairs({ "GossipFrame", "QuestFrame" }) do
+		local window = _G[name]
+		if window and window.IsShown and window:IsShown() then return true end
+	end
+	return false
+end
+
+local retryPending = false
+
 function ns.RefreshScene()
 	local db = ns.db
-	SetTaken(db.enabled and db.scene.enabled and true or false)
+	local wanted = db.enabled and db.scene.enabled and not InCombatLockdown() and true or false
+	if wanted and not taken and GameWindowOpen() then
+		if not retryPending then
+			retryPending = true
+			C_Timer.After(0.5, function()
+				retryPending = false
+				ns.RefreshScene()
+			end)
+		end
+		return
+	end
+	SetTaken(wanted)
 	if not taken and scene then Finish(true) end
 end
 
@@ -961,7 +989,7 @@ function ns.InitScene()
 			end)
 		end
 	end
-	for _, event in ipairs({ "GOSSIP_CLOSED", "QUEST_FINISHED", "PLAYER_REGEN_DISABLED", "QUEST_ACCEPTED", "QUEST_TURNED_IN" }) do
+	for _, event in ipairs({ "GOSSIP_CLOSED", "QUEST_FINISHED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "QUEST_ACCEPTED", "QUEST_TURNED_IN" }) do
 		panel:RegisterEvent(event)
 	end
 	ns.RefreshScene()

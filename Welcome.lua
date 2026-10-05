@@ -48,7 +48,7 @@ local TIPS = {
 -- as they are. Everything stays free to change afterwards.
 local function Way(preset, values)
 	local all = {
-		["combatEnemies"] = false, ["zones.dungeon"] = "balanced", ["zones.raid"] = "balanced",
+		["combatEnemies"] = false, ["label.stickyTarget"] = true, ["zones.dungeon"] = "group", ["zones.raid"] = "group",
 		["scene.enabled"] = true, ["scene.camera"] = true,
 		["cinema.enabled"] = false, ["cinema.combatOnly"] = true, ["cinema.alpha"] = 20,
 		["travel.enabled"] = true, ["away.enabled"] = false,
@@ -75,9 +75,10 @@ ns.PLAYSTYLES = {
 		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "hearth",
 		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
 		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true }),
-	-- Every name in dungeons and raids, the whole interface, threat at a glance.
+	-- Companions named and their health bars in dungeons and raids, the whole
+	-- interface, threat at a glance.
 	dungeons = Way("balanced", {
-		["zones.dungeon"] = "all", ["zones.raid"] = "all", ["cinema.combatOnly"] = false,
+		["cinema.combatOnly"] = false,
 		["scene.camera"] = false, ["threat.show"] = true, ["threat.alert"] = true }),
 }
 
@@ -432,13 +433,7 @@ end
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererWelcome", "DIALOG")
 	window:SetSize(WIDTH, HEIGHT)
-	window:SetPoint("CENTER")
-	window:EnableMouse(true)
-	window:SetMovable(true)
-	window:RegisterForDrag("LeftButton")
-	window:SetScript("OnDragStart", window.StartMoving)
-	window:SetScript("OnDragStop", window.StopMovingOrSizing)
-	window:SetClampedToScreen(true)
+	ns.Skin.Dress(window, nil, nil, Close)
 	local margin = ns.Skin.Margin() + 8
 
 	-- The crest and the name, on every step.
@@ -461,9 +456,6 @@ local function CreateWindow()
 	window.counter = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
 	window.counter:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -3)
 	window.counter:SetPoint("RIGHT", window, "RIGHT", -40, 0)
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
-	close:SetScript("OnClick", Close)
 	window.top = CreateFrame("Frame", nil, window)
 	window.top:SetSize(1, 1)
 	window.top:SetPoint("TOPLEFT", crest, "BOTTOMLEFT", 0, -16)
@@ -500,7 +492,6 @@ local function CreateWindow()
 	window.skip:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 0.82, 0) end)
 	window.skip:SetScript("OnLeave", function(self) self.text:SetTextColor(0.6, 0.6, 0.6) end)
 
-	if UISpecialFrames then table.insert(UISpecialFrames, "WandererWelcome") end
 	window:SetScript("OnHide", function() ns.root.welcomed = true end)
 	window:SetScript("OnShow", function(self)
 		-- On a small screen (or a large interface scale), the window shrinks to fit.

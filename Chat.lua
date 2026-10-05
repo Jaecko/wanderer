@@ -73,3 +73,31 @@ function ns.CreateChatTabs()
 	end
 	return made, kept
 end
+
+-- The Wanderer tab: in diagnostic mode everything Wanderer writes goes there,
+-- and nothing of the game's chat, ready to be copied as it is. Made once (out
+-- of a fight), then found again by its name; it is the player's like any tab.
+local DEBUG_TAB = "Wanderer"
+
+local function DebugIndex()
+	if not GetChatWindowInfo then return end
+	for index = 1, NUM_CHAT_WINDOWS or 10 do
+		local name, _, _, _, _, _, shown, _, docked = GetChatWindowInfo(index)
+		if Clean(name) == DEBUG_TAB and (shown or docked) then return index end
+	end
+end
+
+function ns.IsDebugTab(index)
+	return index ~= nil and index == DebugIndex()
+end
+
+function ns.DebugFrame(create)
+	local index = DebugIndex()
+	if index then return _G["ChatFrame" .. index] end
+	if not create or InCombatLockdown() or not FCF_OpenNewWindow then return end
+	local ok, frame = pcall(FCF_OpenNewWindow, DEBUG_TAB, true)
+	if ok and frame then
+		Clear(frame)
+		return frame
+	end
+end

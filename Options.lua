@@ -242,6 +242,34 @@ end
 
 -- Panel ----------------------------------------------------------------------------
 
+-- Wanderer's keys, set right here with the game's own key binding rows (the
+-- same as in its Key Bindings page). Returns false when the game has none.
+local KEYS = { "WANDERER_REVEAL", "WANDERER_MARKERS", "WANDERER_TODO", "WANDERER_JOURNAL", "WANDERER_MESSAGES", "WANDERER_PHOTO",
+	"CLICK WandererCampfire:LeftButton" }
+
+local function KeyRows()
+	local create = CreateKeybindingEntryInitializer or (Settings and Settings.CreateKeybindingEntryInitializer)
+	if not (create and GetNumBindings and GetBinding) then return false end
+	local indexes = {}
+	for index = 1, GetNumBindings() do
+		local command = GetBinding(index)
+		if command then indexes[command] = index end
+	end
+	local added = false
+	for _, command in ipairs(KEYS) do
+		local index = indexes[command]
+		if index then
+			local ok, initializer = pcall(create, index, true)
+			if ok and initializer then
+				layout:AddInitializer(initializer)
+				Searchable(initializer)
+				added = true
+			end
+		end
+	end
+	return added
+end
+
 local function HomePage()
 	Page(L.ADDON_TITLE)
 	Header(L.SECTION_GENERAL)
@@ -258,11 +286,11 @@ local function HomePage()
 	Checkbox("MINIMAP", L.MINIMAP_BUTTON, L.MINIMAP_HINT, true,
 		function() return ns.IsMinimapButtonShown and ns.IsMinimapButtonShown() or false end,
 		function(value) if ns.SetMinimapButtonShown then ns.SetMinimapButtonShown(value) end end)
-	Button(L.KEYBINDS, L.KEYBINDS_BUTTON, L.KEYBINDS_DESC, function()
+	local function OpenKeys()
 		if Settings.OpenToCategory and Settings.KEYBINDINGS_CATEGORY_ID then
 			Settings.OpenToCategory(Settings.KEYBINDINGS_CATEGORY_ID)
 		end
-	end)
+	end
 	Button(L.WELCOME_SHOW, L.WELCOME_SHOW_BUTTON, L.WELCOME_SHOW_DESC, function()
 		-- The options step aside: the welcome screen takes their place.
 		if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
@@ -272,6 +300,10 @@ local function HomePage()
 		if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
 		if ns.ShowNews then ns.ShowNews() end
 	end)
+
+	-- Wanderer's keys, here; else the game's page of key bindings.
+	Header(L.KEYBINDS)
+	if not KeyRows() then Button(L.KEYBINDS, L.KEYBINDS_BUTTON, L.KEYBINDS_DESC, OpenKeys) end
 
 	-- Where the other settings are.
 	Header(L.SECTION_PAGES)
@@ -322,6 +354,9 @@ local function NamesPage()
 			function() return ns.db.zones[zone] end,
 			function(value) ns.db.zones[zone] = value; ns.Apply() end)
 	end
+	Checkbox("GROUP_MARKS", L.GROUP_MARKS, L.GROUP_MARKS_DESC, true,
+		function() return ns.db.groupMarks end,
+		function(value) ns.db.groupMarks = value; ns.RefreshPlates() end)
 
 	Header(L.SECTION_REVEAL)
 	Dropdown("REVEAL_MODE", L.REVEAL_MODE, L.REVEAL_DESC, "hold",
@@ -363,6 +398,7 @@ local function LabelPage()
 	end), enabled, labelOn)
 	Under(LabelCheckbox("worldOnly", L.LABEL_WORLD_ONLY, L.LABEL_WORLD_ONLY_DESC), enabled, labelOn)
 	Under(LabelCheckbox("hideInCombat", L.LABEL_COMBAT), enabled, labelOn)
+	Under(LabelCheckbox("stickyTarget", L.LABEL_STICKY_TARGET, L.LABEL_STICKY_TARGET_DESC), enabled, labelOn)
 
 	Header(L.SECTION_TARGET)
 	TableCheckbox("label", "targetName", L.LABEL_TARGET_NAME, L.LABEL_TARGET_NAME_DESC, ns.RefreshTargetLabel)
@@ -387,6 +423,7 @@ local function ContentPage()
 	LabelCheckbox("showRace", L.LABEL_RACE)
 	LabelCheckbox("showClass", L.LABEL_CLASS)
 	LabelCheckbox("showSpec", L.LABEL_SPEC, L.LABEL_SPEC_DESC)
+	LabelCheckbox("shiftDetails", L.LABEL_DETAILS, L.LABEL_DETAILS_DESC)
 	LabelCheckbox("showGuild", L.LABEL_GUILD)
 	local faction = LabelCheckbox("showFaction", L.LABEL_FACTION)
 	Under(LabelCheckbox("showNPCFaction", L.LABEL_NPC_FACTION, L.LABEL_NPC_FACTION_DESC), faction, IsOn("label", "showFaction"))
@@ -408,6 +445,7 @@ local function ContentPage()
 	LabelCheckbox("showPortrait", L.LABEL_PORTRAIT, L.LABEL_PORTRAIT_DESC)
 	LabelCheckbox("showHealth", L.LABEL_HEALTH, L.LABEL_HEALTH_DESC)
 	LabelCheckbox("showTarget", L.LABEL_TARGET, L.LABEL_TARGET_DESC)
+	LabelCheckbox("showCasts", L.LABEL_CASTS, L.LABEL_CASTS_DESC)
 
 	Header(L.SECTION_ACTIONS)
 	LabelCheckbox("showProfessions", L.LABEL_PROFESSIONS, L.LABEL_PROFESSIONS_DESC)
@@ -431,6 +469,10 @@ local function TooltipsPage()
 	Checkbox("HIDE_TOOLTIP", L.HIDE_TOOLTIP, L.HIDE_TOOLTIP_DESC, false,
 		function() return ns.db.hideUnitTooltip end,
 		function(value) ns.db.hideUnitTooltip = value end)
+	LabelCheckbox("ownPortrait", L.LABEL_OWN_PORTRAIT, L.LABEL_OWN_PORTRAIT_DESC)
+	Checkbox("HIDE_TARGET_TOOLTIP", L.HIDE_TARGET_TOOLTIP, L.HIDE_TARGET_TOOLTIP_DESC, true,
+		function() return ns.db.hideTargetTooltip end,
+		function(value) ns.db.hideTargetTooltip = value end)
 end
 
 local function InterfacePage()
@@ -599,6 +641,7 @@ local function SocialPage()
 	TableCheckbox("chat", "whispers", L.CHAT_TAB_WHISPERS, L.CHAT_TAB_WHISPERS_DESC)
 	TableCheckbox("chat", "arrowHistory", L.CHAT_ARROWS, L.CHAT_ARROWS_DESC, ns.RefreshChatComfort)
 	TableCheckbox("chat", "copyButton", L.CHAT_COPY_BUTTON, L.CHAT_COPY_BUTTON_DESC, ns.RefreshChatComfort)
+	TableCheckbox("chat", "keepLog", L.CHAT_KEEP_LOG, L.CHAT_KEEP_LOG_DESC)
 	Button(L.CHAT_TABS, L.CHAT_TABS_BUTTON, L.CHAT_TABS_DESC, function() ns.CreateChatTabs() end)
 end
 

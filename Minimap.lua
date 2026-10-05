@@ -37,20 +37,25 @@ function ns.ShowMenu(owner)
 	GameTooltip:Hide()
 	MenuUtil.CreateContextMenu(owner or UIParent, function(_, root)
 		root:CreateTitle(L.ADDON_TITLE)
-		root:CreateButton(L.MENU_OPTIONS, function() ns.OpenOptions() end)
-		root:CreateButton(L.MENU_JOURNAL, function() ns.ToggleJournal() end)
+		-- Every day: who wrote to you, what is left to do, the journey.
 		if ns.db.messages.enabled then
 			local unread = ns.UnreadMessages()
 			root:CreateButton(unread > 0 and L.MENU_MESSAGES_UNREAD:format(unread) or L.MENU_MESSAGES,
 				function() ns.ToggleMessages() end)
 		end
+		local pending = ns.TodoPending and ns.TodoPending() or 0
+		root:CreateButton(pending > 0 and L.TODO_TITLE_COUNT:format(pending) or L.TODO_TITLE, function() ns.ToggleTodo() end)
+		root:CreateButton(L.MENU_JOURNAL, function() ns.ToggleJournal() end)
+		-- Tools of the moment.
+		root:CreateDivider()
 		root:CreateButton(L.MENU_PHOTO, function() ns.TogglePhotoMode() end)
-		root:CreateButton(L.MENU_SESSION, function() ns.PrintSession() end)
 		root:CreateButton(L.COPY_TITLE, function() ns.CopyChat() end)
 		if ns.db.world.gatherIcons then
 			ns.GatherIcons()
 			root:CreateButton(L.MENU_ICONS:format(ns.CountIcons()), function() ns.ToggleIconDrawer(button) end)
 		end
+		root:CreateButton(L.MENU_SESSION, function() ns.PrintSession() end)
+		-- Settings.
 		root:CreateDivider()
 		local names = root:CreateButton(L.PRESET)
 		for _, preset in ipairs({ "immersion", "balanced", "all" }) do
@@ -63,6 +68,8 @@ function ns.ShowMenu(owner)
 		end
 		root:CreateCheckbox(L.MENU_ENABLED, function() return ns.db.enabled end,
 			function() ns.SetEnabled(not ns.db.enabled) end)
+		root:CreateButton(L.MENU_OPTIONS, function() ns.OpenOptions() end)
+		-- Help.
 		root:CreateDivider()
 		root:CreateButton(L.WELCOME_SHOW, function() ns.ShowWelcome() end)
 		root:CreateButton(L.NEWS_SHOW, function() ns.ShowNews() end)

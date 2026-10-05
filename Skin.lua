@@ -248,6 +248,52 @@ function Skin.Sounds(window, open, close)
 	end)
 end
 
+-- What every Wanderer window does: moved by dragging it (its place kept in
+-- ns.root[save] when given, else at point), closed by its cross and by
+-- Escape. The cross closes directly (or calls onClose), never through the
+-- game's panel manager, locked during a fight. Returns the cross.
+function Skin.Dress(window, point, save, onClose)
+	window:EnableMouse(true)
+	window:SetMovable(true)
+	window:SetClampedToScreen(true)
+	window:RegisterForDrag("LeftButton")
+	window:SetScript("OnDragStart", window.StartMoving)
+	window:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		if save and ns.root then
+			local anchor, _, _, x, y = self:GetPoint(1)
+			ns.root[save] = { anchor, x, y }
+		end
+	end)
+	local saved = save and ns.root and ns.root[save]
+	window:ClearAllPoints()
+	if saved then
+		window:SetPoint(saved[1], UIParent, saved[1], saved[2], saved[3])
+	else
+		window:SetPoint(unpack(point or { "CENTER" }))
+	end
+	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
+	close:SetScript("OnClick", onClose or function() window:Hide() end)
+	local name = window:GetName()
+	if name and UISpecialFrames then table.insert(UISpecialFrames, name) end
+	return close
+end
+
+-- A line to write in, on a dark band, as in the chat.
+function Skin.CreateInput(parent, name, maxLetters)
+	local input = CreateFrame("EditBox", name, parent)
+	input:SetHeight(24)
+	input:SetFontObject("ChatFontNormal")
+	input:SetAutoFocus(false)
+	input:SetMaxLetters(maxLetters or 255)
+	input:SetTextInsets(8, 8, 0, 0)
+	input.background = input:CreateTexture(nil, "BACKGROUND")
+	input.background:SetAllPoints()
+	input.background:SetColorTexture(0, 0, 0, 0.35)
+	return input
+end
+
 function Skin.CreateWindow(name, strata, parent)
 	parent = parent or UIParent
 	local ok, created = pcall(CreateFrame, "Frame", name, parent, "TooltipBackdropTemplate")

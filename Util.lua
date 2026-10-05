@@ -49,6 +49,8 @@ end
 -- Width or height of a font string, with a fallback when it is unknown or
 -- protected (the size of a secret text can itself be secret).
 function Util.Measure(fontString, method, fallback)
+	-- The whole line, even when the game has already laid it out narrower.
+	if method == "GetStringWidth" and fontString.GetUnboundedStringWidth then method = "GetUnboundedStringWidth" end
 	local value = Util.Clean(Util.Safe(fontString[method], fontString))
 	if not value or value <= 0 then return fallback end
 	return value

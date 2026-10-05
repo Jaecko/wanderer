@@ -70,6 +70,7 @@ local ICONS = {
 	flight = "Interface\\Icons\\Ability_Mount_Gryphon_01",
 	banker = "Interface\\Icons\\INV_Misc_Bag_10",
 	questgiver = "Interface\\Icons\\INV_Misc_Note_01",
+	todo = "Interface\\Icons\\INV_Misc_Note_05",
 }
 
 -- What a character is, from the window they opened.
@@ -117,6 +118,11 @@ local function Chronicle(kind, name, zone, value, quiet)
 	while #chronicle > CHRONICLE_MAX do table.remove(chronicle, 1) end
 	if ns.RefreshJournalWindow then ns.RefreshJournalWindow() end
 	if not quiet and Notice then Notice(entry) end
+end
+
+-- A line written by another part of the journal (the reminders): no notice.
+function ns.JournalNote(kind, name)
+	Chronicle(kind, name, nil, nil, true)
 end
 
 local function Zone()
@@ -485,6 +491,7 @@ local function PlacesTip(zone, entry)
 end
 
 local EVENT_TEXT = {
+	todo = function(entry) return L.JOURNAL_EVENT_TODO:format(entry.n or "?") end,
 	zone = function(entry) return L.JOURNAL_EVENT_ZONE:format(entry.n or "?") end,
 	sub = function(entry) return L.JOURNAL_EVENT_SUB:format(entry.n or "?") end,
 	level = function(entry) return L.JOURNAL_EVENT_LEVEL:format(entry.v or 0) end,
@@ -903,13 +910,7 @@ local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererJournal", "DIALOG")
 	ns.Skin.Sounds(window, "IG_SPELLBOOK_OPEN", "IG_SPELLBOOK_CLOSE") -- a book, as the game's
 	window:SetSize(WIDTH, HEIGHT)
-	window:SetPoint("CENTER")
-	window:EnableMouse(true)
-	window:SetMovable(true)
-	window:RegisterForDrag("LeftButton")
-	window:SetScript("OnDragStart", window.StartMoving)
-	window:SetScript("OnDragStop", window.StopMovingOrSizing)
-	window:SetClampedToScreen(true)
+	local close = ns.Skin.Dress(window)
 	local margin = ns.Skin.Margin() + 6
 
 	-- Header: round portrait in a golden ring, the character's story.
@@ -936,10 +937,20 @@ local function CreateWindow()
 		text:SetPoint("RIGHT", window, "RIGHT", -40, 0)
 		if text.SetWordWrap then text:SetWordWrap(false) end
 	end
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
-	-- Closed directly, never through the game's panel manager (locked during a fight).
-	close:SetScript("OnClick", function() window:Hide() end)
+	-- The reminders, a page of their own beside the journal.
+	local reminders = CreateFrame("Button", nil, window)
+	reminders:SetSize(26, 26)
+	reminders:SetPoint("RIGHT", close, "LEFT", -4, 0)
+	reminders:SetNormalTexture(ICONS.todo)
+	reminders:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+	reminders:SetScript("OnClick", function() if ns.ToggleTodo then ns.ToggleTodo() end end)
+	reminders:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		local pending = ns.TodoPending and ns.TodoPending() or 0
+		GameTooltip:AddLine(pending > 0 and L.TODO_TITLE_COUNT:format(pending) or L.TODO_TITLE, 1, 0.82, 0)
+		GameTooltip:Show()
+	end)
+	reminders:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	window.headerRule = window:CreateTexture(nil, "ARTWORK")
 	window.headerRule:SetColorTexture(1, 0.82, 0, 0.25)
 	window.headerRule:SetHeight(1)
@@ -978,8 +989,6 @@ local function CreateWindow()
 	window.empty:SetPoint("CENTER", inset, "CENTER")
 	window.empty:SetText(L.JOURNAL_EMPTY)
 
-	-- Escape closes it, like the game's windows.
-	if UISpecialFrames then table.insert(UISpecialFrames, "WandererJournal") end
 	window:HookScript("OnShow", function(self)
 		self:SetScale(ns.Skin.Scale())
 		FillHeader()

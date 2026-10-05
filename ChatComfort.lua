@@ -1,7 +1,7 @@
 local _, ns = ...
 local L = ns.L
 
--- Two comforts of the chat (options):
+-- Three comforts of the chat (options):
 -- * Your sent messages with the arrow keys: Up and Down bring them back while
 --   you type, the last one first (as in a terminal), Left and Right move in
 --   the text instead of turning your character. Wanderer keeps them itself,
@@ -10,6 +10,10 @@ local L = ns.L
 --   clients do not answer.
 -- * Copy the chat: a discreet button in the corner of the chat, shown while
 --   the mouse is over it, opens the chat of that tab as plain text.
+-- * The conversations kept: each tab keeps its last lines (its channels, as
+--   the game shows them) from one session to the next, for each character;
+--   after a reload or a new session they are back in their tab, a little
+--   dimmed, under a quiet line. Secret lines are never kept.
 
 local U = ns.Util
 
@@ -17,6 +21,8 @@ local KEPT = 32 -- sent messages kept, as many as the game remembers
 local BUTTON_SIZE = 18
 local CHECK_EVERY = 0.1
 local FADE_IN, FADE_OUT = 0.2, 0.5
+local LOG_KEPT = 150 -- lines kept per tab
+local LOG_DIM = 0.7 -- the lines of before, a little dimmed
 
 local boxes = {} -- edit box -> true: watched
 local browsing = {} -- edit box -> { index, draft } while you go through your messages
@@ -55,6 +61,78 @@ local function Remember(text)
 	if history[#history] == text then return end
 	history[#history + 1] = text
 	while #history > KEPT do table.remove(history, 1) end
+end
+
+-- The lines of each tab, per character: { [tab number] = { { text, r, g, b }, ... } }.
+local function Log()
+	local root = ns.root
+	if not (root and ns.CharacterKey) then return {} end
+	root.chatLog = type(root.chatLog) == "table" and root.chatLog or {}
+	local key = ns.CharacterKey()
+	if type(root.chatLog[key]) ~= "table" then root.chatLog[key] = {} end
+	return root.chatLog[key]
+end
+
+local restoring = false -- Wanderer putting the lines of before back: not kept twice
+local logged = {} -- chat frame -> true: watched
+
+local function LogOn()
+	local settings = Settings()
+	return settings and settings.keepLog and true or false
+end
+
+-- The combat log (the game's second tab, loaded later) keeps its own lines: never touched.
+local function IsCombatLogFrame(frame)
+	return frame == _G.COMBATLOG or frame == _G.ChatFrame2
+end
+
+local function Keep(index, text, r, g, b)
+	if restoring or not LogOn() or type(text) ~= "string" or U.IsSecret(text) or text == "" then return end
+	-- The Wanderer tab (diagnostic mode) is never kept.
+	if ns.IsDebugTab and ns.IsDebugTab(index) then return end
+	local log = Log()
+	log[index] = log[index] or {}
+	local lines = log[index]
+	lines[#lines + 1] = { text, r, g, b }
+	while #lines > LOG_KEPT do table.remove(lines, 1) end
+end
+
+-- The lines of before, back in their tab, under a quiet line.
+local function Restore()
+	if not LogOn() then return end
+	local log = Log()
+	restoring = true
+	for index, lines in pairs(log) do
+		local frame = type(index) == "number" and _G["ChatFrame" .. index]
+		if frame and lines[1] and frame.AddMessage and not IsCombatLogFrame(frame) then
+			U.Safe(frame.AddMessage, frame, "|cff808080" .. L.CHAT_LOG_BEFORE .. "|r")
+			for _, line in ipairs(lines) do
+				local r, g, b = line[2] or 1, line[3] or 1, line[4] or 1
+				U.Safe(frame.AddMessage, frame, line[1], r * LOG_DIM, g * LOG_DIM, b * LOG_DIM)
+			end
+		end
+	end
+	restoring = false
+end
+
+ns.RestoreChatLog = Restore -- (tests)
+
+-- /wanderer clear: the lines a tab kept go with its content.
+function ns.ForgetChatLog(frame)
+	local index = frame and frame.GetName and tonumber((frame:GetName() or ""):match("^ChatFrame(%d+)$"))
+	if index then Log()[index] = nil end
+end
+
+local function WatchLog()
+	for index = 1, (NUM_CHAT_WINDOWS or 10) do
+		local frame = _G["ChatFrame" .. index]
+		if frame and not logged[frame] and frame.AddMessage and not IsCombatLogFrame(frame) then
+			logged[frame] = true
+			hooksecurefunc(frame, "AddMessage", function(_, text, r, g, b)
+				Keep(index, text, r, g, b)
+			end)
+		end
+	end
 end
 
 -- The copy button of a chat frame.
@@ -160,6 +238,9 @@ function ns.RefreshChatComfort()
 end
 
 function ns.InitChatComfort()
+	-- The lines of before first, then every new one kept.
+	Restore()
+	WatchLog()
 	Watch()
 	ns.RefreshChatComfort()
 	local since = 0

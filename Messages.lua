@@ -4,6 +4,9 @@ local L = ns.L
 -- Private messages in their own window, in Wanderer's look: the people you
 -- whisper with on the left, the conversation on the right, a line to answer
 -- at the bottom. Whispers (and Battle.net whispers) leave the chat for it.
+-- The conversation reads as a thread of bubbles drawn with the game's own
+-- tooltip frame: theirs on the left, yours on the right in gold, the hour
+-- between moments apart.
 --
 -- A new message opens the window without taking the keyboard, never during a
 -- fight or a conversation scene: then the minimap menu counts the unread
@@ -19,12 +22,13 @@ local ROW_HEIGHT = 30
 local MAX_LINES = 200 -- kept per person
 local MAX_PEOPLE = 40
 local TIME_FORMAT = "%H:%M"
+local ECHO_WAIT = 60 -- seconds: the game's confirmation of a message, recognised within this time
 local EVENTS = { -- event -> who wrote it
 	CHAT_MSG_WHISPER = "them", CHAT_MSG_WHISPER_INFORM = "me",
 	CHAT_MSG_BN_WHISPER = "them", CHAT_MSG_BN_WHISPER_INFORM = "me",
 }
 
-local window, list, history, input, header, portrait
+local window, list, thread, input, header, info, portrait, person
 local PORTRAIT, ROW_PORTRAIT = 40, 22
 local CLASSES_TEXTURE = "Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES"
 -- The game's race names that its icons spell differently.
@@ -135,28 +139,320 @@ local function ShowPortrait(texture, talk)
 	texture.ring:SetShown(shown and texture.ringShown or false)
 end
 
--- Window -----------------------------------------------------------------------------------
-
 local function Hex(color) return color and color.colorStr and ("|c" .. color.colorStr) or "|cffffffff" end
+
+-- Who they are ------------------------------------------------------------------------------
+-- What the game can tell, best source first: the person near you, your
+-- friends list, your guild's roster, a /who you asked for; else race and
+-- class from the message itself. Kept with the conversation, with the time
+-- it was true.
+
+local SEEN_FRESH = 600 -- seconds: older information says when it was seen
+local WHO_WAIT = 6 -- seconds before a /who without answer counts as "not found"
+local WHO_MISS_SHOWN = 30 -- seconds the "not found" stays
+
+local function IsBattleNet(key) return key:sub(1, 3) == "BN:" end
+
+local function Short(talk, key)
+	return talk.name or (Ambiguate and Clean(Safe(Ambiguate, key, "short"))) or key
+end
+
+-- The friends list functions, current or older names.
+local function Friends(name)
+	return C_FriendList and C_FriendList[name] or _G[name]
+end
+
+local function SameName(name, key, short)
+	return name == key or (Ambiguate and Safe(Ambiguate, name, "short")) == short
+end
+
+local function Learn(talk, key)
+	if IsBattleNet(key) then return end
+	local short = Short(talk, key)
+	local unit = UnitFor(talk.guid)
+	if unit then
+		talk.level = Clean(Safe(UnitLevel, unit)) or talk.level
+		talk.guild = Clean(Safe(GetGuildInfo, unit))
+		talk.zone = Clean(Safe(GetRealZoneText)) or talk.zone
+		talk.online, talk.seen = true, time()
+	end
+	local friend = Safe(Friends("GetFriendInfo"), short)
+	talk.friend = type(friend) == "table" or nil
+	if talk.friend then
+		talk.online = friend.connected and true or false
+		if friend.connected then
+			talk.level = Clean(friend.level) or talk.level
+			talk.zone = Clean(friend.area) or talk.zone
+			talk.seen = time()
+		end
+	end
+	if not unit and IsInGuild and Safe(IsInGuild) then
+		for index = 1, Clean(Safe(GetNumGuildMembers)) or 0 do
+			local name, rank, _, level, _, zone, _, _, online = Safe(GetGuildRosterInfo, index)
+			name = Clean(name)
+			if name and SameName(name, key, short) then
+				talk.guild = Clean(Safe(GetGuildInfo, "player")) or talk.guild
+				talk.rank, talk.level = Clean(rank), Clean(level) or talk.level
+				talk.online = online and true or false
+				if online then talk.zone, talk.seen = Clean(zone) or talk.zone, time() end
+				break
+			end
+		end
+	end
+end
+
+-- "Level 60 Human Warrior · <Guild> Officer · Ironforge · Online"
+local function InfoLine(talk, key)
+	if IsBattleNet(key) then return "" end
+	local parts = {}
+	local color = talk.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[talk.class]
+	local who = {}
+	if talk.level then who[#who + 1] = LEVEL .. " " .. talk.level end
+	if talk.raceName then who[#who + 1] = talk.raceName end
+	if talk.className then who[#who + 1] = Hex(color) .. talk.className .. "|r" end
+	if who[1] then parts[#parts + 1] = table.concat(who, " ") end
+	if talk.guild then parts[#parts + 1] = "<" .. talk.guild .. ">" .. (talk.rank and (" " .. talk.rank) or "") end
+	if talk.zone then parts[#parts + 1] = talk.zone end
+	if talk.looking then
+		parts[#parts + 1] = "|cff808080" .. L.MESSAGES_WHO_WAIT .. "|r"
+	elseif talk.whoMiss and time() - talk.whoMiss < WHO_MISS_SHOWN then
+		parts[#parts + 1] = "|cff808080" .. L.MESSAGES_WHO_NONE .. "|r"
+	elseif talk.online == true then
+		parts[#parts + 1] = "|cff66ff66" .. L.MESSAGES_ONLINE .. "|r"
+	elseif talk.online == false then
+		parts[#parts + 1] = "|cff808080" .. L.MESSAGES_OFFLINE .. "|r"
+	end
+	if talk.friend then parts[#parts + 1] = "|cff82c5ff" .. L.MESSAGES_FRIEND .. "|r" end
+	if talk.seen and time() - talk.seen > SEEN_FRESH and talk.online ~= true then
+		parts[#parts + 1] = "|cff808080" .. L.MESSAGES_SEEN:format(Safe(SecondsToTime, time() - talk.seen, true) or "?") .. "|r"
+	end
+	return table.concat(parts, "  |cff808080·|r  ")
+end
+
+local function RefreshHeader()
+	if not (current and info) then return end
+	info:SetText(InfoLine(Conversation(current), current))
+end
+
+-- /who on someone, asked from the menu: the answer fills their information.
+local whoFor, friendsOpen
+
+local function AskWho(key)
+	local send = Friends("SendWho")
+	if not send then return end
+	local talk = Conversation(key)
+	whoFor = key
+	friendsOpen = FriendsFrame and FriendsFrame:IsShown()
+	Safe(Friends("SetWhoToUi"), true)
+	talk.looking, talk.whoMiss = true, nil
+	Safe(send, ('n-"%s"'):format(Short(talk, key)))
+	RefreshHeader()
+	C_Timer.After(WHO_WAIT, function()
+		if whoFor ~= key then return end
+		whoFor = nil
+		talk.looking, talk.whoMiss = nil, time()
+		RefreshHeader()
+	end)
+end
+
+local function OnWho()
+	if not whoFor then return end
+	local key, talk = whoFor, Conversation(whoFor)
+	local short = Short(talk, key)
+	local found = false
+	for index = 1, Clean(Safe(Friends("GetNumWhoResults"))) or 0 do
+		local entry = Safe(Friends("GetWhoInfo"), index)
+		local name = type(entry) == "table" and Clean(entry.fullName)
+		if name and SameName(name, key, short) then
+			talk.level = Clean(entry.level) or talk.level
+			talk.raceName = Clean(entry.raceStr) or talk.raceName
+			talk.className = Clean(entry.classStr) or talk.className
+			talk.class = Clean(entry.filename) or talk.class
+			talk.guild = Clean(entry.fullGuildName)
+			talk.zone = Clean(entry.area) or talk.zone
+			talk.online, talk.seen = true, time()
+			found = true
+			break
+		end
+	end
+	whoFor = nil
+	talk.looking = nil
+	if not found then talk.whoMiss = time() end
+	-- The game's list may open for the answer: closed again if it was closed.
+	if FriendsFrame and FriendsFrame:IsShown() and not friendsOpen and not InCombatLockdown() then FriendsFrame:Hide() end
+	RefreshHeader()
+end
+
+-- What can be done with someone: the game's own actions, in every menu of a person.
+local function PersonActions(root, key, talk)
+	if IsBattleNet(key) then return end
+	local short = Short(talk, key)
+	root:CreateButton(L.MESSAGES_WHO, function() AskWho(key) end)
+	root:CreateButton(L.MESSAGES_INVITE, function()
+		Safe(C_PartyInfo and C_PartyInfo.InviteUnit or InviteUnit, key)
+	end)
+	if Safe(Friends("GetFriendInfo"), short) then
+		root:CreateButton(L.MESSAGES_REMOVE_FRIEND, function() Safe(Friends("RemoveFriend"), short) end)
+	else
+		root:CreateButton(L.MESSAGES_ADD_FRIEND, function() Safe(Friends("AddFriend"), key) end)
+	end
+	if Clean(Safe(Friends("IsIgnored"), key)) then
+		root:CreateButton(L.MESSAGES_UNIGNORE, function() Safe(Friends("DelIgnore"), key) end)
+	else
+		root:CreateButton(L.MESSAGES_IGNORE, function() Safe(Friends("AddIgnore"), key) end)
+	end
+end
+
+-- Window -----------------------------------------------------------------------------------
 
 local function NameOf(talk, key)
 	local color = talk.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[talk.class]
 	return Hex(color) .. (talk.name or key) .. "|r"
 end
 
-local function Line(entry)
-	local stamp = "|cff808080" .. date(TIME_FORMAT, entry.t) .. "|r  "
-	local who = entry.me and ("|cffbfbfbf" .. L.MESSAGES_ME .. "|r") or ("|cffffd100" .. (entry.from or "?") .. "|r")
-	return stamp .. who .. "  " .. (entry.text or "")
+-- The thread of bubbles -----------------------------------------------------------------------
+
+local BUBBLE_SHARE = 0.72 -- of the thread's width, at most
+local BUBBLE_PAD_X, BUBBLE_PAD_Y = 10, 7
+local SAME_GAP, OTHER_GAP = 3, 10 -- between bubbles of the same person, between two people
+local TOGETHER = 180 -- seconds: closer messages of one person stay together
+local APART = 900 -- seconds: the hour is written between moments further apart
+local SCROLL_STEP = 40
+local SENDING_ALPHA = 0.65 -- your message until the game confirms it
+local BUBBLE_BACKDROP = {
+	bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+	edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+	tile = true, tileSize = 16, edgeSize = 12,
+	insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+local BUBBLE_LOOK = {
+	them = { bg = { 0.05, 0.05, 0.07, 0.88 }, edge = { 0.55, 0.55, 0.6, 0.9 }, text = { 0.95, 0.93, 0.88 } },
+	me = { bg = { 0.2, 0.14, 0.04, 0.88 }, edge = { 1, 0.82, 0, 0.75 }, text = { 1, 0.95, 0.8 } },
+}
+
+local bubbles, stamps = {}, {} -- pools
+local used = { bubbles = 0, stamps = 0, height = 0 }
+local lastShown -- the entry shown last (its time and its author)
+local bubbleOf = setmetatable({}, { __mode = "k" }) -- entry -> its bubble
+
+local function ThreadWidth()
+	return math.max(120, (thread.width or 300))
+end
+
+local function Bubble()
+	used.bubbles = used.bubbles + 1
+	local bubble = bubbles[used.bubbles]
+	if bubble then return bubble end
+	bubble = CreateFrame("Frame", nil, thread.content, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	if bubble.SetBackdrop then bubble:SetBackdrop(BUBBLE_BACKDROP) end
+	bubble.text = bubble:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
+	bubble.text:SetJustifyH("LEFT")
+	if bubble.text.SetWordWrap then bubble.text:SetWordWrap(true) end
+	bubble.text:SetPoint("TOPLEFT", bubble, "TOPLEFT", BUBBLE_PAD_X, -BUBBLE_PAD_Y)
+	-- Item and quest links stay clickable; the hour shows under the mouse.
+	if bubble.SetHyperlinksEnabled then pcall(bubble.SetHyperlinksEnabled, bubble, true) end
+	bubble:SetScript("OnHyperlinkClick", function(_, link, text, button) SetItemRef(link, text, button) end)
+	bubble:EnableMouse(true)
+	bubble:SetScript("OnEnter", function(self)
+		if not self.entry then return end
+		GameTooltip:SetOwner(self, self.entry.me and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
+		GameTooltip:AddLine(date("%d/%m %H:%M", self.entry.t or time()), 0.8, 0.8, 0.8)
+		GameTooltip:Show()
+	end)
+	bubble:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	bubbles[used.bubbles] = bubble
+	return bubble
+end
+
+local function Stamp()
+	used.stamps = used.stamps + 1
+	local stamp = stamps[used.stamps]
+	if not stamp then
+		stamp = ns.Skin.CreateText(thread.content, "GameTooltipTextSmall", 0.55, 0.55, 0.55)
+		stamp:SetJustifyH("CENTER")
+		stamps[used.stamps] = stamp
+	end
+	return stamp
+end
+
+local function ClearThread()
+	for index = 1, used.bubbles do bubbles[index]:Hide() bubbles[index].entry = nil end
+	for index = 1, used.stamps do stamps[index]:Hide() end
+	used.bubbles, used.stamps, used.height = 0, 0, 0
+	lastShown = nil
+	thread.content:SetHeight(1)
+	thread:SetVerticalScroll(0)
+end
+
+local function ScrollToEnd()
+	local range = math.max(0, used.height - (thread:GetHeight() or 0))
+	thread:SetVerticalScroll(range)
+end
+
+-- One message as a bubble, under the others.
+local function AddBubble(entry, secretText)
+	local width = ThreadWidth()
+	local t = entry.t or time()
+	-- The hour, between moments apart (and before the first one).
+	if not lastShown or t - (lastShown.t or 0) > APART then
+		local stamp = Stamp()
+		local today = date("%d/%m") == date("%d/%m", t)
+		stamp:SetText(today and date(TIME_FORMAT, t) or date("%d/%m " .. TIME_FORMAT, t))
+		stamp:ClearAllPoints()
+		used.height = used.height + (lastShown and OTHER_GAP or 2)
+		stamp:SetPoint("TOP", thread.content, "TOP", 0, -used.height)
+		stamp:SetWidth(width)
+		stamp:Show()
+		used.height = used.height + 12
+		lastShown = nil
+	end
+	local together = lastShown and (lastShown.me and true or false) == (entry.me and true or false)
+		and t - (lastShown.t or 0) <= TOGETHER
+	used.height = used.height + (lastShown and (together and SAME_GAP or OTHER_GAP) or 4)
+	local bubble = Bubble()
+	local look = entry.me and BUBBLE_LOOK.me or BUBBLE_LOOK.them
+	if bubble.SetBackdropColor then
+		bubble:SetBackdropColor(look.bg[1], look.bg[2], look.bg[3], look.bg[4])
+		bubble:SetBackdropBorderColor(look.edge[1], look.edge[2], look.edge[3], look.edge[4])
+	end
+	local text = bubble.text
+	text:SetTextColor(look.text[1], look.text[2], look.text[3])
+	local most = math.floor(width * BUBBLE_SHARE) - BUBBLE_PAD_X * 2
+	text:SetWidth(most)
+	if not pcall(text.SetText, text, secretText or entry.text or "") then text:SetText("") end
+	local natural = U.Measure(text, "GetStringWidth", most)
+	local textWidth = math.min(most, math.ceil(natural) + 1)
+	text:SetWidth(textWidth)
+	local textHeight = U.Measure(text, "GetStringHeight", 14)
+	bubble:SetSize(textWidth + BUBBLE_PAD_X * 2, textHeight + BUBBLE_PAD_Y * 2)
+	bubble:ClearAllPoints()
+	if entry.me then
+		bubble:SetPoint("TOPRIGHT", thread.content, "TOPRIGHT", -2, -used.height)
+	else
+		bubble:SetPoint("TOPLEFT", thread.content, "TOPLEFT", 2, -used.height)
+	end
+	-- Yours waits, a little faded, for the game to confirm it.
+	local waiting = entry.echo and GetTime() - entry.echo >= 0 and GetTime() - entry.echo <= ECHO_WAIT
+	bubble:SetAlpha(waiting and SENDING_ALPHA or 1)
+	bubble.entry = entry
+	bubbleOf[entry] = bubble
+	bubble:Show()
+	used.height = used.height + textHeight + BUBBLE_PAD_Y * 2
+	thread.content:SetHeight(math.max(1, used.height + 4))
+	lastShown = entry
+	ScrollToEnd()
 end
 
 local function ShowConversation(key)
 	current = key
 	local talk = Conversation(key)
 	talk.unread = 0
-	history:Clear()
-	for _, entry in ipairs(talk.lines) do pcall(history.AddMessage, history, Line(entry)) end
+	ClearThread()
+	for _, entry in ipairs(talk.lines) do AddBubble(entry) end
 	header:SetText(NameOf(talk, key))
+	Learn(talk, key)
+	info:SetText(InfoLine(talk, key))
+	person:SetShown(not IsBattleNet(key))
 	ShowPortrait(portrait, talk)
 	input:Show()
 	ns.RefreshMessages()
@@ -185,8 +481,23 @@ local function OpenMenu(row)
 				ns.RefreshMessages()
 			end)
 		end
+		if not IsBattleNet(key) then
+			root:CreateDivider()
+			PersonActions(root, key, talk)
+		end
 		root:CreateDivider()
 		root:CreateButton("|cffff6060" .. L.MESSAGES_DELETE .. "|r", function() Forget(key) end)
+	end)
+end
+
+-- The menu of the person shown (a click on their name or portrait).
+local function OpenPersonMenu(owner)
+	if not (current and MenuUtil and MenuUtil.CreateContextMenu) or IsBattleNet(current) then return end
+	local key = current
+	local talk = Conversation(key)
+	MenuUtil.CreateContextMenu(owner, function(_, root)
+		root:CreateTitle(NameOf(talk, key))
+		PersonActions(root, key, talk)
 	end)
 end
 
@@ -256,25 +567,13 @@ function ns.RefreshMessages()
 	window.empty:SetShown(not all[1])
 	if not current then
 		header:SetText(L.MESSAGES_TITLE)
+		info:SetText("")
+		person:Hide()
 		ShowPortrait(portrait, nil)
-		history:Clear()
+		ClearThread()
 		input:Hide()
 	end
 end
-
-local sentAt -- /wanderer debug: when your last message left
-local fromWindow = false -- a message being sent by the window (not typed in the chat)
-
--- /wanderer debug: a whisper handed to the game, timed until its confirmation.
-local function DebugSent(label)
-	local sent = GetTime()
-	sentAt = sent
-	ns.Print(label)
-	C_Timer.After(10, function()
-		if ns.debug and sentAt == sent then ns.Print(L.MESSAGES_DEBUG_NONE) end
-	end)
-end
-local ECHO_WAIT = 60 -- seconds: the game's confirmation of a message, recognised within this time
 
 -- Your message in the window at once, as you send it: never waiting for the
 -- game's confirmation (it may come late, or not reach Wanderer at all).
@@ -284,7 +583,7 @@ local function Echo(key, text)
 	talk.lines[#talk.lines + 1] = entry
 	while #talk.lines > MAX_LINES do table.remove(talk.lines, 1) end
 	talk.last = time()
-	if current == key and window and window:IsShown() then pcall(history.AddMessage, history, Line(entry)) end
+	if current == key and window and window:IsShown() then AddBubble(entry) end
 	ns.RefreshMessages()
 end
 
@@ -298,38 +597,18 @@ local function Send()
 		if BNSendWhisper then ok, problem = pcall(BNSendWhisper, tonumber(current:sub(4)), text) end
 	else
 		local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
-		fromWindow = true
 		if send then ok, problem = pcall(send, text, "WHISPER", nil, current) end
-		fromWindow = false
 	end
-	-- /wanderer debug: how long the game takes to confirm it, or why it refused.
-	if ns.debug then
-		if ok == false then ns.Print(L.MESSAGES_DEBUG_FAILED:format(tostring(problem))) end
-		DebugSent(L.MESSAGES_DEBUG_SENT)
-	end
+	-- /wanderer debug: why the game refused it.
+	if ns.debug and ok == false then ns.Print(L.MESSAGES_DEBUG_FAILED:format(tostring(problem))) end
 end
 
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererMessages", "MEDIUM")
 	ns.Skin.Sounds(window, "IG_CHARACTER_INFO_OPEN", "IG_CHARACTER_INFO_CLOSE")
 	window:SetSize(WIDTH, HEIGHT)
-	local pos = ns.root.messagesPos
-	if pos then window:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3]) else window:SetPoint("LEFT", UIParent, "LEFT", 40, 60) end
-	window:EnableMouse(true)
-	window:SetMovable(true)
-	window:SetClampedToScreen(true)
-	window:RegisterForDrag("LeftButton")
-	window:SetScript("OnDragStart", window.StartMoving)
-	window:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		local point, _, _, x, y = self:GetPoint(1)
-		ns.root.messagesPos = { point, x, y }
-	end)
+	ns.Skin.Dress(window, { "LEFT", UIParent, "LEFT", 40, 60 }, "messagesPos")
 	local margin = ns.Skin.Margin() + 6
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
-	-- Closed directly, never through the game's panel manager (locked during a fight).
-	close:SetScript("OnClick", function() window:Hide() end)
 
 	-- The people, on the left.
 	list = CreateFrame("Frame", nil, window)
@@ -350,40 +629,54 @@ local function CreateWindow()
 	portrait = ns.Skin.RoundPortrait(window, PORTRAIT)
 	portrait:SetPoint("TOPLEFT", list, "TOPRIGHT", 16, 0)
 	header = ns.Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
-	header:SetPoint("LEFT", portrait, "RIGHT", 12, 0)
+	header:SetPoint("TOPLEFT", portrait, "TOPRIGHT", 12, -3)
 	header:SetPoint("RIGHT", window, "RIGHT", -36, 0)
 	if header.SetWordWrap then header:SetWordWrap(false) end
-	input = CreateFrame("EditBox", "WandererMessagesInput", window)
-	input:SetHeight(24)
+	-- Who they are, under the name.
+	info = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.8, 0.8, 0.8)
+	info:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
+	info:SetPoint("RIGHT", window, "RIGHT", -36, 0)
+	if info.SetWordWrap then info:SetWordWrap(false) end
+	-- A click on the person (portrait or name): what can be done with them.
+	person = CreateFrame("Button", nil, window)
+	person:SetPoint("TOPLEFT", portrait, "TOPLEFT")
+	person:SetPoint("BOTTOMRIGHT", info, "BOTTOMRIGHT")
+	person:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	person:SetScript("OnClick", function(self) OpenPersonMenu(self) end)
+	person:SetScript("OnEnter", function(self)
+		header:SetAlpha(0.8)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:AddLine(L.MESSAGES_PERSON_HINT, 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	person:SetScript("OnLeave", function()
+		header:SetAlpha(1)
+		GameTooltip:Hide()
+	end)
+	person:Hide()
+	input = ns.Skin.CreateInput(window, "WandererMessagesInput", 255)
 	input:SetPoint("BOTTOMLEFT", list, "BOTTOMRIGHT", 16, 0)
 	input:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
-	input:SetFontObject("ChatFontNormal")
-	input:SetAutoFocus(false)
-	input:SetMaxLetters(255)
-	input:SetTextInsets(8, 8, 0, 0)
-	input.background = input:CreateTexture(nil, "BACKGROUND")
-	input.background:SetAllPoints()
-	input.background:SetColorTexture(0, 0, 0, 0.35)
 	input:SetScript("OnEnterPressed", Send)
 	input:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
 		window:Hide()
 	end)
-	history = CreateFrame("ScrollingMessageFrame", "WandererMessagesHistory", window)
-	history:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -10)
-	history:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 0, 8)
-	history:SetFontObject("ChatFontNormal")
-	history:SetJustifyH("LEFT")
-	history:SetFading(false)
-	history:SetMaxLines(MAX_LINES)
-	history:SetHyperlinksEnabled(true)
-	history:SetScript("OnHyperlinkClick", function(_, link, text, button) SetItemRef(link, text, button) end)
-	history:EnableMouseWheel(true)
-	history:SetScript("OnMouseWheel", function(self, delta)
-		if delta > 0 then self:ScrollUp() else self:ScrollDown() end
+	thread = CreateFrame("ScrollFrame", "WandererMessagesHistory", window)
+	thread:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -10)
+	thread:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 0, 8)
+	-- Its width is known from the window's (the frame may not be laid out yet).
+	thread.width = WIDTH - margin * 2 - LIST_WIDTH - 16
+	thread.content = CreateFrame("Frame", nil, thread)
+	thread.content:SetSize(thread.width, 1)
+	thread:SetScrollChild(thread.content)
+	thread:EnableMouseWheel(true)
+	thread:SetScript("OnMouseWheel", function(self, delta)
+		local range = math.max(0, used.height - (self:GetHeight() or 0))
+		local value = (self:GetVerticalScroll() or 0) - delta * SCROLL_STEP
+		self:SetVerticalScroll(math.min(range, math.max(0, value)))
 	end)
 
-	if UISpecialFrames then table.insert(UISpecialFrames, "WandererMessages") end
 	window:HookScript("OnShow", function(self)
 		self:SetScale(ns.Skin.Scale())
 		if current then ShowConversation(current) else ns.RefreshMessages() end
@@ -440,8 +733,10 @@ local function OnMessage(event, text, name, guid, bnID)
 		talk.name = Ambiguate and Clean(Safe(Ambiguate, key, "short")) or key
 		guid = Clean(guid)
 		if guid then
-			local _, class, _, race, sex = Safe(GetPlayerInfoByGUID, guid)
+			local className, class, raceName, race, sex = Safe(GetPlayerInfoByGUID, guid)
 			talk.guid = guid
+			talk.className = Clean(className) or talk.className
+			talk.raceName = Clean(raceName) or talk.raceName
 			talk.class = Clean(class) or talk.class
 			talk.race = Clean(race) or talk.race
 			talk.sex = Clean(sex) or talk.sex
@@ -454,6 +749,7 @@ local function OnMessage(event, text, name, guid, bnID)
 			local line = talk.lines[index]
 			if line.echo and GetTime() - line.echo <= ECHO_WAIT and (U.IsSecret(text) or line.text == text) then
 				line.echo = nil
+				if bubbleOf[line] and bubbleOf[line].entry == line then bubbleOf[line]:SetAlpha(1) end
 				return
 			end
 		end
@@ -476,7 +772,7 @@ local function OnMessage(event, text, name, guid, bnID)
 		if sound and PlaySound then pcall(PlaySound, sound) end
 	end
 	if current == key and window and window:IsShown() then
-		if entry.text then pcall(history.AddMessage, history, Line(entry)) else pcall(history.AddMessage, history, text) end
+		AddBubble(entry, not entry.text and text or nil)
 	elseif not me then
 		talk.unread = (talk.unread or 0) + 1
 	end
@@ -503,17 +799,22 @@ local function Filter(_, event, _, name, ...)
 end
 
 function ns.InitMessages()
-	-- /wanderer debug: whispers typed in the chat are timed too, to compare.
-	if C_ChatInfo and C_ChatInfo.SendChatMessage then
-		hooksecurefunc(C_ChatInfo, "SendChatMessage", function(_, kind)
-			if ns.debug and kind == "WHISPER" and not fromWindow then DebugSent(L.MESSAGES_DEBUG_SENT_CHAT) end
-		end)
-	end
 	local frame = CreateFrame("Frame")
 	for event in pairs(EVENTS) do frame:RegisterEvent(event) end
 	frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 	frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+	frame:RegisterEvent("WHO_LIST_UPDATE")
+	frame:RegisterEvent("FRIENDLIST_UPDATE")
+	frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 	frame:SetScript("OnEvent", function(_, event, ...)
+		if event == "WHO_LIST_UPDATE" then return OnWho() end
+		if event == "FRIENDLIST_UPDATE" or event == "GUILD_ROSTER_UPDATE" then
+			if current and window and window:IsShown() then
+				Learn(Conversation(current), current)
+				RefreshHeader()
+			end
+			return
+		end
 		if event == "PLAYER_TARGET_CHANGED" then
 			if current and window and window:IsShown() then ShowPortrait(portrait, Conversation(current)) end
 			return
@@ -529,11 +830,6 @@ function ns.InitMessages()
 			return
 		end
 		local text, name = ...
-		-- /wanderer debug: the game's confirmation of your message, as it arrives.
-		if ns.debug and EVENTS[event] == "me" then
-			ns.Print(L.MESSAGES_DEBUG_ARRIVED:format(sentAt and (GetTime() - sentAt) or -1, U.IsSecret(name) and "secret" or tostring(name)))
-			sentAt = nil
-		end
 		if not Enabled() then return end
 		local guid, bnID = select(12, ...), select(13, ...)
 		OnMessage(event, text, name, guid, bnID)

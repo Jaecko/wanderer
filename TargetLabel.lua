@@ -27,7 +27,8 @@ end
 
 -- The hover label already describes this character.
 local function LabelOnTarget()
-	return ns.IsLabelActive and ns.IsLabelActive() and Clean(Safe(UnitIsUnit, "mouseover", UNIT)) and true or false
+	local described = ns.LabelUnit and ns.LabelUnit() or "mouseover"
+	return ns.IsLabelActive and ns.IsLabelActive() and Clean(Safe(UnitIsUnit, described, UNIT)) and true or false
 end
 
 local function Wanted()

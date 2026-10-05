@@ -197,6 +197,32 @@ local function Portraits(layout, x, y)
 	if setting and setting.BuffsOnTop then SetSetting(target, setting.BuffsOnTop, 1) end
 end
 
+-- Your group, in the top left corner the portraits left free: the game's
+-- raid-style frames (health, role, who is targeted, dispels), wide enough
+-- for the names, sorted by role (tanks, healers, then the others); the raid
+-- in the same place. The class colors of the game's option make each one
+-- recognisable at a glance.
+local GROUP_X, GROUP_Y = 24, -170
+local GROUP_WIDTH, GROUP_HEIGHT = 96, 40 -- the game makes them 72 by 36 at least
+local function Group(layout)
+	local system, index = Enum.EditModeSystem.UnitFrame, Enum.EditModeUnitFrameSystemIndices
+	local setting = Enum.EditModeUnitFrameSetting
+	if not (system and index and setting) then return end
+	local party = index.Party and SystemEntry(layout, system, index.Party)
+	if party then
+		Place(party, "TOPLEFT", "TOPLEFT", GROUP_X, GROUP_Y)
+		if setting.UseRaidStylePartyFrames then SetSetting(party, setting.UseRaidStylePartyFrames, 1) end
+		if setting.UseHorizontalGroups then SetSetting(party, setting.UseHorizontalGroups, 0) end
+		if setting.FrameWidth then SetSetting(party, setting.FrameWidth, GROUP_WIDTH) end
+		if setting.FrameHeight then SetSetting(party, setting.FrameHeight, GROUP_HEIGHT) end
+		if setting.SortPlayersBy and Enum.SortPlayersBy and Enum.SortPlayersBy.Role then
+			SetSetting(party, setting.SortPlayersBy, Enum.SortPlayersBy.Role)
+		end
+	end
+	local raid = index.Raid and SystemEntry(layout, system, index.Raid)
+	if raid then Place(raid, "TOPLEFT", "TOPLEFT", GROUP_X, GROUP_Y) end
+end
+
 -- No art around the main bar: its frame, its page arrows and the gryphons
 -- (their own elements in WoW Forever).
 local function HideMainBarArt(layout)
@@ -311,6 +337,7 @@ local LAYOUTS = {
 		Corners(layout, 10)
 		OverTheBars(layout, above - 4, 10)
 		Portraits(layout, 180, above + 46)
+		Group(layout)
 	end,
 	-- For immersion: the main bar alone at the bottom; every other bar shown
 	-- only in fights, in its place (bars 2 and 3 over the main bar, the others
@@ -328,6 +355,7 @@ local LAYOUTS = {
 		Corners(layout, 40)
 		OverTheBars(layout, above - 4, 40)
 		Portraits(layout, 160, above + 46)
+		Group(layout)
 	end,
 	-- The game's own default layout, as it is: to come back to it, or to start
 	-- from it in Edit Mode.
@@ -383,6 +411,18 @@ function ns.MakeLayout(key)
 	if not existing and edit.OnLayoutAdded then pcall(edit.OnLayoutAdded, index, true, false) end
 	ns.db.world.editLayout = name
 	if edit.SetActiveLayout then pcall(edit.SetActiveLayout, index) end
+	-- The group frames raid-style and in class colors: the game's options (older
+	-- games keep the raid style there, not in Edit Mode), set once here; yours after.
+	if key ~= "blizzard" and ns.WriteCVar then
+		ns.WriteCVar("useCompactPartyFrames", "1")
+		ns.WriteCVar("raidFramesDisplayClassColor", "1")
+		if CompactPartyFrame_UpdateShown and CompactPartyFrame then Safe(CompactPartyFrame_UpdateShown, CompactPartyFrame) end
+	end
+	if ns.debug then
+		local frames, setting = Enum.EditModeUnitFrameSystemIndices or {}, Enum.EditModeUnitFrameSetting or {}
+		ns.Print(("Group: Edit Mode party %s, raid style setting %s, game option %s"):format(tostring(frames.Party),
+			tostring(setting.UseRaidStylePartyFrames), tostring(Safe(GetCVar, "useCompactPartyFrames"))))
+	end
 	if ns.RefreshOptions then ns.RefreshOptions() end
 	ns.Print(L.MSG_LAYOUT_READY:format(name))
 	return true

@@ -11,6 +11,12 @@
 	<Binding name="WANDERER_MESSAGES">
 		Wanderer_ToggleMessages()
 	</Binding>
+	<Binding name="WANDERER_TODO">
+		Wanderer_ToggleTodo()
+	</Binding>
+	<Binding name="WANDERER_MARKERS" runOnUp="true">
+		Wanderer_Markers(keystate)
+	</Binding>
 	<Binding name="CLICK WandererCampfire:LeftButton">
 	</Binding>
 </Bindings>

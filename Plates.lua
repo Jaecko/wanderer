@@ -6,8 +6,14 @@ local _, ns = ...
 -- settings saved and given back). The plates of allies and critters stay
 -- invisible, always, even when turned on in the game's options: they are
 -- only where the label stands, the label says the rest. Enemies keep theirs
--- (out of a fight only if the game's options show them then). Plates the game keeps to itself (in instances)
--- are left alone. Nothing runs while no plate is shown.
+-- (out of a fight only if the game's options show them then). In dungeons,
+-- raids and battlegrounds every plate is the game's own, left alone.
+-- Nothing runs while no plate is shown.
+--
+-- Your group: since names are hidden, the game cannot color theirs. Over
+-- each member's quiet plate, Wanderer writes the name small, in the game's
+-- color for your group (option, on by default); never while the game writes
+-- it itself, nor under the label.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -20,12 +26,15 @@ local since = 0
 local tweens = setmetatable({}, { __mode = "k" }) -- plate -> its tween
 local count = 0 -- plates shown
 local quiet = setmetatable({}, { __mode = "k" }) -- plate -> true while kept invisible
+local marks = setmetatable({}, { __mode = "k" }) -- plate -> its group mark (a name)
+local MARK_SIZE = 10
 
 -- Whether a plate is kept invisible (the label then stands lower, on the head).
 function ns.IsPlateQuiet(plate) return quiet[plate] == true end
 
 local function On()
 	local db = ns.db
+	if ns.zone == "dungeon" or ns.zone == "raid" or ns.zone == "pvp" then return false end -- the game's own plates there
 	return db and db.enabled and db.label.allHeads and db.label.anchor == "head" and true or false
 end
 
@@ -52,6 +61,46 @@ local function Quiet(unit)
 	return not Own("nameplateShowAll") and not (ns.inCombat or InCombatLockdown())
 end
 
+-- A member of your group, other than you.
+local function Companion(unit)
+	if Clean(Safe(UnitIsUnit, unit, "player")) or not Clean(Safe(UnitIsPlayer, unit)) then return false end
+	return (Clean(Safe(UnitInParty, unit)) or Clean(Safe(UnitInRaid, unit))) and true or false
+end
+
+local function MarkWanted(unit, isQuiet, plate)
+	if not (isQuiet and ns.db.groupMarks and Companion(unit)) then return false end
+	if ns.GameShowsName and ns.GameShowsName(unit) then return false end
+	-- The label describes this character already: gone at once, never under it.
+	if ns.LabelPlate and ns.LabelPlate() == plate then return false, true end
+	if ns.IsLabelActive and ns.IsLabelActive() then
+		local hovered, own = Clean(Safe(UnitGUID, "mouseover")), Clean(Safe(UnitGUID, unit))
+		if (hovered and hovered == own) or Clean(Safe(UnitIsUnit, "mouseover", unit)) then return false, true end
+	end
+	return true
+end
+
+-- The game's own color for your group (its party chat), raid members alike.
+local function PartyColor()
+	local info = ChatTypeInfo and ChatTypeInfo.PARTY
+	if info and info.r then return info.r, info.g, info.b end
+	return 0.67, 0.67, 1
+end
+
+local function Mark(plate)
+	local mark = marks[plate]
+	if mark then return mark end
+	mark = plate:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	local font, _, flags = mark:GetFont()
+	if font then mark:SetFont(font, MARK_SIZE, flags) end
+	mark:SetShadowOffset(1, -1)
+	mark:SetShadowColor(0, 0, 0, 0.9)
+	mark:SetPoint("BOTTOM", plate, "BOTTOM", 0, 2)
+	mark:SetAlpha(0)
+	mark.tween = U.Tween(0)
+	marks[plate] = mark
+	return mark
+end
+
 -- Brings every plate to its wanted opacity, softly. Returns true while a
 -- plate is still moving.
 local function Update(elapsed)
@@ -71,6 +120,19 @@ local function Update(elapsed)
 			local alpha = tween:Step(wanted, elapsed, FADE_IN, FADE_OUT)
 			drawn:SetAlpha(alpha)
 			if alpha ~= wanted then moving = true end
+			local markOn, underLabel = MarkWanted(unit, wanted == 0, plate)
+			if markOn or marks[plate] then
+				local mark = Mark(plate)
+				if markOn then
+					pcall(mark.SetText, mark, (Safe(UnitName, unit)))
+					mark:SetTextColor(PartyColor())
+				end
+				if underLabel then mark.tween = U.Tween(0) end
+				local markAlpha = mark.tween:Step(markOn and 1 or 0, elapsed, FADE_IN, FADE_OUT)
+				mark:SetAlpha(markAlpha)
+				mark:SetShown(markAlpha > 0)
+				if markAlpha ~= (markOn and 1 or 0) then moving = true end
+			end
 		end
 	end
 	return moving
@@ -105,6 +167,7 @@ function ns.InitPlates()
 	events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 	events:RegisterEvent("PLAYER_REGEN_DISABLED")
 	events:RegisterEvent("PLAYER_REGEN_ENABLED")
+	events:RegisterEvent("GROUP_ROSTER_UPDATE")
 	events:SetScript("OnEvent", function(_, event, unit)
 		if event == "NAME_PLATE_UNIT_ADDED" then
 			count = count + 1
