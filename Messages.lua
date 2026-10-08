@@ -102,7 +102,7 @@ local function UnitFor(guid)
 		if Clean(Safe(UnitGUID, unit)) == guid then return unit end
 	end
 	for _, plate in ipairs(C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}) do
-		local unit = plate.namePlateUnitToken
+		local unit = U.PlateUnit(plate)
 		if unit and Clean(Safe(UnitGUID, unit)) == guid then return unit end
 	end
 end
@@ -545,9 +545,25 @@ local function RowFor(index)
 	return row
 end
 
+-- The search over the people: their name or a word of the conversation.
+local SEARCH_HEIGHT = 26
+local function Matches(entry, query)
+	if query == "" then return true end
+	local name = (entry.talk.name or entry.key)
+	if type(name) == "string" and name:lower():find(query, 1, true) then return true end
+	for _, line in ipairs(entry.talk.lines or {}) do
+		if type(line.text) == "string" and line.text:lower():find(query, 1, true) then return true end
+	end
+	return false
+end
+
 function ns.RefreshMessages()
 	if not (window and window:IsShown()) then return end
-	local all = AllConversations()
+	local query = strtrim((window.search and window.search:GetText() or "")):lower()
+	local all = {}
+	for _, entry in ipairs(AllConversations()) do
+		if Matches(entry, query) then all[#all + 1] = entry end
+	end
 	for index, entry in ipairs(all) do
 		local row = RowFor(index)
 		row.key = entry.key
@@ -558,12 +574,13 @@ function ns.RefreshMessages()
 		local selected = entry.key == current
 		row.background:SetColorTexture(1, selected and 0.82 or 1, selected and 0 or 1, selected and 0.14 or 0)
 		row:ClearAllPoints()
-		row:SetPoint("TOPLEFT", list, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
+		row:SetPoint("TOPLEFT", list, "TOPLEFT", 0, -SEARCH_HEIGHT - (index - 1) * ROW_HEIGHT)
 		row:SetPoint("RIGHT", list, "RIGHT", 0, 0)
 		row:Show()
 	end
 	for index = #all + 1, #rows do rows[index]:Hide() end
 	if ns.RefreshMinimapButton then ns.RefreshMinimapButton() end
+	window.empty:SetText(query ~= "" and L.MESSAGES_NO_MATCH or L.MESSAGES_EMPTY)
 	window.empty:SetShown(not all[1])
 	if not current then
 		header:SetText(L.MESSAGES_TITLE)
@@ -621,7 +638,21 @@ local function CreateWindow()
 	line:SetPoint("TOPLEFT", list, "TOPRIGHT", 6, 0)
 	line:SetPoint("BOTTOMLEFT", list, "BOTTOMRIGHT", 6, 0)
 	window.empty = ns.Skin.CreateText(list, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
-	window.empty:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -4)
+	-- Search: a name or a word.
+	window.search = ns.Skin.CreateInput(list, "WandererMessagesSearch", 40)
+	window.search:SetHeight(20)
+	window.search:SetPoint("TOPLEFT", list, "TOPLEFT", 0, 0)
+	window.search:SetPoint("RIGHT", list, "RIGHT", 0, 0)
+	window.search.hint = ns.Skin.CreateText(window.search, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
+	window.search.hint:SetPoint("LEFT", window.search, "LEFT", 8, 0)
+	window.search.hint:SetText(L.MESSAGES_SEARCH)
+	window.search:SetScript("OnTextChanged", function(self)
+		self.hint:SetShown((self:GetText() or "") == "")
+		ns.RefreshMessages()
+	end)
+	window.search:SetScript("OnEscapePressed", function(self) self:SetText("") self:ClearFocus() end)
+	window.search:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+	window.empty:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -SEARCH_HEIGHT - 4)
 	window.empty:SetPoint("RIGHT", list, "RIGHT", -4, 0)
 	window.empty:SetText(L.MESSAGES_EMPTY)
 
@@ -728,7 +759,7 @@ local function OnMessage(event, text, name, guid, bnID)
 	local me = EVENTS[event] == "me"
 	if key:sub(1, 3) == "BN:" then
 		-- The game gives a protected name: shown as is, never kept.
-		talk.name = name
+		if not U.IsSecret(name) then talk.name = name end
 	else
 		talk.name = Ambiguate and Clean(Safe(Ambiguate, key, "short")) or key
 		guid = Clean(guid)
@@ -747,7 +778,8 @@ local function OnMessage(event, text, name, guid, bnID)
 	if me then
 		for index = #talk.lines, math.max(1, #talk.lines - 10), -1 do
 			local line = talk.lines[index]
-			if line.echo and GetTime() - line.echo <= ECHO_WAIT and (U.IsSecret(text) or line.text == text) then
+			if line.echo and GetTime() - line.echo >= 0 and GetTime() - line.echo <= ECHO_WAIT
+				and (U.IsSecret(text) or line.text == text) then
 				line.echo = nil
 				if bubbleOf[line] and bubbleOf[line].entry == line then bubbleOf[line]:SetAlpha(1) end
 				return
@@ -824,7 +856,14 @@ function ns.InitMessages()
 			if Enabled() and ns.db.messages.popup and ns.UnreadMessages() > 0 and not (window and window:IsShown()) then
 				if not window then CreateWindow() end
 				window.quiet = true
-				ns.ToggleMessages(AllConversations()[1].key)
+				-- The most recent conversation with something unread.
+				local open
+				for _, conversation in ipairs(AllConversations()) do
+					if (conversation.talk.unread or 0) > 0 and (not open or (conversation.talk.last or 0) > (open.talk.last or 0)) then
+						open = conversation
+					end
+				end
+				ns.ToggleMessages((open or AllConversations()[1]).key)
 				window.quiet = nil
 			end
 			return

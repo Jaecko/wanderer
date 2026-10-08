@@ -60,6 +60,12 @@ end
 -- ("ok", "none", "forbidden", "hidden", "no-api") for /wanderer debug. Some
 -- games give the plate only through its own unit name: then every plate is
 -- looked at.
+-- The unit a nameplate shows: some games leave the plate's own token empty
+-- and keep it only on the frame drawn inside.
+function Util.PlateUnit(plate)
+	return plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)) or nil
+end
+
 function Util.NameplateFor(unit)
 	local plates = C_NamePlate
 	if not plates then return nil, "no-api" end
@@ -68,7 +74,7 @@ function Util.NameplateFor(unit)
 		plate = nil
 		for _, candidate in ipairs(Util.Safe(plates.GetNamePlates) or {}) do
 			if not (candidate.IsForbidden and candidate:IsForbidden()) then
-				local token = candidate.namePlateUnitToken or (candidate.UnitFrame and candidate.UnitFrame.unit)
+				local token = Util.PlateUnit(candidate)
 				if token and Util.Clean(Util.Safe(UnitIsUnit, token, unit)) then
 					plate = candidate
 					break
@@ -104,15 +110,19 @@ function Util.MouseFocus()
 	local now = GetTime()
 	if now ~= focusTime then
 		focusTime = now
-		local foci = GetMouseFoci and Util.Safe(GetMouseFoci)
-		focus = foci and foci[1] or nil
+		if GetMouseFoci then
+			local foci = Util.Safe(GetMouseFoci)
+			focus = foci and foci[1] or nil
+		else
+			focus = GetMouseFocus and Util.Safe(GetMouseFocus) or nil
+		end
 	end
 	return focus
 end
 
 -- True when the mouse is over the 3D world rather than the interface.
 function Util.IsOverWorld()
-	if not GetMouseFoci then return true end
+	if not (GetMouseFoci or GetMouseFocus) then return false end
 	local current = Util.MouseFocus()
 	return current == nil or current == WorldFrame
 end

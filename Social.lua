@@ -47,6 +47,9 @@ local HANDLERS = {
 	PARTY_INVITE_REQUEST = function(db, _, _, _, _, _, _, inviterGUID)
 		if not db.acceptInvites or not IsKnown(inviterGUID) then return end
 		Safe(AcceptGroup)
+		-- Accepted: the popup must not decline as it goes.
+		local popup = StaticPopup_FindVisible and Safe(StaticPopup_FindVisible, "PARTY_INVITE")
+		if popup then popup.inviteAccepted = true end
 		HidePopup("PARTY_INVITE")
 	end,
 	RESURRECT_REQUEST = function(db)

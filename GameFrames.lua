@@ -90,13 +90,17 @@ local function TakeAll()
 	end
 end
 
+local waiting = false -- turned off during a fight: done after it
+
 function ns.RefreshGameFrames()
+	waiting = false
 	if On() then
 		TakeAll()
 		PlaceAll()
-	elseif not InCombatLockdown() then
-		-- Back where the game puts them.
-		if UpdateUIPanelPositions then pcall(UpdateUIPanelPositions) end
+	elseif InCombatLockdown() then
+		waiting = true
+	else
+		-- Back where the game puts them: the windows when they open next, the bags now.
 		if UpdateContainerFrameAnchors then pcall(UpdateContainerFrameAnchors) end
 	end
 end
@@ -104,7 +108,14 @@ end
 function ns.InitGameFrames()
 	local events = CreateFrame("Frame")
 	events:RegisterEvent("ADDON_LOADED")
-	events:SetScript("OnEvent", function() if On() then TakeAll() end end)
+	events:RegisterEvent("PLAYER_REGEN_ENABLED")
+	events:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_REGEN_ENABLED" then
+			if waiting then ns.RefreshGameFrames() end
+		elseif On() then
+			TakeAll()
+		end
+	end)
 	-- The game places its windows (and the bags) when they open.
 	if UpdateUIPanelPositions then hooksecurefunc("UpdateUIPanelPositions", PlaceAll) end
 	if UpdateContainerFrameAnchors then hooksecurefunc("UpdateContainerFrameAnchors", PlaceAll) end

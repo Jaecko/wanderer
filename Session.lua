@@ -58,6 +58,9 @@ function ns.SessionSummary()
 	if session.kills > 0 or session.quests > 0 then
 		lines[#lines + 1] = L.SESSION_COUNTS:format(session.kills, session.quests)
 	end
+	-- Herbs, ore, leather gathered and fish caught (Crafts.lua).
+	local gathered = ns.GatheredLine and ns.GatheredLine()
+	if gathered then lines[#lines + 1] = gathered end
 	return lines
 end
 

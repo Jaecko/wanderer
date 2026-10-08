@@ -3,7 +3,8 @@ local L = ns.L
 
 -- Travel journal: what this character has lived, kept by Wanderer as you play.
 -- A chronicle day by day, the places discovered, the characters met, the rares
--- defeated and the quests turned in by region. Shown in a window drawn by the
+-- defeated, the quests turned in by region and the fish caught (where, how many);
+-- the first time each recipe is crafted is written in the chronicle too. Shown in a window drawn by the
 -- shared engine: the character's portrait and story at the top, a tile per
 -- kind (each opens its page), and the pages themselves below.
 --
@@ -23,8 +24,8 @@ local TILE_GAP = 8
 local ROW_HEIGHT, HEADER_HEIGHT = 34, 26
 local ICON_SIZE = 24
 local DATE_FORMAT, TIME_FORMAT = "%d/%m/%Y", "%H:%M"
-local KINDS = { "places", "npcs", "rares", "quests" }
-local PAGES = { "chronicle", "places", "npcs", "rares", "quests" }
+local KINDS = { "places", "npcs", "rares", "quests", "fish", "crafts" }
+local PAGES = { "chronicle", "places", "npcs", "rares", "quests", "fish" }
 local CHRONICLE_MAX = 400 -- oldest entries leave first
 local TOOLTIP_PLACES = 20
 local GRID = 24 -- points per side read on each map
@@ -41,7 +42,7 @@ local WRITE_SOUNDS = { 567445, 567503, 567396 } -- the game's own quill, as in t
 local NOTICE_TIME = 4
 -- What deserves a notice when written (meeting characters is too frequent).
 local NOTICE_KINDS = { zone = true, sub = true, level = true, rare = true, quest = true, mount = true,
-	instance = true, skill = true, gold = true, death = true }
+	instance = true, skill = true, gold = true, death = true, craft = true }
 local LOAD_BATCH, LOAD_EVERY = 25, 0.4 -- quest titles asked to the game
 
 local ICONS = {
@@ -63,7 +64,6 @@ local ICONS = {
 	death = "Interface\\Icons\\Ability_Creature_Cursed_02",
 	rest = "Interface\\Icons\\Spell_Nature_Sleep",
 	session = "Interface\\Icons\\INV_Misc_PocketWatch_02",
-	before = "Interface\\Icons\\INV_Misc_PocketWatch_01",
 	-- Characters by what they offered when you met them.
 	merchant = "Interface\\Icons\\INV_Misc_Coin_01",
 	trainer = "Interface\\Icons\\INV_Misc_Book_11",
@@ -71,6 +71,9 @@ local ICONS = {
 	banker = "Interface\\Icons\\INV_Misc_Bag_10",
 	questgiver = "Interface\\Icons\\INV_Misc_Note_01",
 	todo = "Interface\\Icons\\INV_Misc_Note_05",
+	fish = "Interface\\Icons\\Trade_Fishing",
+	craft = "Interface\\Icons\\Trade_BlackSmithing",
+	photo = "Interface\\Icons\\Spell_Holy_MindVision",
 }
 
 -- What a character is, from the window they opened.
@@ -122,6 +125,7 @@ end
 
 -- A line written by another part of the journal (the reminders): no notice.
 function ns.JournalNote(kind, name)
+	if not (ns.db and ns.db.enabled and ns.db.journal.enabled) then return end
 	Chronicle(kind, name, nil, nil, true)
 end
 
@@ -168,6 +172,7 @@ end
 
 -- Called by World when a rare is defeated.
 function ns.JournalRare(npc, name)
+	if not (ns.db and ns.db.enabled and ns.db.journal.enabled) then return end
 	if not (npc and Clean(name)) then return end
 	local rares = Journal().rares
 	local entry = rares[npc] or { kills = 0 }
@@ -307,6 +312,34 @@ local function NoteSkills()
 	end
 end
 
+-- A fish caught: its species kept (where first, how many); the first one of
+-- each species written in the chronicle (the fishing notice tells it).
+-- Returns true for a new species.
+function ns.JournalCatch(name, icon)
+	if not (ns.db and ns.db.enabled and ns.db.journal.enabled) then return end
+	local fish = Journal().fish
+	local entry = fish[name]
+	local new = entry == nil
+	if new then
+		entry = { name = name, icon = icon, first = time(), zone = Zone(), count = 0 }
+		fish[name] = entry
+		Chronicle("fish", name, entry.zone, nil, true)
+	end
+	entry.count = entry.count + 1
+	return new
+end
+
+-- Something crafted: the first time of each recipe is written, with its notice.
+function ns.JournalCraft(name)
+	local crafts = Journal().crafts
+	if crafts[name] then
+		crafts[name].count = crafts[name].count + 1
+		return
+	end
+	crafts[name] = { first = time(), count = 1 }
+	Chronicle("craft", name, Zone())
+end
+
 local function NoteMoney()
 	local milestones = Milestones()
 	local tier = Tier(Clean(Safe(GetMoney)) or 0, GOLD_TIERS)
@@ -330,11 +363,31 @@ local function NoteLogout()
 	end
 	local played = time() - (session.start or time())
 	local level = Clean(Safe(UnitLevel, "player"))
+	local written
 	if played >= SESSION_MIN and (session.places > 0 or session.quests > 0 or (level and level ~= session.level)) then
 		local chronicle = journal.chronicle
-		chronicle[#chronicle + 1] = { t = time(), k = "session", z = Zone(),
+		written = { t = time(), k = "session", z = Zone(),
 			d = { m = math.floor(played / 60), p = session.places, q = session.quests, a = session.level, b = level } }
+		chronicle[#chronicle + 1] = written
+		while #chronicle > CHRONICLE_MAX do table.remove(chronicle, 1) end
 	end
+	-- A /reload also ends here: kept, the session goes on after it.
+	journal.lastSession = { t = time(), start = session.start, places = session.places, quests = session.quests,
+		level = session.level, written = written and written.t or nil }
+end
+
+-- Back within a moment of the end: a /reload, the same play session.
+local RELOAD_GAP = 120
+local function ResumeSession()
+	local journal = Journal()
+	local last = journal.lastSession
+	journal.lastSession = nil
+	if not (last and last.start and time() - (last.t or 0) < RELOAD_GAP) then return end
+	session.start, session.level = last.start, last.level or session.level
+	session.places, session.quests = last.places or 0, last.quests or 0
+	local chronicle = journal.chronicle
+	local entry = chronicle[#chronicle]
+	if last.written and entry and entry.k == "session" and entry.t == last.written then chronicle[#chronicle] = nil end
 end
 
 -- Date of an entry; 0: known from the game's memory, without a date.
@@ -492,6 +545,9 @@ end
 
 local EVENT_TEXT = {
 	todo = function(entry) return L.JOURNAL_EVENT_TODO:format(entry.n or "?") end,
+	fish = function(entry) return L.JOURNAL_EVENT_FISH:format(entry.n or "?") end,
+	craft = function(entry) return L.JOURNAL_EVENT_CRAFT:format(entry.n or "?") end,
+	photo = function(entry) return L.JOURNAL_EVENT_PHOTO:format(entry.n or "?") end,
 	zone = function(entry) return L.JOURNAL_EVENT_ZONE:format(entry.n or "?") end,
 	sub = function(entry) return L.JOURNAL_EVENT_SUB:format(entry.n or "?") end,
 	level = function(entry) return L.JOURNAL_EVENT_LEVEL:format(entry.v or 0) end,
@@ -541,16 +597,41 @@ function ns.JournalToday(max)
 	return lines
 end
 
+-- What a day held: places, quests, catches, crafts ("Places 3 · Quests 12").
+local DAY_COUNTS = { { "zone", "sub", key = "JOURNAL_DAY_PLACES" }, { "quest", key = "JOURNAL_DAY_QUESTS" },
+	{ "fish", key = "JOURNAL_DAY_FISH" }, { "craft", key = "JOURNAL_DAY_CRAFTS" } }
+
+local function DaySummaries(chronicle)
+	local days = {}
+	for _, entry in ipairs(chronicle) do
+		local day = date(DATE_FORMAT, entry.t)
+		days[day] = days[day] or {}
+		days[day][entry.k] = (days[day][entry.k] or 0) + 1
+	end
+	local summaries = {}
+	for day, kinds in pairs(days) do
+		local parts = {}
+		for _, count in ipairs(DAY_COUNTS) do
+			local total = 0
+			for _, kind in ipairs(count) do total = total + (kinds[kind] or 0) end
+			if total > 0 then parts[#parts + 1] = L[count.key]:format(total) end
+		end
+		summaries[day] = parts[1] and table.concat(parts, "  ·  ") or nil
+	end
+	return summaries
+end
+
 local function ChronicleRows(journal)
 	local rows, lastDay = {}, nil
 	local chronicle = journal.chronicle
+	local summaries = DaySummaries(chronicle)
 	for index = #chronicle, 1, -1 do
 		local entry = chronicle[index]
 		local text = EVENT_TEXT[entry.k]
 		if text then
 			local day = date(DATE_FORMAT, entry.t)
 			if day ~= lastDay then
-				rows[#rows + 1] = { header = day }
+				rows[#rows + 1] = { header = summaries[day] and (day .. "    |cffa8a8a8" .. summaries[day] .. "|r") or day }
 				lastDay = day
 			end
 			rows[#rows + 1] = { ICONS[entry.k], text(entry), entry.z or "", date(TIME_FORMAT, entry.t),
@@ -619,6 +700,11 @@ local function Rows(page)
 			local subtitle = entry.zone
 			if entry.role then subtitle = L["JOURNAL_ROLE_" .. entry.role:upper()] .. "  ·  " .. subtitle end
 			rows[#rows + 1] = { ICONS[entry.role] or ICONS.npcs, entry.name, subtitle, Day(entry.first), sort = entry.first }
+		end
+	elseif page == "fish" then
+		for _, entry in pairs(journal.fish) do
+			rows[#rows + 1] = { entry.icon or ICONS.fish, entry.name, (entry.zone or "") .. "  ·  " .. L.JOURNAL_FISH_COUNT:format(entry.count),
+				Day(entry.first), sort = entry.first }
 		end
 	elseif page == "rares" then
 		for _, entry in pairs(journal.rares) do
@@ -1018,6 +1104,14 @@ BINDING_NAME_WANDERER_JOURNAL = L.BINDING_JOURNAL
 
 local scanStarted = false
 
+-- A screenshot taken: a memory of the place, in the chronicle.
+local function OnScreenshot()
+	if not (ns.db and ns.db.enabled and ns.db.journal.enabled) then return end
+	local place = Clean(Safe(GetSubZoneText)) or Zone()
+	if place then Chronicle("photo", place, Zone(), nil, true) end
+end
+ns.JournalPhoto = OnScreenshot -- (tests)
+
 function ns.InitJournal()
 	local frame = CreateFrame("Frame")
 	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA" }) do
@@ -1028,13 +1122,15 @@ function ns.InitJournal()
 		frame:RegisterEvent(event)
 	end
 	for _, event in ipairs({ "QUEST_TURNED_IN", "PLAYER_LEVEL_UP", "PLAYER_MOUNT_DISPLAY_CHANGED", "SKILL_LINES_CHANGED",
-		"PLAYER_MONEY", "PLAYER_DEAD", "PLAYER_LOGOUT", "QUEST_DATA_LOAD_RESULT" }) do
+		"PLAYER_MONEY", "PLAYER_DEAD", "PLAYER_LOGOUT", "QUEST_DATA_LOAD_RESULT", "SCREENSHOT_SUCCEEDED" }) do
 		frame:RegisterEvent(event)
 	end
 	session.start, session.level = time(), Clean(Safe(UnitLevel, "player"))
+	ResumeSession()
 	frame:SetScript("OnEvent", function(_, event, arg1, arg2)
 		if event == "QUEST_DATA_LOAD_RESULT" then return OnQuestLoaded(arg1, arg2) end
 		if not (ns.db and ns.db.enabled and ns.db.journal.enabled) then return end
+		if event == "SCREENSHOT_SUCCEEDED" then return OnScreenshot() end
 		if event == "PLAYER_MOUNT_DISPLAY_CHANGED" then return NoteMount() end
 		if event == "SKILL_LINES_CHANGED" then return NoteSkills() end
 		if event == "PLAYER_MONEY" then return NoteMoney() end

@@ -48,7 +48,7 @@ local TIPS = {
 -- as they are. Everything stays free to change afterwards.
 local function Way(preset, values)
 	local all = {
-		["combatEnemies"] = false, ["label.stickyTarget"] = true, ["zones.dungeon"] = "group", ["zones.raid"] = "group",
+		["combatEnemies"] = false, ["label.stickyTarget"] = true, ["enemyNames"] = "names", ["nearNames.show"] = "bar", ["zones.dungeon"] = "group", ["zones.raid"] = "group",
 		["scene.enabled"] = true, ["scene.camera"] = true,
 		["cinema.enabled"] = false, ["cinema.combatOnly"] = true, ["cinema.alpha"] = 20,
 		["travel.enabled"] = true, ["away.enabled"] = false,
@@ -63,6 +63,7 @@ end
 ns.PLAYSTYLES = {
 	-- No names, face to face, an interface that steps aside, an ambiance while away.
 	immersion = Way("immersion", {
+		["enemyNames"] = "near",
 		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "contemplation",
 		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true }),
 	-- Enemies named, quests without delay, the whole interface at hand.
@@ -72,6 +73,7 @@ ns.PLAYSTYLES = {
 		["merchant.sellJunk"] = true, ["merchant.repair"] = true, ["loot.fast"] = true }),
 	-- No names, quiet scenes, a character who lives, resting by the fire while away.
 	roleplay = Way("immersion", {
+		["enemyNames"] = "near", ["nearNames.show"] = "name",
 		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "hearth",
 		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
 		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true }),

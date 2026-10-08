@@ -35,15 +35,34 @@ ns.PRESET_ORDER = { "immersion", "balanced", "all", "custom" }
 -- Places where a different preset can apply automatically.
 ns.ZONES = { "world", "city", "dungeon", "raid", "pvp" }
 ns.ZONE_CHOICES = { "default", "immersion", "balanced", "group", "all" }
+-- The enemies' names: as the names settings say, always, never, or as you come near.
+ns.ENEMY_NAMES = { "names", "always", "never", "near" }
+
+-- What the label says, in three levels: the essential (who, what to do
+-- with them), complete (the defaults) or all of it. Each line can still be
+-- set alone below ("custom").
+ns.LABEL_CONTENT_KEYS = { "showRace", "showClass", "showSpec", "shiftDetails", "showGuild", "showFaction", "showNPCFaction",
+	"showStatus", "showCreatureType", "showClassification", "showNPCRole", "showReputation", "showTameable", "showRareKills",
+	"untagged", "showLevel", "showDifficulty", "showXP", "showPortrait", "showHealth", "showTarget", "showCasts",
+	"showProfessions", "showLoot", "showObjects", "showQuests" }
+ns.LABEL_CONTENT_ORDER = { "essential", "complete", "all", "custom" }
+local ESSENTIAL = { showClass = true, shiftDetails = true, showStatus = true, showClassification = true, showNPCRole = true,
+	untagged = true, showLevel = true, showDifficulty = true, showPortrait = true, showHealth = true, showCasts = true,
+	showProfessions = true, showLoot = true, showObjects = true, showQuests = true }
 
 -- Settings stored in each profile.
 local DEFAULTS = {
-	styleVersion = 5,
+	styleVersion = 9,
 	enabled = true,
 	preset = "immersion",
 	show = {},
 	combatEnemies = false, -- enemy names in a fight: asked for (their health bars show anyway)
 	groupMarks = true, -- in the world, the name of each member of your group, small, over their head
+	enemyNames = "names", -- "names" (as the names settings say), "always", "never", "near" (as you come near)
+	nearNames = {
+		distance = 45, -- yards from the camera beyond which the enemies' names are gone
+		show = "bar", -- what comes as you come near: "bar" (their health bar, as the game) or "name"
+	},
 	hideUnitTooltip = true,
 	hideTargetTooltip = true, -- no game tooltip over your target's portrait (its auras keep theirs)
 	revealMode = "hold",
@@ -56,6 +75,7 @@ local DEFAULTS = {
 	},
 	label = {
 		enabled = true,
+		content = "complete", -- what the label says: "essential", "complete", "all" or "custom"
 		style = "blizzard",
 		anchor = "head",
 		allHeads = true, -- nameplates turned on unseen, so the label finds every head
@@ -82,7 +102,6 @@ local DEFAULTS = {
 		showReputation = true,
 		showTameable = true,
 		showRareKills = true,
-		targetName = true,
 		showXP = true,
 		untagged = true,
 		showProfessions = true,
@@ -124,6 +143,7 @@ local DEFAULTS = {
 		sellJunk = true,
 		repair = true,
 		guildRepair = false,
+		repairReminder = true, -- back in town with worn equipment: a smith would be welcome
 	},
 	loot = {
 		fast = true,
@@ -140,12 +160,19 @@ local DEFAULTS = {
 	},
 	fishing = {
 		doubleClick = true,
+		tell = true, -- the label tells the fishing over the bobber, a notice each catch
+		splash = false, -- the music and the ambience lowered while the line is in the water
+	},
+	crafts = {
+		skillUps = true, -- a short notice for the points gained in a profession
+		firstCrafts = true, -- the first craft of each recipe written in the journal
 	},
 	journal = {
 		enabled = true,
 		notices = true, -- a short notice when something is written
 		sound = true, -- and the quill on paper
 		deaths = false,
+		threshold = true, -- at a dungeon's door: your quests there, your worn equipment
 	},
 	gestures = {
 		read = false, -- automations: off until the player asks
@@ -175,6 +202,7 @@ local DEFAULTS = {
 		arrowHistory = true, -- Up and Down bring back your sent messages, kept between sessions
 		copyButton = true, -- a discreet copy button in the corner of the chat
 		keepLog = true, -- each tab keeps its last lines from one session to the next
+		links = true, -- web addresses in the chat become links, ready to copy
 		guild = true,
 		whispers = true,
 	},
@@ -218,6 +246,7 @@ for _, cat in ipairs(ns.CATEGORIES) do DEFAULTS.show[cat.key] = false end
 -- (a function, as some lists are defined by modules loaded later).
 ns.RANGES = {
 	["label.scale"] = { 0.6, 2, 0.1 },
+	["nearNames.distance"] = { 20, 60, 5 },
 	["label.offset"] = { 0, 80, 2 },
 	["label.padding"] = { 0, 20, 1 },
 	["label.bgOpacity"] = { 0, 100, 5 },
@@ -236,9 +265,12 @@ end
 local CHOICES = {
 	["preset"] = function() return ns.PRESET_ORDER end,
 	["revealMode"] = function() return { "hold", "toggle" } end,
+	["nearNames.show"] = function() return { "bar", "name" } end,
+	["enemyNames"] = function() return ns.ENEMY_NAMES end,
 	["label.style"] = function() return ns.STYLES end,
 	["label.font"] = function() return Keys(ns.FONTS, "key") end,
 	["label.anchor"] = function() return { "head", "cursor" } end,
+	["label.content"] = function() return ns.LABEL_CONTENT_ORDER end,
 	["away.style"] = function() return ns.AWAY_STYLES end,
 }
 for _, zone in ipairs(ns.ZONES) do CHOICES["zones." .. zone] = function() return ns.ZONE_CHOICES end end
@@ -376,7 +408,40 @@ local function FriendlyPlates(db)
 	return AllHeads(db) and "1" or nil
 end
 
+-- Enemy names as you come near: out of a fight, the plates (and the names
+-- Wanderer writes on them) fade with the distance, by the game's own settings.
+-- Distances from the camera (the game measures from it), in yards: the names
+-- are gone farther than the chosen distance and fully seen FADE yards closer.
+local NEAR_FADE = 18
+
+-- The plates' reach the player chose (before Wanderer touched it).
+local function OwnReach()
+	local original = ns.root.original and ns.root.original.nameplateMaxDistance
+	return tonumber(original) or tonumber(ns.Util.Safe(GetCVar, "nameplateMaxDistance")) or 60
+end
+local function NearNames(db)
+	return db.enemyNames == "near" and AllHeads(db) and not ns.inCombat
+end
+
 local MANAGED_CVARS = {
+	-- The enemies' plates themselves (V in the game): their names need them.
+	nameplateShowEnemies = function(db) return db.enemyNames == "near" and AllHeads(db) and "1" or nil end,
+	nameplateMinAlpha = function(db) return NearNames(db) and "0" or nil end,
+	nameplateMaxDistance = function(db)
+		if not NearNames(db) then return nil end
+		local own = OwnReach()
+		return db.nearNames.distance > own and tostring(db.nearNames.distance) or nil
+	end,
+	nameplateMaxAlphaDistance = function(db)
+		return NearNames(db) and tostring(math.max(5, db.nearNames.distance - NEAR_FADE)) or nil
+	end,
+	-- Counted by the game from the plates' farthest reach, not from you.
+	nameplateMinAlphaDistance = function(db)
+		if not NearNames(db) then return nil end
+		local own = OwnReach()
+		local reach = math.max(own, db.nearNames.distance)
+		return tostring(math.max(0, reach - db.nearNames.distance))
+	end,
 	nameplateShowAll = function(db) return AllHeads(db) and "1" or nil end,
 	nameplateShowFriendlyPlayers = FriendlyPlates,
 	nameplateShowFriends = FriendlyPlates, -- its older name
@@ -404,10 +469,14 @@ end
 
 function ns.RestoreOriginal()
 	if not ns.root.original then return end
+	-- A setting the game refused (in a fight): kept to put back at the next
+	-- load, never mistaken for the player's own.
+	local refused = false
 	for cvar, value in pairs(ns.root.original) do
 		WriteCVar(cvar, value)
+		if CVarExists(cvar) and GetCVar(cvar) ~= value then refused = true end
 	end
-	ns.root.dirty = false
+	ns.root.dirty = refused
 end
 
 -- Whether the game itself writes the name above this unit right now.
@@ -448,6 +517,11 @@ local function ShouldShowCategory(cat)
 	else
 		show = db.show[cat.key] and true or false
 	end
+	local zone = ns.zone or "world"
+	local instance = zone == "dungeon" or zone == "raid" or zone == "pvp"
+	if cat.enemy and db.enemyNames == "always" then show = true end
+	-- Near: Wanderer writes them itself over the plates (Plates.lua); in instances the zone decides.
+	if cat.enemy and (db.enemyNames == "never" or (db.enemyNames == "near" and not instance)) then show = false end
 	if cat.enemy and db.combatEnemies and ns.inCombat then show = true end
 	return show
 end
@@ -552,6 +626,7 @@ function ns.MakePlaceProfiles()
 	map.raid = map.raid or map.dungeon
 	map.pvp = map.pvp or map.dungeon
 	ns.UpdatePlaceProfile()
+	if ns.initialized then ns.RefreshAll() end
 	if ns.RefreshOptions then ns.RefreshOptions() end
 	ns.Print(L.MSG_PLACE_PROFILES_MADE)
 end
@@ -575,7 +650,6 @@ function ns.RefreshAll()
 	if ns.RefreshTooltips then ns.RefreshTooltips() end
 	if ns.RefreshTrainer then ns.RefreshTrainer() end
 	if ns.RefreshScreen then ns.RefreshScreen() end
-	if ns.RefreshTargetLabel then ns.RefreshTargetLabel() end
 	if ns.RefreshSession then ns.RefreshSession() end
 	if ns.RefreshSounds then ns.RefreshSounds() end
 	if ns.RefreshScene then ns.RefreshScene() end
@@ -627,26 +701,26 @@ local function Migrate(root)
 	root.profiles = { [DEFAULT_PROFILE] = profile }
 end
 
+-- One of the three levels of the label's content, every line set at once.
+function ns.SetLabelContent(level)
+	local label = ns.db.label
+	for _, key in ipairs(ns.LABEL_CONTENT_KEYS) do
+		if level == "essential" then
+			label[key] = ESSENTIAL[key] or false
+		elseif level == "all" then
+			label[key] = true
+		else
+			label[key] = DEFAULTS.label[key]
+		end
+	end
+	label.content = level
+	if ns.RefreshLabel then ns.RefreshLabel() end
+end
+
 function ns.SetProfile(name, byPlace)
 	local root = ns.root
 	if not root.profiles[name] then root.profiles[name] = {} end
 	local profile = root.profiles[name]
-	-- Profiles made before 0.11: the label replaces the game's tooltip for
-	-- characters. Version 0.14 had removed the "Game interface" style and moved
-	-- its users to Minimal: they get it back.
-	if profile.label and (profile.styleVersion or 0) < 4 then
-		if not profile.styleVersion then profile.hideUnitTooltip = true end
-		if not profile.styleVersion or profile.styleVersion == 3 and profile.label.style == "minimal" then
-			profile.label.style = "blizzard"
-		end
-		profile.styleVersion = 4
-	end
-	-- 0.21: the label replaces the game's tooltip in the world, once for every
-	-- profile (the game's tooltip showed with it); the choice stays free after.
-	if (profile.styleVersion or 0) < 5 then
-		profile.hideUnitTooltip = true
-		profile.styleVersion = 5
-	end
 	-- 0.34: enemy names no longer come back in a fight unless asked, once for
 	-- every profile; the choice stays free after.
 	if (profile.styleVersion or 0) < 6 then
@@ -667,6 +741,10 @@ function ns.SetProfile(name, byPlace)
 		if type(profile.label) == "table" then profile.label.stickyTarget = true end
 		profile.styleVersion = 8
 	end
+	if (profile.styleVersion or 0) < 9 then
+		if type(profile.nearNames) == "table" and profile.nearNames.distance == 40 then profile.nearNames.distance = 45 end
+		profile.styleVersion = 9
+	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
 	-- Not in DEFAULTS (nil means the game's own key): checked on its own.
@@ -683,7 +761,8 @@ end
 function ns.ResetProfile()
 	local name = ns.profileName
 	ns.root.profiles[name] = {}
-	ns.SetProfile(name)
+	-- A place's profile stays the place's: the character keeps their own.
+	ns.SetProfile(name, name ~= ns.root.profileKeys[ns.CharacterKey()])
 	if ns.RefreshOptions then ns.RefreshOptions() end
 	if ns.RefreshThemeGrids then ns.RefreshThemeGrids() end
 	ns.Print(L.MSG_RESET_PROFILE:format(name))
@@ -712,7 +791,7 @@ function ns.DeleteProfile(name)
 			if profile == name then places[zone] = nil end
 		end
 	end
-	if ns.profileName == name then ns.SetProfile(DEFAULT_PROFILE) end
+	if ns.profileName == name then ns.SetProfile(WantedProfile(), true) end
 	return true
 end
 
@@ -852,8 +931,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		-- Modules are built once: frames, hooks and events must never be doubled.
 		if not ns.initialized then
 			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitCinema", "InitTooltips",
-				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen", "InitTargetLabel",
-				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSession", "InitSounds", "InitFishing", "InitJournal", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
+				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
+				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSession", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitJournal", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
 				if ns[init] then ns[init]() end
 			end
 			ns.initialized = true
@@ -938,6 +1017,20 @@ SlashCmdList.WANDERER = function(msg)
 		ns.DebugTalents()
 	elseif msg == "todo" or msg == "afaire" or msg == "à faire" then
 		ns.ToggleTodo()
+	elseif msg:match("^ennemis") or msg:match("^enemies") then
+		-- /wanderer ennemis proche | toujours | jamais | noms: the enemies' names, said back.
+		local word = msg:match("^%S+%s+(%S+)")
+		local choice = ({ proche = "near", near = "near", toujours = "always", always = "always", jamais = "never",
+			never = "never", noms = "names", names = "names" })[word or ""]
+		if choice then
+			ns.db.enemyNames = choice
+			ns.Apply()
+			if ns.RefreshPlates then ns.RefreshPlates() end
+			if ns.RefreshOptions then ns.RefreshOptions() end
+		end
+		ns.Print(L.ENEMY_NAMES .. " : " .. L["ENEMY_NAMES_" .. ns.db.enemyNames:upper()] .. " (" .. tostring(ns.profileName) .. ")")
+	elseif msg == "plates" and ns.DebugPlates then
+		ns.DebugPlates()
 	elseif msg == "clear" or msg == "effacer" then
 		-- The tab shown (the Wanderer tab in diagnostic mode), and what it kept.
 		local frame = ns.debug and ns.debugFrame or SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME

@@ -12,18 +12,40 @@ local Safe, Clean = U.Safe, U.Clean
 
 -- Difficulty ------------------------------------------------------------------------
 
+-- A creature's level as the classic game colors it, when the game gives no
+-- function for it: yellow from two levels under you to two over, orange and
+-- red above, green under, grey once it gives nothing any more.
+local function GreyLevel(player)
+	if player <= 5 then return 0 end
+	if player <= 39 then return player - math.floor(player / 10) - 5 end
+	if player <= 59 then return player - math.floor(player / 5) - 1 end
+	return player - 9
+end
+
+local function CreatureColor(level)
+	local player = Clean(Safe(UnitLevel, "player")) or level
+	local gap = level - player
+	if gap >= 5 then return 1, 0.1, 0.1 end
+	if gap >= 3 then return 1, 0.5, 0.25 end
+	if gap >= -2 then return 1, 0.82, 0 end
+	if level > GreyLevel(player) then return 0.25, 0.75, 0.25 end
+	return 0.5, 0.5, 0.5
+end
+
 -- Color of a level compared to the player's: grey, green, yellow, orange, red.
 -- forQuest: the quests' own scale (slightly different from creatures').
-function World.LevelColor(level, forQuest)
-	if not level or level <= 0 then return 1, 0.1, 0.1 end -- "??": far above you
-	local color
-	if forQuest then
-		color = Safe(GetQuestDifficultyColor, level) or Safe(GetCreatureDifficultyColor, level)
-	else
-		color = Safe(GetCreatureDifficultyColor, level) or Safe(GetQuestDifficultyColor, level)
+-- unit: the character itself, as the game's own frames color it (its
+-- difficulty for you, not only its level); else the level alone.
+function World.LevelColor(level, forQuest, unit)
+	if unit and C_PlayerInfo and C_PlayerInfo.GetContentDifficultyCreatureForPlayer and GetDifficultyColor then
+		local difficulty = Clean(Safe(C_PlayerInfo.GetContentDifficultyCreatureForPlayer, unit))
+		local color = difficulty and Safe(GetDifficultyColor, difficulty)
+		if type(color) == "table" and color.r then return color.r, color.g, color.b end
 	end
+	if not level or level <= 0 then return 1, 0.1, 0.1 end -- "??": far above you
+	local color = Safe(forQuest and GetQuestDifficultyColor or GetCreatureDifficultyColor, level)
 	if type(color) == "table" and color.r then return color.r, color.g, color.b end
-	return 1, 1, 1
+	return CreatureColor(level)
 end
 
 -- Reputation --------------------------------------------------------------------------

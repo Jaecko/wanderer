@@ -19,6 +19,7 @@ local POOR = (Enum and Enum.ItemQuality and Enum.ItemQuality.Poor) or 0
 
 local frame
 local queue, sinceSell, startMoney = {}, 0, nil
+local open = false -- the merchant window is there
 
 -- The merchant buys items: the game shows its junk button only then. Clients
 -- without this button rely on the server's answer (ERR_VENDOR_DOESNT_BUY).
@@ -58,6 +59,7 @@ local function Stop()
 end
 
 local function OnUpdate(_, elapsed)
+	if not open then return Stop() end
 	sinceSell = sinceSell + elapsed
 	if sinceSell < SELL_DELAY then return end
 	sinceSell = 0
@@ -66,7 +68,7 @@ local function OnUpdate(_, elapsed)
 	-- The slot is checked again: the bags may have changed in between.
 	local info = Safe(Container.GetContainerItemInfo, item.bag, item.slot)
 	if type(info) == "table" and info.itemID == item.id and info.quality == POOR and not info.isLocked then
-		Safe(Container.UseContainerItem, item.bag, item.slot)
+		if open then Safe(Container.UseContainerItem, item.bag, item.slot) end
 	end
 	if not queue[1] then
 		-- The last sale needs a moment before the money is counted.
@@ -100,7 +102,7 @@ local function Repair()
 end
 
 local function Start()
-	if not (ns.db and ns.db.enabled and ns.db.merchant.sellJunk) then return end
+	if not (open and ns.db and ns.db.enabled and ns.db.merchant.sellJunk) then return end
 	if not MerchantBuys() then return end
 	local junk = FindJunk()
 	if not junk[1] then return end
@@ -115,14 +117,17 @@ function ns.InitMerchant()
 	frame:RegisterEvent("UI_ERROR_MESSAGE")
 	frame:SetScript("OnEvent", function(_, event, _, message)
 		if event == "MERCHANT_SHOW" then
+			open = true
 			if not (ns.db and ns.db.enabled) or U.IsSkipping() then return end
 			-- The merchant window sets up its buttons first; the junk is sold once
 			-- the repair is paid, so the gain counted is the sale's alone.
 			C_Timer.After(0, function()
+				if not open then return end
 				Repair()
 				C_Timer.After(0.3, Start)
 			end)
 		elseif event == "MERCHANT_CLOSED" then
+			open = false
 			if queue[1] or startMoney then Stop() end
 		elseif queue[1] and (message == ERR_VENDOR_DOESNT_BUY or message == ERR_TOO_MUCH_GOLD) then
 			Stop()

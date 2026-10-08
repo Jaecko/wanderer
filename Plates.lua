@@ -10,6 +10,10 @@ local _, ns = ...
 -- raids and battlegrounds every plate is the game's own, left alone.
 -- Nothing runs while no plate is shown.
 --
+-- Enemies (option "as you come near"): the same small name over their quiet
+-- plate, in the color of their reaction; the game fades the plate with the
+-- distance, so the name comes as you come near (out of a fight).
+--
 -- Your group: since names are hidden, the game cannot color theirs. Over
 -- each member's quiet plate, Wanderer writes the name small, in the game's
 -- color for your group (option, on by default); never while the game writes
@@ -57,6 +61,8 @@ local function Quiet(unit)
 	if U.IsSecret(hostile) then return false end
 	if not hostile then return true end
 	if Clean(Safe(UnitClassification, unit)) == "minus" then return not Own("nameplateShowEnemyMinus") end
+	-- Enemies as you come near, with their health bar: shown, the game fades them with the distance.
+	if ns.db.enemyNames == "near" and ns.db.nearNames.show == "bar" then return false end
 	-- Enemies: the game shows them in a fight anyway.
 	return not Own("nameplateShowAll") and not (ns.inCombat or InCombatLockdown())
 end
@@ -67,8 +73,15 @@ local function Companion(unit)
 	return (Clean(Safe(UnitInParty, unit)) or Clean(Safe(UnitInRaid, unit))) and true or false
 end
 
+-- An enemy whose name comes as you come near (out of a fight).
+local function NearEnemy(unit)
+	if ns.db.enemyNames ~= "near" or ns.db.nearNames.show ~= "name" or ns.inCombat then return false end
+	return Clean(Safe(UnitCanAttack, "player", unit)) and true or false
+end
+
 local function MarkWanted(unit, isQuiet, plate)
-	if not (isQuiet and ns.db.groupMarks and Companion(unit)) then return false end
+	if not isQuiet then return false end
+	if not ((ns.db.groupMarks and Companion(unit)) or NearEnemy(unit)) then return false end
 	if ns.GameShowsName and ns.GameShowsName(unit) then return false end
 	-- The label describes this character already: gone at once, never under it.
 	if ns.LabelPlate and ns.LabelPlate() == plate then return false, true end
@@ -125,9 +138,13 @@ local function Update(elapsed)
 				local mark = Mark(plate)
 				if markOn then
 					pcall(mark.SetText, mark, (Safe(UnitName, unit)))
-					mark:SetTextColor(PartyColor())
+					if Companion(unit) then
+						mark:SetTextColor(PartyColor())
+					elseif ns.UnitColor then
+						mark:SetTextColor(ns.UnitColor(unit, Clean(Safe(UnitIsPlayer, unit))))
+					end
 				end
-				if underLabel then mark.tween = U.Tween(0) end
+				if underLabel then mark.tween:Set(0) end
 				local markAlpha = mark.tween:Step(markOn and 1 or 0, elapsed, FADE_IN, FADE_OUT)
 				mark:SetAlpha(markAlpha)
 				mark:SetShown(markAlpha > 0)
@@ -140,6 +157,22 @@ end
 
 local function Wake()
 	if driver and (On() or next(tweens)) then driver:Show() end
+end
+
+-- /wanderer plates: what the game does with the plates (distance fading, names).
+function ns.DebugPlates()
+	local function cvar(name) return tostring(Safe(GetCVar, name)) end
+	ns.Print(("Plates: enemies %s, all %s, alpha %s at %s..%s, max distance %s, mode %s, active %s"):format(
+		cvar("nameplateShowEnemies"), cvar("nameplateShowAll"), cvar("nameplateMinAlpha"), cvar("nameplateMaxAlphaDistance"),
+		cvar("nameplateMinAlphaDistance"), cvar("nameplateMaxDistance"), tostring(ns.db.enemyNames), tostring(On())))
+	for _, plate in ipairs(C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}) do
+		local drawn = Drawn(plate)
+		local unit = plate.namePlateUnitToken or (drawn and drawn.unit)
+		local mark = marks[plate]
+		ns.Print(("  %s %s: plate %.2f, drawn %s, quiet %s, mark %s %.2f"):format(tostring(unit), tostring(Clean(Safe(UnitName, unit or ""))),
+			plate:GetAlpha(), drawn and ("%.2f"):format(drawn:GetAlpha()) or "-", tostring(quiet[plate]),
+			mark and tostring(mark:IsShown()) or "-", mark and mark:GetAlpha() or 0))
+	end
 end
 
 function ns.RefreshPlates()
@@ -173,7 +206,16 @@ function ns.InitPlates()
 			count = count + 1
 			-- Hidden at once if it should be: no flash of a quiet plate.
 			local plate = unit and C_NamePlate and Safe(C_NamePlate.GetNamePlateForUnit, unit)
-			if plate then tweens[plate] = nil end
+			if plate then
+				tweens[plate] = nil
+				-- A plate handed to someone else: the name it carried goes at once.
+				local mark = marks[plate]
+				if mark then
+					mark.tween:Set(0)
+					mark:SetAlpha(0)
+					mark:Hide()
+				end
+			end
 			Update(0)
 		elseif event == "NAME_PLATE_UNIT_REMOVED" then
 			count = math.max(0, count - 1)

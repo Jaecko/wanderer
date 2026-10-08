@@ -270,6 +270,12 @@ local function KeyRows()
 	return added
 end
 
+local function CloseSettings()
+	if not (SettingsPanel and SettingsPanel:IsShown()) then return end
+	if SettingsPanel.Close then pcall(SettingsPanel.Close, SettingsPanel)
+	elseif HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
+end
+
 local function HomePage()
 	Page(L.ADDON_TITLE)
 	Header(L.SECTION_GENERAL)
@@ -293,11 +299,11 @@ local function HomePage()
 	end
 	Button(L.WELCOME_SHOW, L.WELCOME_SHOW_BUTTON, L.WELCOME_SHOW_DESC, function()
 		-- The options step aside: the welcome screen takes their place.
-		if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
+		CloseSettings()
 		if ns.ShowWelcome then ns.ShowWelcome() end
 	end)
 	Button(L.NEWS_SHOW, L.NEWS_SHOW_BUTTON, L.NEWS_SHOW_DESC, function()
-		if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
+		CloseSettings()
 		if ns.ShowNews then ns.ShowNews() end
 	end)
 
@@ -340,7 +346,7 @@ local function NamesPage()
 	end
 
 	Header(L.SECTION_COMBAT)
-	Checkbox("COMBAT_ENEMIES", L.COMBAT_ENEMIES, L.COMBAT_ENEMIES_DESC, true,
+	Checkbox("COMBAT_ENEMIES", L.COMBAT_ENEMIES, L.COMBAT_ENEMIES_DESC, ns.DEFAULTS.combatEnemies,
 		function() return ns.db.combatEnemies end,
 		function(value) ns.db.combatEnemies = value; ns.Apply() end)
 
@@ -354,6 +360,23 @@ local function NamesPage()
 			function() return ns.db.zones[zone] end,
 			function(value) ns.db.zones[zone] = value; ns.Apply() end)
 	end
+	local enemyChoices = {}
+	for _, choice in ipairs(ns.ENEMY_NAMES) do enemyChoices[#enemyChoices + 1] = { choice, L["ENEMY_NAMES_" .. choice:upper()] } end
+	local enemyNames = Dropdown("ENEMY_NAMES", L.ENEMY_NAMES, L.ENEMY_NAMES_DESC, "names", enemyChoices,
+		function() return ns.db.enemyNames end,
+		function(value)
+			ns.db.enemyNames = value
+			ns.Apply()
+			ns.RefreshPlates()
+		end)
+	local near = function() return ns.db.enemyNames == "near" end
+	Under(Dropdown("NEAR_SHOW", L.NEAR_SHOW, L.NEAR_SHOW_DESC, "bar", { { "bar", L.NEAR_SHOW_BAR }, { "name", L.NEAR_SHOW_NAME } },
+		function() return ns.db.nearNames.show end,
+		function(value)
+			ns.db.nearNames.show = value
+			ns.RefreshPlates()
+		end), enemyNames, near)
+	Under(Slider("NEAR_DISTANCE", L.NEAR_DISTANCE, "nearNames.distance", L.NEAR_DISTANCE_FORMAT, ns.Apply), enemyNames, near)
 	Checkbox("GROUP_MARKS", L.GROUP_MARKS, L.GROUP_MARKS_DESC, true,
 		function() return ns.db.groupMarks end,
 		function(value) ns.db.groupMarks = value; ns.RefreshPlates() end)
@@ -397,11 +420,8 @@ local function LabelPage()
 		ns.RefreshPlates()
 	end), enabled, labelOn)
 	Under(LabelCheckbox("worldOnly", L.LABEL_WORLD_ONLY, L.LABEL_WORLD_ONLY_DESC), enabled, labelOn)
-	Under(LabelCheckbox("hideInCombat", L.LABEL_COMBAT), enabled, labelOn)
+	Under(LabelCheckbox("hideInCombat", L.LABEL_COMBAT, L.LABEL_COMBAT_DESC), enabled, labelOn)
 	Under(LabelCheckbox("stickyTarget", L.LABEL_STICKY_TARGET, L.LABEL_STICKY_TARGET_DESC), enabled, labelOn)
-
-	Header(L.SECTION_TARGET)
-	TableCheckbox("label", "targetName", L.LABEL_TARGET_NAME, L.LABEL_TARGET_NAME_DESC, ns.RefreshTargetLabel)
 
 	Header(L.SECTION_HIGHLIGHTS)
 	LabelCheckbox("highlight", L.LABEL_HIGHLIGHT, L.LABEL_HIGHLIGHT_DESC)
@@ -416,42 +436,60 @@ local function LabelPage()
 	Under(LabelCheckbox("threatVignette", L.LABEL_THREAT_VIGNETTE, L.LABEL_THREAT_VIGNETTE_DESC), threat, threatOn)
 end
 
+-- A line of the label's content: set alone, the level becomes "custom".
+local function ContentCheckbox(key, label, tooltip)
+	return TableCheckbox("label", key, label, tooltip, function()
+		ns.db.label.content = "custom"
+		ns.RefreshLabel()
+		ns.RefreshOptions()
+	end)
+end
+
 local function ContentPage()
 	Page(L.PAGE_CONTENT)
 	ns.PREVIEW_CATEGORIES[category] = true
+	-- Three levels; the lines below for whoever wants to set them one by one.
+	local levels = {}
+	for _, level in ipairs(ns.LABEL_CONTENT_ORDER) do levels[#levels + 1] = { level, L["LABEL_CONTENT_" .. level:upper()] } end
+	Dropdown("LABEL_CONTENT", L.LABEL_CONTENT, L.LABEL_CONTENT_DESC, "complete", levels,
+		function() return ns.db.label.content end,
+		function(value)
+			if value ~= "custom" then ns.SetLabelContent(value) else ns.db.label.content = value end
+			ns.RefreshOptions()
+		end)
 	Header(L.SECTION_PLAYERS)
-	LabelCheckbox("showRace", L.LABEL_RACE)
-	LabelCheckbox("showClass", L.LABEL_CLASS)
-	LabelCheckbox("showSpec", L.LABEL_SPEC, L.LABEL_SPEC_DESC)
-	LabelCheckbox("shiftDetails", L.LABEL_DETAILS, L.LABEL_DETAILS_DESC)
-	LabelCheckbox("showGuild", L.LABEL_GUILD)
-	local faction = LabelCheckbox("showFaction", L.LABEL_FACTION)
-	Under(LabelCheckbox("showNPCFaction", L.LABEL_NPC_FACTION, L.LABEL_NPC_FACTION_DESC), faction, IsOn("label", "showFaction"))
-	LabelCheckbox("showStatus", L.LABEL_STATUS, L.LABEL_STATUS_DESC)
+	ContentCheckbox("showRace", L.LABEL_RACE)
+	ContentCheckbox("showClass", L.LABEL_CLASS)
+	ContentCheckbox("showSpec", L.LABEL_SPEC, L.LABEL_SPEC_DESC)
+	ContentCheckbox("shiftDetails", L.LABEL_DETAILS, L.LABEL_DETAILS_DESC)
+	ContentCheckbox("showGuild", L.LABEL_GUILD)
+	local faction = ContentCheckbox("showFaction", L.LABEL_FACTION)
+	Under(ContentCheckbox("showNPCFaction", L.LABEL_NPC_FACTION, L.LABEL_NPC_FACTION_DESC), faction, IsOn("label", "showFaction"))
+	ContentCheckbox("showStatus", L.LABEL_STATUS, L.LABEL_STATUS_DESC)
 
 	Header(L.SECTION_CREATURES)
-	LabelCheckbox("showCreatureType", L.LABEL_CREATURE_TYPE, L.LABEL_CREATURE_TYPE_DESC)
-	LabelCheckbox("showClassification", L.LABEL_CLASSIFICATION, L.LABEL_CLASSIFICATION_DESC)
-	LabelCheckbox("showNPCRole", L.LABEL_NPC_ROLE, L.LABEL_NPC_ROLE_DESC)
-	LabelCheckbox("showReputation", L.LABEL_REPUTATION, L.LABEL_REPUTATION_DESC)
-	LabelCheckbox("showTameable", L.LABEL_TAMEABLE, L.LABEL_TAMEABLE_DESC)
-	LabelCheckbox("showRareKills", L.LABEL_RARE_KILLS, L.LABEL_RARE_KILLS_DESC)
-	LabelCheckbox("untagged", L.LABEL_UNTAGGED, L.LABEL_UNTAGGED_DESC)
+	ContentCheckbox("showCreatureType", L.LABEL_CREATURE_TYPE, L.LABEL_CREATURE_TYPE_DESC)
+	ContentCheckbox("showClassification", L.LABEL_CLASSIFICATION, L.LABEL_CLASSIFICATION_DESC)
+	ContentCheckbox("showNPCRole", L.LABEL_NPC_ROLE, L.LABEL_NPC_ROLE_DESC)
+	ContentCheckbox("showReputation", L.LABEL_REPUTATION, L.LABEL_REPUTATION_DESC)
+	ContentCheckbox("showTameable", L.LABEL_TAMEABLE, L.LABEL_TAMEABLE_DESC)
+	ContentCheckbox("showRareKills", L.LABEL_RARE_KILLS, L.LABEL_RARE_KILLS_DESC)
+	ContentCheckbox("untagged", L.LABEL_UNTAGGED, L.LABEL_UNTAGGED_DESC)
 
 	Header(L.SECTION_EVERYONE)
-	local level = LabelCheckbox("showLevel", L.LABEL_LEVEL)
-	Under(LabelCheckbox("showDifficulty", L.LABEL_DIFFICULTY, L.LABEL_DIFFICULTY_DESC), level, IsOn("label", "showLevel"))
-	LabelCheckbox("showXP", L.LABEL_XP, L.LABEL_XP_DESC)
-	LabelCheckbox("showPortrait", L.LABEL_PORTRAIT, L.LABEL_PORTRAIT_DESC)
-	LabelCheckbox("showHealth", L.LABEL_HEALTH, L.LABEL_HEALTH_DESC)
-	LabelCheckbox("showTarget", L.LABEL_TARGET, L.LABEL_TARGET_DESC)
-	LabelCheckbox("showCasts", L.LABEL_CASTS, L.LABEL_CASTS_DESC)
+	local level = ContentCheckbox("showLevel", L.LABEL_LEVEL)
+	Under(ContentCheckbox("showDifficulty", L.LABEL_DIFFICULTY, L.LABEL_DIFFICULTY_DESC), level, IsOn("label", "showLevel"))
+	ContentCheckbox("showXP", L.LABEL_XP, L.LABEL_XP_DESC)
+	ContentCheckbox("showPortrait", L.LABEL_PORTRAIT, L.LABEL_PORTRAIT_DESC)
+	ContentCheckbox("showHealth", L.LABEL_HEALTH, L.LABEL_HEALTH_DESC)
+	ContentCheckbox("showTarget", L.LABEL_TARGET, L.LABEL_TARGET_DESC)
+	ContentCheckbox("showCasts", L.LABEL_CASTS, L.LABEL_CASTS_DESC)
 
 	Header(L.SECTION_ACTIONS)
-	LabelCheckbox("showProfessions", L.LABEL_PROFESSIONS, L.LABEL_PROFESSIONS_DESC)
-	LabelCheckbox("showLoot", L.LABEL_LOOT, L.LABEL_LOOT_DESC)
-	LabelCheckbox("showObjects", L.LABEL_OBJECTS, L.LABEL_OBJECTS_DESC)
-	LabelCheckbox("showQuests", L.LABEL_QUESTS, L.LABEL_QUESTS_DESC)
+	ContentCheckbox("showProfessions", L.LABEL_PROFESSIONS, L.LABEL_PROFESSIONS_DESC)
+	ContentCheckbox("showLoot", L.LABEL_LOOT, L.LABEL_LOOT_DESC)
+	ContentCheckbox("showObjects", L.LABEL_OBJECTS, L.LABEL_OBJECTS_DESC)
+	ContentCheckbox("showQuests", L.LABEL_QUESTS, L.LABEL_QUESTS_DESC)
 
 	Header(L.SECTION_RP)
 	TableCheckbox("rp", "useName", L.RP_NAME, L.RP_NAME_DESC, ns.RefreshLabel)
@@ -466,7 +504,7 @@ local function TooltipsPage()
 	Under(TableCheckbox("tooltips", "cursor", L.TOOLTIPS_CURSOR, L.TOOLTIPS_CURSOR_DESC), styled, styledOn)
 	Under(TableCheckbox("tooltips", "icon", L.TOOLTIPS_ICON, L.TOOLTIPS_ICON_DESC), styled, styledOn)
 	Under(TableCheckbox("tooltips", "quality", L.TOOLTIPS_QUALITY, L.TOOLTIPS_QUALITY_DESC), styled, styledOn)
-	Checkbox("HIDE_TOOLTIP", L.HIDE_TOOLTIP, L.HIDE_TOOLTIP_DESC, false,
+	Checkbox("HIDE_TOOLTIP", L.HIDE_TOOLTIP, L.HIDE_TOOLTIP_DESC, ns.DEFAULTS.hideUnitTooltip,
 		function() return ns.db.hideUnitTooltip end,
 		function(value) ns.db.hideUnitTooltip = value end)
 	LabelCheckbox("ownPortrait", L.LABEL_OWN_PORTRAIT, L.LABEL_OWN_PORTRAIT_DESC)
@@ -532,7 +570,7 @@ local function ImmersionPage()
 	local travel = TableCheckbox("travel", "enabled", L.TRAVEL_ENABLE, L.TRAVEL_ENABLE_DESC)
 	Under(TableCheckbox("travel", "camera", L.TRAVEL_CAMERA, L.TRAVEL_CAMERA_DESC), travel, IsOn("travel", "enabled"))
 	Button(L.PHOTO, L.PHOTO_BUTTON, L.PHOTO_DESC, function()
-		if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
+		CloseSettings()
 		ns.TogglePhotoMode()
 	end)
 
@@ -550,7 +588,7 @@ local function ImmersionPage()
 			ns.RefreshAway()
 		end), away, IsOn("away", "enabled"))
 	Button(L.AWAY_TRY, L.AWAY_TRY_BUTTON, L.AWAY_TRY_DESC, function()
-		if SettingsPanel and SettingsPanel:IsShown() and HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
+		CloseSettings()
 		ns.GoAway()
 	end)
 
@@ -588,6 +626,7 @@ local function MerchantsPage()
 	Page(L.PAGE_MERCHANTS)
 	Header(L.SECTION_MERCHANT)
 	TableCheckbox("merchant", "sellJunk", L.MERCHANT_SELL_JUNK, L.MERCHANT_SELL_JUNK_DESC)
+	TableCheckbox("merchant", "repairReminder", L.REPAIR_REMINDER, L.REPAIR_REMINDER_DESC)
 	local repair = TableCheckbox("merchant", "repair", L.MERCHANT_REPAIR, L.MERCHANT_REPAIR_DESC)
 	Under(TableCheckbox("merchant", "guildRepair", L.MERCHANT_GUILD_REPAIR, L.MERCHANT_GUILD_REPAIR_DESC),
 		repair, IsOn("merchant", "repair"))
@@ -609,14 +648,25 @@ local function AdventurePage()
 	Under(TableCheckbox("journal", "notices", L.JOURNAL_NOTICES, L.JOURNAL_NOTICES_DESC), journal, journalOn)
 	Under(TableCheckbox("journal", "sound", L.JOURNAL_SOUND, L.JOURNAL_SOUND_DESC), journal, journalOn)
 	Under(TableCheckbox("journal", "deaths", L.JOURNAL_DEATHS, L.JOURNAL_DEATHS_DESC), journal, journalOn)
-
-	Header(L.SECTION_FISHING)
-	TableCheckbox("fishing", "doubleClick", L.FISHING_DOUBLE_CLICK, L.FISHING_DOUBLE_CLICK_DESC)
+	TableCheckbox("journal", "threshold", L.THRESHOLD, L.THRESHOLD_DESC)
 
 	Header(L.SECTION_SESSION)
 	Slider("SESSION_BREAK", L.SESSION_BREAK, "session.breakEvery",
 		function(value) return value == 0 and L.NEVER or L.MINUTES:format(value) end, ns.RefreshSession)
 	Button(L.SESSION_SHOW, L.SESSION_SHOW_BUTTON, L.SESSION_SHOW_DESC, function() ns.PrintSession() end)
+end
+
+-- Fishing and professions, a page of their own.
+local function CraftsPage()
+	Page(L.PAGE_CRAFTS)
+	Header(L.SECTION_FISHING)
+	TableCheckbox("fishing", "doubleClick", L.FISHING_DOUBLE_CLICK, L.FISHING_DOUBLE_CLICK_DESC)
+	TableCheckbox("fishing", "tell", L.FISHING_TELL, L.FISHING_TELL_DESC)
+	TableCheckbox("fishing", "splash", L.FISHING_SPLASH, L.FISHING_SPLASH_DESC)
+
+	Header(L.SECTION_CRAFTS)
+	TableCheckbox("crafts", "skillUps", L.CRAFTS_SKILL_UPS, L.CRAFTS_SKILL_UPS_DESC)
+	TableCheckbox("crafts", "firstCrafts", L.CRAFTS_FIRST, L.CRAFTS_FIRST_DESC)
 end
 
 local function SocialPage()
@@ -642,6 +692,7 @@ local function SocialPage()
 	TableCheckbox("chat", "arrowHistory", L.CHAT_ARROWS, L.CHAT_ARROWS_DESC, ns.RefreshChatComfort)
 	TableCheckbox("chat", "copyButton", L.CHAT_COPY_BUTTON, L.CHAT_COPY_BUTTON_DESC, ns.RefreshChatComfort)
 	TableCheckbox("chat", "keepLog", L.CHAT_KEEP_LOG, L.CHAT_KEEP_LOG_DESC)
+	TableCheckbox("chat", "links", L.CHAT_LINKS, L.CHAT_LINKS_DESC)
 	Button(L.CHAT_TABS, L.CHAT_TABS_BUTTON, L.CHAT_TABS_DESC, function() ns.CreateChatTabs() end)
 end
 
@@ -687,7 +738,7 @@ function ns.InitOptions()
 	-- First folded page: the predefined styles (cards with previews).
 	if ns.RegisterThemesPage and Settings.RegisterVerticalLayoutSubcategory then ns.RegisterThemesPage(mainCategory) end
 	for _, page in ipairs({ NamesPage, LabelPage, ContentPage, TooltipsPage, InterfacePage, ActionBarsPage, ImmersionPage,
-		ConversationsPage, MerchantsPage, AdventurePage, SocialPage, ProfilesPage }) do
+		ConversationsPage, MerchantsPage, AdventurePage, CraftsPage, SocialPage, ProfilesPage }) do
 		page()
 	end
 	Settings.RegisterAddOnCategory(mainCategory)

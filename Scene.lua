@@ -79,6 +79,8 @@ end
 -- A frame of the game's conversation windows (the window or one of its parts).
 local function IsGameWindow(frame)
 	if frame.IsForbidden and frame:IsForbidden() then return false end
+	local name = frame.GetName and frame:GetName()
+	if name and issecurevariable and not issecurevariable(name) then return false end
 	local depth = 0
 	while frame and depth < 8 do
 		if frame == _G.GossipFrame or frame == _G.QuestFrame or frame == _G.CustomGossipFrameManager then return true end
@@ -216,7 +218,7 @@ local function Rewards(required)
 		for index = 1, count do
 			local name, texture, amount, quality, usable = Safe(GetQuestItemInfo, kind, index)
 			if name then
-				rewards[#rewards + 1] = { kind = kind, index = index, name = name, texture = texture,
+				rewards[#rewards + 1] = { kind = kind, index = index, name = Clean(name) or "?", texture = texture,
 					count = Clean(amount) or 1, quality = Clean(quality), unusable = Clean(usable) == false }
 			end
 		end
@@ -828,6 +830,8 @@ local function OnEvent(_, event, ...)
 		-- game's windows hear their events themselves until it ends. Opened
 		-- by Wanderer in a fight, they would be refused by the game and the
 		-- conversation would stay stuck.
+		sceneToken = sceneToken + 1
+		planned = nil
 		if scene then Finish(true) end
 		SetTaken(false)
 		return
@@ -972,7 +976,10 @@ function ns.InitScene()
 	end
 	-- Escape closes the scene and the conversation.
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererScene") end
-	panel:SetScript("OnHide", function() if scene then Finish(true) end end)
+	-- Closed (Escape), not merely hidden with the whole interface (Alt+Z).
+	panel:SetScript("OnHide", function()
+		if scene and not (UIParent and not UIParent:IsShown()) then Finish(true) end
+	end)
 	panel:SetScript("OnUpdate", OnUpdate)
 	panel:SetScript("OnEvent", OnEvent)
 	for event in pairs(SHOW_EVENTS) do panel:RegisterEvent(event) end

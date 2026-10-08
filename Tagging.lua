@@ -123,11 +123,11 @@ local function Update()
 	local shown = {}
 	local plates = C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}
 	for _, plate in ipairs(plates) do
-		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-		-- The target says it in its own bubble (TargetLabel.lua).
-		local target = ns.TargetBubbleSaysUntagged and ns.TargetBubbleSaysUntagged() and unit
-			and Clean(Safe(UnitIsUnit, unit, "target"))
-		if unit and not target and not (plate.IsForbidden and plate:IsForbidden()) and ns.IsUntaggedOnYou(unit) then
+		local unit = U.PlateUnit(plate)
+		-- The label says it already for the one it describes.
+		local described = unit and ns.IsLabelActive and ns.IsLabelActive() and ns.LabelUnit
+			and Clean(Safe(UnitIsUnit, unit, ns.LabelUnit()))
+		if unit and not described and not (plate.IsForbidden and plate:IsForbidden()) and ns.IsUntaggedOnYou(unit) then
 			local mark = marks[plate] or CreateMark()
 			marks[plate] = mark
 			mark:ClearAllPoints()
@@ -169,6 +169,11 @@ function ns.InitTagging()
 			Update()
 			driver:Hide()
 		else
+			-- A plate handed to another monster: the blows it knew were not on this one.
+			if event == "NAME_PLATE_UNIT_REMOVED" and unit and C_NamePlate then
+				local plate = Safe(C_NamePlate.GetNamePlateForUnit, unit)
+				if plate then touched[plate] = nil end
+			end
 			Update()
 		end
 	end)

@@ -130,6 +130,21 @@ local function RestoreAfterCrash()
 	if not saved then return end
 	ns.root.sceneCamera = nil
 	for cvar, value in pairs(saved.cvars or {}) do ns.WriteCVar(cvar, value) end
+	-- Still where Wanderer sent it (a /reload): back to your distance.
+	local now = Clean(Safe(GetCameraZoom))
+	local aim = saved.aim or saved.zoom
+	if now and aim and saved.zoom and saved.zoom > aim and math.abs(now - aim) < 1 and CameraZoomOut then
+		Safe(CameraZoomOut, saved.zoom - aim)
+	end
+end
+
+-- Leaving the game: the settings borrowed go back now (the addon may be off
+-- next time); the distance is set again after a /reload.
+local function GiveBackSettings()
+	local saved = Saved()
+	if not saved then return end
+	for cvar, value in pairs(saved.cvars or {}) do ns.WriteCVar(cvar, value) end
+	saved.cvars = {}
 end
 
 function ns.InitCamera()
@@ -138,8 +153,11 @@ function ns.InitCamera()
 	for event in pairs(RELEASES) do frame:RegisterEvent(event) end
 	frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 	frame:RegisterEvent("PLAYER_LOGIN")
+	frame:RegisterEvent("PLAYER_LOGOUT")
 	frame:SetScript("OnEvent", function(_, event)
-		if HOLDS[event] then
+		if event == "PLAYER_LOGOUT" then
+			GiveBackSettings()
+		elseif HOLDS[event] then
 			Hold(HOLDS[event])
 		elseif RELEASES[event] then
 			Release(RELEASES[event])

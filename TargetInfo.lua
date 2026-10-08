@@ -21,10 +21,7 @@ local UNTAGGED_COLOR = { 1, 0.6, 0.2 }
 local frame, skin, text, driver
 local wanted, since = 0, 0
 
-local function Hex(color)
-	local function byte(value) return math.floor(value * 255 + 0.5) end
-	return ("|cff%02x%02x%02x"):format(byte(color[1]), byte(color[2]), byte(color[3]))
-end
+local function Hex(color) return U.ColorCode(color[1], color[2], color[3]) end
 
 -- The pieces of the line, in order of importance.
 local function Pieces()

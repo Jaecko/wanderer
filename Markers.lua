@@ -51,7 +51,7 @@ local function MarkedUnit()
 	end
 	if guid == Clean(Safe(UnitGUID, "target")) then return "target", guid end
 	for _, plate in ipairs(C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}) do
-		local token = plate.namePlateUnitToken
+		local token = U.PlateUnit(plate)
 		if token and Clean(Safe(UnitGUID, token)) == guid then return token, guid end
 	end
 	return "mouseover", guid

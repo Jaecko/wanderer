@@ -276,6 +276,12 @@ end
 
 function ns.InitAway()
 	ns.InitCampfire()
+	-- A turn of the camera started before a /reload: stopped.
+	Safe(MoveViewLeftStop)
+	Safe(MoveViewRightStop)
+	local leaving = CreateFrame("Frame")
+	leaving:RegisterEvent("PLAYER_LOGOUT")
+	leaving:SetScript("OnEvent", function() HoldFollow(false) end)
 	-- A camera left held by a crash: your following setting comes back.
 	if ns.root and ns.root.awayFollow then
 		if ns.WriteCVar then ns.WriteCVar(FOLLOW, ns.root.awayFollow) end

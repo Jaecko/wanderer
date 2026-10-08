@@ -29,20 +29,14 @@ local RANK_ICON_SIZE = 20
 local PORTRAIT_SIZE = 40 -- the hovered character's portrait, left of the label
 local PORTRAIT_GAP = 8
 local FALLBACK_WIDTH, FALLBACK_HEIGHT = 160, 16
-local INSPECT_DELAY = 1.5
-local INSPECT_KEEP = 300 -- seconds an inspection is trusted before asking again
--- A spell being cast: its icon and name, a thin bar for its progress.
-local CAST_ICON = 14
-local CAST_BAR_HEIGHT = 3
-local CAST_COLORS = { cast = { 1, 0.7, 0 }, channel = { 0, 1, 0 }, locked = { 0.7, 0.7, 0.7 } } -- as the game's cast bars
--- Equipment counted in the average item level (no shirt, no tabard).
-local GEAR_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }
+local FISH_ICON = "Interface\\Icons\\Trade_Fishing"
 local REFRESH_DELAY = 0.2
 local SCAN_DELAY = 1
 local ALERT_SOUND_DELAY = 60 -- seconds before the same player can trigger the sound again
 local HEAD_OFFSET = 4
 local HOLD_GRACE = 0.4 -- seconds the label waits after a click before leaving
 local MAX_QUEST_LINES = 3
+local IsInnkeeper, HearthLine -- (below, with the tooltip reading)
 local LOOT_ICON = "Interface\\Icons\\INV_Misc_Bag_08"
 local INTERACT_ICON = "Interface\\Cursor\\Interact"
 local TAME_ICON = "Interface\\Icons\\Ability_Hunter_BeastTaming"
@@ -104,6 +98,7 @@ local target = {} -- the target block: line, portrait, info, bar (targetText is 
 local LINES -- display order under the name, set in InitLabel
 local targetAlpha, sinceRefresh, sinceScan = 0, 0, 0
 local objectMode = false -- hovering a gatherable object instead of a character
+local fishLock = false -- the bobber was hovered: the label stays on it while the line is in the water
 local current = nil -- result of the last full analysis
 local lastAlert = {} -- player GUID -> time of the last alert sound
 
@@ -248,6 +243,35 @@ local function DetectRole(lines)
 	return "<" .. text .. ">"
 end
 
+-- The innkeeper: where your home is (here or elsewhere), and your hearthstone.
+-- Known by the role the game gives them, in every language.
+local HEARTHSTONE = 6948
+local HEARTH_ICON = "Interface\\Icons\\INV_Misc_Rune_01"
+local INNKEEPER_WORDS = { "innkeeper", "aubergiste", "gastwirt", "tabern", "posader", "locandier", "estalajadeir",
+	"таверн", "여관", "旅店" }
+
+IsInnkeeper = function(lines)
+	local role = lines[2] and lines[2].text
+	if not role then return false end
+	role = role:lower()
+	for _, word in ipairs(INNKEEPER_WORDS) do
+		if role:find(word, 1, true) then return true end
+	end
+	return false
+end
+
+HearthLine = function()
+	local home = Clean(Safe(GetBindLocation))
+	local here = home and (home == Clean(Safe(GetSubZoneText)) or home == Clean(Safe(GetRealZoneText)))
+	local text = here and L.HEARTH_HERE or (home and L.HEARTH_ELSEWHERE:format(home) or L.HEARTH_NONE)
+	local cooldown = C_Container and C_Container.GetItemCooldown or GetItemCooldown
+	local start, duration = Safe(cooldown, HEARTHSTONE)
+	start, duration = Clean(start), Clean(duration)
+	local left = start and duration and duration > 2 and (start + duration - GetTime()) or 0
+	local stone = left > 0 and L.HEARTH_WAIT:format(Safe(SecondsToTime, left, true) or "") or L.HEARTH_READY
+	return ("|T%s:14:14:0:0|t |cffffd100%s|r  |cffa8a8a8%s|r"):format(HEARTH_ICON, text, stone)
+end
+
 -- Total RP 3 ------------------------------------------------------------------
 
 -- Returns the TRP3 profile of the hovered player, if they have one.
@@ -258,207 +282,8 @@ local function GetRPPlayer()
 	if player and Clean(Safe(player.GetProfileID, player)) then return player end
 end
 
--- Inspection of other players ------------------------------------------------
--- Specialization, talents and equipment are only known after an inspection:
--- requested out of combat, within reach, throttled, and kept per character
--- for a few minutes.
-
-local inspected = {} -- GUID -> { time, spec, talents, itemLevel }
-local pendingGUID, lastInspect = nil, 0
-
-local function SpecName(specID)
-	specID = Clean(specID)
-	if not specID or specID <= 0 then return end
-	local _, name = Safe(GetSpecializationInfoByID, specID)
-	return Clean(name)
-end
-
--- WoW Forever keeps the three branches of old in one tree of today's talent
--- system, side by side: each node belongs to the branch of its column. The
--- columns are found from where the nodes stand (the two widest gaps between
--- them), the names from the class's specializations (or the branches' own).
-local BRANCHES = 3
-
--- What Wanderer knows of the classes: their three branches in the game's
--- order (left to right in the talent window) and the role each one plays.
--- The names: Wanderer's (L.BRANCH_*), the game's only for a class it does not know.
-local CLASS_BRANCHES = {
-	WARRIOR = { { "ARMS", "DAMAGER" }, { "FURY", "DAMAGER" }, { "PROTECTION", "TANK" } },
-	PALADIN = { { "HOLY", "HEALER" }, { "PROTECTION", "TANK" }, { "RETRIBUTION", "DAMAGER" } },
-	HUNTER = { { "BEAST_MASTERY", "DAMAGER" }, { "MARKSMANSHIP", "DAMAGER" }, { "SURVIVAL", "DAMAGER" } },
-	ROGUE = { { "ASSASSINATION", "DAMAGER" }, { "COMBAT", "DAMAGER" }, { "SUBTLETY", "DAMAGER" } },
-	PRIEST = { { "DISCIPLINE", "HEALER" }, { "HOLY", "HEALER" }, { "SHADOW", "DAMAGER" } },
-	SHAMAN = { { "ELEMENTAL", "DAMAGER" }, { "ENHANCEMENT", "DAMAGER" }, { "RESTORATION", "HEALER" } },
-	MAGE = { { "ARCANE", "DAMAGER" }, { "FIRE", "DAMAGER" }, { "FROST", "DAMAGER" } },
-	WARLOCK = { { "AFFLICTION", "DAMAGER" }, { "DEMONOLOGY", "DAMAGER" }, { "DESTRUCTION", "DAMAGER" } },
-	-- Feral: a bear tanks, a cat strikes; the points alone cannot tell.
-	DRUID = { { "BALANCE", "DAMAGER" }, { "FERAL", "FERAL" }, { "RESTORATION", "HEALER" } },
-	DEATHKNIGHT = { { "BLOOD", "TANK" }, { "FROST", "DAMAGER" }, { "UNHOLY", "DAMAGER" } },
-}
-
-local function ClassBranches(unit)
-	local _, classFile = Safe(UnitClass, unit)
-	return Clean(classFile) and CLASS_BRANCHES[classFile]
-end
-
-local function BranchNames(unit)
-	local known = ClassBranches(unit) or {}
-	local names = {}
-	for index, branch in ipairs(known) do names[index] = L["BRANCH_" .. branch[1]] end
-	local _, _, classID = Safe(UnitClass, unit)
-	classID = Clean(classID)
-	-- A class Wanderer knows: its own names (the game's may come out garbled).
-	if not classID or known[1] then return names end
-	local count = Clean(Safe(GetNumSpecializationsForClassID, classID)) or 0
-	if count == BRANCHES then
-		for index = 1, BRANCHES do
-			local _, name = Safe(GetSpecializationInfoForClassID, classID, index)
-			names[index] = names[index] or Clean(name)
-		end
-	end
-	return names
-end
-
-local function ReadTraits(inspect, unit)
-	if not (C_Traits and C_Traits.GetConfigInfo) then return end
-	local configID
-	if inspect then
-		configID = Constants and Constants.TraitConsts and Constants.TraitConsts.INSPECT_TRAIT_CONFIG_ID
-	else
-		configID = C_ClassTalents and Clean(Safe(C_ClassTalents.GetActiveConfigID))
-	end
-	local config = configID and Safe(C_Traits.GetConfigInfo, configID)
-	local treeID = type(config) == "table" and config.treeIDs and config.treeIDs[1]
-	if not treeID then return end
-	local nodes, xs = {}, {}
-	for _, nodeID in ipairs(Safe(C_Traits.GetTreeNodes, treeID) or {}) do
-		local node = Safe(C_Traits.GetNodeInfo, configID, nodeID)
-		local x = type(node) == "table" and Clean(node.posX)
-		if x and node.isVisible ~= false then
-			nodes[#nodes + 1] = { x = x, ranks = Clean(node.ranksPurchased) or Clean(node.currentRank) or 0 }
-			xs[#xs + 1] = x
-		end
-	end
-	if #nodes < BRANCHES then return end
-	-- The two widest gaps between the columns split the three branches.
-	table.sort(xs)
-	local gaps = {}
-	for index = 2, #xs do gaps[#gaps + 1] = { size = xs[index] - xs[index - 1], at = (xs[index] + xs[index - 1]) / 2 } end
-	table.sort(gaps, function(a, b) return a.size > b.size end)
-	if not (gaps[2] and gaps[2].size > 0) then return end
-	local first, second = math.min(gaps[1].at, gaps[2].at), math.max(gaps[1].at, gaps[2].at)
-	local points, total = { 0, 0, 0 }, 0
-	for _, node in ipairs(nodes) do
-		local branch = node.x < first and 1 or (node.x < second and 2 or 3)
-		points[branch] = points[branch] + node.ranks
-		total = total + node.ranks
-	end
-	if total == 0 then return end
-	local names = BranchNames(unit)
-	local trees = {}
-	for index = 1, BRANCHES do trees[index] = { name = names[index] or tostring(index), points = points[index] } end
-	return trees
-end
-
--- Points spent in each talent tree; nil without trees or points.
--- Classic clients answer id, name, description, icon, points; older ones
--- name, icon, points. WoW Forever: the branches of one tree (ReadTraits).
-local function ReadTalents(inspect, unit)
-	if not GetNumTalentTabs then return ReadTraits(inspect, unit or (inspect and UNIT or "player")) end
-	local trees, total = {}, 0
-	for i = 1, Clean(Safe(GetNumTalentTabs, inspect)) or 0 do
-		local r = { Safe(GetTalentTabInfo, i, inspect) }
-		local name, points
-		if type(Clean(r[1])) == "number" then name, points = Clean(r[2]), Clean(r[5]) else name, points = Clean(r[1]), Clean(r[3]) end
-		if type(name) == "string" and type(points) == "number" then
-			trees[#trees + 1] = { name = name, points = points }
-			total = total + points
-		end
-	end
-	if total > 0 then return trees end
-end
-
-local function ItemLevelOf(link)
-	local level = C_Item and Clean(Safe(C_Item.GetDetailedItemLevelInfo, link))
-	if level then return level end
-	local _, _, _, base = Safe(GetItemInfo, link)
-	return Clean(base)
-end
-
--- Average item level of what the unit wears (a two-handed weapon counts
--- twice). Returns nil, true while some items are still unknown to the client.
-local function ReadItemLevel(unit)
-	local api = C_PaperDollInfo and Clean(Safe(C_PaperDollInfo.GetInspectItemLevel, unit))
-	if type(api) == "number" and api > 0 then return math.floor(api + 0.5) end
-	local sum, worn = 0, 0
-	for _, slot in ipairs(GEAR_SLOTS) do
-		local link = Clean(Safe(GetInventoryItemLink, unit, slot))
-		if link then
-			local level = ItemLevelOf(link)
-			if not level then return nil, true end
-			sum, worn = sum + level, worn + 1
-			local equip = select(9, Safe(GetItemInfo, link))
-			if slot == 16 and equip == "INVTYPE_2HWEAPON" and not Clean(Safe(GetInventoryItemLink, unit, 17)) then sum = sum + level end
-		end
-	end
-	if worn > 0 then return math.floor(sum / 16 + 0.5) end
-end
-
--- Whether a fresh inspection can be asked now (nothing is asked in a fight).
-local function CanAsk()
-	if not NotifyInspect or InCombatLockdown() then return false end
-	if InspectFrame and InspectFrame:IsShown() then return false end
-	return Clean(Safe(CanInspect, UNIT)) and true or false
-end
-
--- Close enough to be inspected (unknown counts as close).
-local function InReach()
-	if not CheckInteractDistance then return true end
-	local close = Safe(CheckInteractDistance, UNIT, 1)
-	return IsSecret(close) or close ~= false
-end
-
--- The inspection of the hovered player, asked for when missing or old.
-local function Inspection()
-	local guid = Clean(Safe(UnitGUID, UNIT))
-	if not guid then return end
-	local entry = inspected[guid]
-	if entry and GetTime() - entry.time < INSPECT_KEEP then return entry end
-	if not CanAsk() or GetTime() - lastInspect < INSPECT_DELAY then return entry end
-	lastInspect = GetTime()
-	pendingGUID = guid
-	NotifyInspect(UNIT)
-	return entry
-end
-
--- Reads the inspection just received; items unknown yet are read again a
--- moment later, while the same player is hovered.
-local function ReadInspection(guid, tries)
-	if Clean(Safe(UnitGUID, UNIT)) ~= guid then return end
-	local entry = inspected[guid] or {}
-	inspected[guid] = entry
-	entry.time = GetTime()
-	entry.spec = SpecName(Safe(GetInspectSpecialization, UNIT))
-	entry.talents = ReadTalents(true, UNIT)
-	local level, missing = ReadItemLevel(UNIT)
-	entry.itemLevel = level or entry.itemLevel
-	if missing and tries < 3 then
-		C_Timer.After(0.5, function() ReadInspection(guid, tries + 1) end)
-	end
-end
-
-local function GetSpec()
-	if Clean(Safe(UnitIsUnit, UNIT, "player")) then
-		local index = Clean(Safe(GetSpecialization))
-		if index then
-			local _, name = Safe(GetSpecializationInfo, index)
-			return Clean(name)
-		end
-		return
-	end
-	local entry = Inspection()
-	return entry and entry.spec
-end
+-- The inspection of other players (talents, branches, item level): Inspect.lua.
+local Inspect = ns.Inspect
 
 -- Colors & text lines ----------------------------------------------------------
 
@@ -511,7 +336,7 @@ local function BuildIdentityLine(a)
 		end
 		local text = table.concat(parts, " ")
 		if db.showSpec then
-			local spec = GetSpec()
+			local spec = Inspect.Spec(UNIT)
 			if spec and not RepeatsClass(spec, className, classFile) then text = text ~= "" and (text .. " (" .. spec .. ")") or spec end
 		end
 		return text
@@ -578,7 +403,7 @@ local function BuildDetailLine(a)
 		if level then
 			local text = LEVEL .. " " .. (level > 0 and level or "??")
 			-- Colored by difficulty, as in the original game.
-			if db.showDifficulty then text = ColorCode(World.LevelColor(level)) .. text .. "|r" end
+			if db.showDifficulty then text = ColorCode(World.LevelColor(level, false, UNIT)) .. text .. "|r" end
 			parts[#parts + 1] = text
 			if not isPlayer then World.NoteLevel(a.name, level) end
 		end
@@ -619,92 +444,29 @@ local function Over(unitFrame)
 end
 
 -- Your own portrait: the label shows you there, the closer look included.
+local ColorLevelLine -- (below)
+
 local function OverOwnPortrait()
 	local db = ns.db
 	return db and db.label.ownPortrait and Over(PlayerFrame) and Clean(Safe(UnitIsUnit, UNIT, "player")) and true or false
-end
-
--- The role a talent tree gives, by class and tree order (the game's trees):
--- the tree holding the most points decides. Feral druids may tank or strike.
-local ROLE_ICONS = { TANK = "roleicon-tiny-tank", HEALER = "roleicon-tiny-healer", DAMAGER = "roleicon-tiny-dps" }
-
--- The role as the game's small icons (both for a feral druid), its name
--- when the game has no icon.
-local function RoleIcons(role)
-	if role == "FERAL" then return RoleIcons("TANK") .. RoleIcons("DAMAGER") end
-	local atlas = ROLE_ICONS[role]
-	if atlas and HasAtlas(atlas) then return ("|A:%s:14:14|a"):format(atlas) end
-	return "|cffc8c8c8" .. (_G[role] or role) .. "|r "
-end
-
--- The role of the main talent tree (your group's roles show on its frames).
-local function Role(talents, unit)
-	if not talents then return end
-	local best, most, tie = nil, -1, false
-	for index, tree in ipairs(talents) do
-		if tree.points > most then best, most, tie = index, tree.points, false
-		elseif tree.points == most then tie = true end
-	end
-	if tie or not best then return end
-	local branches = ClassBranches(unit or UNIT)
-	return branches and branches[best] and branches[best][2]
-end
-
--- "[role] Fire 31 · Frost 5": the main branch first, the others with points
--- after it, a little greyed; none without points. Nothing without talents.
-local function TalentLine(talents, unit)
-	if not talents then return end
-	local spent = {}
-	for _, tree in ipairs(talents) do
-		if tree.points > 0 then spent[#spent + 1] = tree end
-	end
-	if not spent[1] then return end
-	table.sort(spent, function(a, b) return a.points > b.points end)
-	local role = Role(talents, unit)
-	local parts = {}
-	for index, tree in ipairs(spent) do
-		parts[#parts + 1] = (index == 1 and "|cffffffff%s %d|r" or "|cffa8a8a8%s %d|r"):format(tree.name, tree.points)
-	end
-	return "|cffd0c090" .. L.DETAILS_TALENTS .. "|r  " .. (role and (RoleIcons(role) .. " ") or "") .. table.concat(parts, SEPARATOR)
-end
-
--- Talents and item level of a player: you, read live; the others from their
--- inspection (asked for when ask is true, else only what is already known).
-local function Known(unit, ask)
-	if Clean(Safe(UnitIsUnit, unit, "player")) then
-		local _, equipped = Safe(GetAverageItemLevel)
-		return ReadTalents(false, "player"), Clean(equipped) and math.floor(equipped + 0.5) or nil, true
-	end
-	local entry
-	if ask then
-		entry = Inspection()
-	else
-		local guid = Clean(Safe(UnitGUID, unit))
-		entry = guid and inspected[guid]
-	end
-	if entry then return entry.talents, entry.itemLevel end
-end
-
-local function ItemLevelText(itemLevel)
-	return "|cffd0c090" .. L.DETAILS_ITEM_LEVEL .. "|r  |cffffffff" .. itemLevel .. "|r"
 end
 
 -- The closer look, while Shift is held over a player: role, talents, item
 -- level, rank in the guild. Waits for the inspection, says why when it cannot come.
 local function BuildMoreLines(a)
 	if not (a.isPlayer and ns.db.label.shiftDetails and (shiftDown or OverOwnPortrait())) then return "" end
-	local talents, itemLevel, yours = Known(UNIT, true)
+	local talents, itemLevel, yours = Inspect.Known(UNIT, true)
 	local lines = {}
-	local talentLine = TalentLine(talents, UNIT)
+	local talentLine = Inspect.TalentLine(talents, UNIT)
 	if talentLine then lines[#lines + 1] = talentLine end
 	local second = {}
-	if itemLevel then second[#second + 1] = ItemLevelText(itemLevel) end
+	if itemLevel then second[#second + 1] = Inspect.ItemLevelText(itemLevel) end
 	local guild, rank = Safe(GetGuildInfo, UNIT)
 	if Clean(guild) and Clean(rank) then second[#second + 1] = "|cffd0c090" .. L.DETAILS_RANK .. "|r  " .. rank end
 	if #second > 0 then lines[#lines + 1] = table.concat(second, SEPARATOR) end
 	-- Nothing known yet: why.
 	if not (talentLine or itemLevel or yours) then
-		local why = InCombatLockdown() and L.DETAILS_COMBAT or (not InReach() and L.DETAILS_FAR) or L.DETAILS_WAIT
+		local why = InCombatLockdown() and L.DETAILS_COMBAT or (not Inspect.InReach(UNIT) and L.DETAILS_FAR) or L.DETAILS_WAIT
 		lines[#lines + 1] = "|cff808080" .. why .. "|r"
 	end
 	return table.concat(lines, "\n")
@@ -714,56 +476,12 @@ end
 -- frames): you always, the others once inspected. Lines for the tooltip.
 local function KnownDetails(unit)
 	if not Clean(Safe(UnitIsPlayer, unit)) and not Clean(Safe(UnitIsUnit, unit, "player")) then return end
-	local talents, itemLevel = Known(unit, false)
+	local talents, itemLevel = Inspect.Known(unit, false)
 	local lines = {}
-	local talentLine = TalentLine(talents, unit)
+	local talentLine = Inspect.TalentLine(talents, unit)
 	if talentLine then lines[#lines + 1] = talentLine end
-	if itemLevel then lines[#lines + 1] = ItemLevelText(itemLevel) end
+	if itemLevel then lines[#lines + 1] = Inspect.ItemLevelText(itemLevel) end
 	return lines
-end
-
--- Casts ---------------------------------------------------------------------------
-
-local function TickCast(c)
-	if not (c.active and c.timed) then return end
-	local now = GetTime() * 1000
-	if c.start then
-		local share = math.min(math.max((now - c.start) / (c.finish - c.start), 0), 1)
-		c.bar:SetValue(c.channel and 1 - share or share)
-	else
-		-- Protected times: the bar takes them as they are, and the clock.
-		pcall(c.bar.SetValue, c.bar, now)
-	end
-end
-
--- What the unit casts or channels right now: icon, name, progress, in the
--- game's colors. Protected values are shown, never looked into.
-local function ReadCast(c, unit)
-	c.active = false
-	if not ns.db.label.showCasts or Clean(Safe(UnitIsUnit, unit, "player")) then return false end
-	local channel = false
-	local name, _, texture, start, finish, _, _, locked = Safe(UnitCastingInfo, unit)
-	if not IsSecret(name) and name == nil then
-		name, _, texture, start, finish, _, locked = Safe(UnitChannelInfo, unit)
-		channel = true
-	end
-	if not IsSecret(name) and name == nil then return false end
-	if not pcall(c.text.SetText, c.text, name) then return false end
-	c.icon.wanted = (IsSecret(texture) or texture ~= nil) and pcall(c.icon.SetTexture, c.icon, texture) or false
-	local color = Clean(locked) and CAST_COLORS.locked or (channel and CAST_COLORS.channel or CAST_COLORS.cast)
-	c.bar:SetStatusBarColor(color[1], color[2], color[3])
-	c.channel = channel
-	if IsSecret(start) or IsSecret(finish) then
-		c.start, c.finish = nil, nil
-		c.timed = pcall(c.bar.SetMinMaxValues, c.bar, start, finish)
-	else
-		c.start, c.finish = Clean(start), Clean(finish)
-		c.timed = c.start ~= nil and c.finish ~= nil and c.finish > c.start
-		c.bar:SetMinMaxValues(0, 1)
-	end
-	c.active = true
-	TickCast(c)
-	return true
 end
 
 local function TargetPrefix()
@@ -795,7 +513,14 @@ local function UpdateTargetLine()
 	if not shown then return false end
 	local parts = {}
 	local level = Clean(Safe(UnitLevel, TARGET))
-	if level then parts[#parts + 1] = LEVEL .. " " .. (level > 0 and level or "??") end
+	if level then
+		local text = LEVEL .. " " .. (level > 0 and level or "??")
+		-- An enemy: colored by difficulty, as in the label above.
+		if ns.db.label.showDifficulty and Clean(Safe(UnitCanAttack, "player", TARGET)) then
+			text = ColorCode(World.LevelColor(level, false, TARGET)) .. text .. "|r"
+		end
+		parts[#parts + 1] = text
+	end
 	local kind = isPlayer and Clean((Safe(UnitClass, TARGET))) or Clean(Safe(UnitCreatureType, TARGET))
 	if kind then parts[#parts + 1] = kind end
 	target.info:SetText(table.concat(parts, " "))
@@ -848,44 +573,14 @@ end
 
 -- Layout & look ----------------------------------------------------------------
 
--- A cast: shown or hidden, its size (icon and name, the bar under them).
-local function CastSize(c)
-	local shown = c.active and true or false
-	c.text:SetShown(shown)
-	c.icon:SetShown(shown and c.icon.wanted or false)
-	c.bar:SetShown(shown and c.timed or false)
-	if not shown then return 0, 0 end
-	local iconSpace = c.icon.wanted and CAST_ICON + 4 or 0
-	local width = iconSpace + TextWidth(c.text, FALLBACK_WIDTH)
-	local height = math.max(c.icon.wanted and CAST_ICON or 0, Measure(c.text, "GetStringHeight", 10))
-	if c.timed then height = height + LINE_GAP + CAST_BAR_HEIGHT end
-	return width, height
-end
-
--- Under anchor, from its left edge, as wide as the label.
-local function PlaceCast(c, anchor, x, gap)
-	local margin = ns.Skin.Margin()
-	local height = c.icon.wanted and CAST_ICON or 0
-	c.icon:ClearAllPoints()
-	c.icon:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x, -gap)
-	c.text:ClearAllPoints()
-	if c.icon.wanted then
-		c.text:SetPoint("LEFT", c.icon, "RIGHT", 4, 0)
-	else
-		c.text:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x, -gap)
-	end
-	height = math.max(height, Measure(c.text, "GetStringHeight", 10))
-	c.bar:ClearAllPoints()
-	c.bar:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x, -(gap + height + LINE_GAP))
-	c.bar:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
-	return c.timed and c.bar or (c.icon.wanted and c.icon or c.text)
-end
-
 -- Laid out like the game's tooltips: left aligned, same margins and room
 -- for the badge (ns.Skin metrics), so every window looks the same.
 local function Layout()
 	local margin = ns.Skin.Margin()
+	-- Measured at their own width; bounded again once the label is sized.
+	nameText:SetWidth(0)
 	for _, line in ipairs(LINES) do
+		line:SetWidth(0)
 		line:SetShown(line.forceShow or Clean(line:GetText()) ~= nil)
 	end
 	local nameWidth = TextWidth(nameText, FALLBACK_WIDTH)
@@ -907,7 +602,7 @@ local function Layout()
 	target.info:SetShown(info)
 	target.bar:SetShown(bar)
 	if block then
-		local castWidth, castHeight = CastSize(targetCast)
+		local castWidth, castHeight = targetCast:Size(TextWidth)
 		local textWidth = math.max(TextWidth(targetText, FALLBACK_WIDTH),
 			info and TextWidth(target.info, FALLBACK_WIDTH) or 0, bar and TARGET_BAR_WIDTH or 0, castWidth)
 		width = math.max(width, TARGET_PORTRAIT + TARGET_GAP + textWidth)
@@ -921,7 +616,7 @@ local function Layout()
 	if healthBar:IsShown() then
 		height = height + LINE_GAP * 2 + HEALTH_HEIGHT
 	end
-	local castWidth, castHeight = CastSize(cast)
+	local castWidth, castHeight = cast:Size(TextWidth)
 	if castHeight > 0 then
 		width = math.max(width, castWidth)
 		height = height + LINE_GAP * 2 + castHeight
@@ -936,6 +631,12 @@ local function Layout()
 	local insetTop, insetBottom = skin:Insets()
 	local top, bottom = margin + insetTop, margin + insetBottom
 	width = math.max(width, skin:MinWidth())
+	-- Never past the frame: a text drawn wider than measured is cut, not spilled.
+	local column = width - portraitSpace
+	nameText:SetWidth(math.max(1, column - iconSpace))
+	for _, line in ipairs(LINES) do
+		if line:IsShown() then line:SetWidth(math.max(1, column)) end
+	end
 	unitPortrait:ClearAllPoints()
 	unitPortrait:SetPoint("TOPLEFT", frame, "TOPLEFT", margin, -top)
 	nameText:ClearAllPoints()
@@ -957,7 +658,7 @@ local function Layout()
 		previous, offset = healthBar, 0
 	end
 	if castHeight > 0 then
-		previous, offset = PlaceCast(cast, previous, offset, LINE_GAP * 2), 0
+		previous, offset = cast:Place(previous, offset, LINE_GAP * 2), 0
 	end
 	if block then
 		target.line:ClearAllPoints()
@@ -973,12 +674,12 @@ local function Layout()
 		target.bar:SetPoint("TOPLEFT", info and target.info or targetText, "BOTTOMLEFT", 0, -TARGET_GAP)
 		target.bar:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
 		if targetCast.active then
-			PlaceCast(targetCast, bar and target.bar or (info and target.info or targetText), 0, TARGET_GAP)
+			targetCast:Place(bar and target.bar or (info and target.info or targetText), 0, TARGET_GAP)
 		end
 	end
 	if not block then
 		targetCast.active = false
-		CastSize(targetCast)
+		targetCast:Size(TextWidth)
 	end
 	frame:SetSize(width + margin * 2, height + top + bottom)
 	skin:Layout()
@@ -1024,6 +725,7 @@ local function AnalyzeUnit()
 		a.action = db.showProfessions and DetectProfessionAction(clean) or nil
 		a.quests = db.showQuests and DetectQuests(clean) or nil
 		a.role = db.showNPCRole and DetectRole(clean) or nil
+		a.innkeeper = IsInnkeeper(clean)
 		local classification = Clean(Safe(UnitClassification, UNIT))
 		a.rank = classification and CLASSIFICATIONS[classification] or nil
 		a.reputation = db.showReputation and World.Reputation(clean) or nil
@@ -1049,6 +751,7 @@ end
 
 local function RenderActions(a)
 	local parts = {}
+	if a.innkeeper then parts[#parts + 1] = HearthLine() end
 	local profession = FormatProfessionAction(a.action)
 	if profession then parts[#parts + 1] = profession end
 	if a.loot then parts[#parts + 1] = ("|T%s:14:14:0:0|t |cffffd100%s|r"):format(LOOT_ICON, L.ACTION_LOOT) end
@@ -1082,8 +785,8 @@ local function RefreshDynamic()
 	detailText:SetText(BuildDetailLine(a))
 	moreText:SetText(BuildMoreLines(a))
 	targetText.forceShow = UpdateTargetLine()
-	ReadCast(cast, UNIT)
-	if targetText.forceShow then ReadCast(targetCast, TARGET) else targetCast.active = false end
+	cast:Read(UNIT, ns.db.label.showCasts)
+	if targetText.forceShow then targetCast:Read(TARGET, ns.db.label.showCasts) else targetCast.active = false end
 	healthBar:SetShown(UpdateHealth(a.isPlayer))
 	a.highlight = PickHighlight(a)
 	if skin:GetHighlight() ~= a.highlight then skin:SetHighlight(a.highlight) end
@@ -1145,6 +848,34 @@ end
 -- World objects: doors, chests, quest objects, herbs, but also decorations.
 -- "Interact" is said only when the game offers the object to the interact
 -- key; the other lines become the details.
+-- The bobber, while the line is in the water: what happens, the time left,
+-- the catches of the session. Returns false when there is nothing to tell.
+local function RenderFishing()
+	local words = ns.FishingWords and ns.FishingWords()
+	if not words then return false end
+	local status = ns.FishingStatus()
+	cast.text:SetText("|cffffd100" .. words .. "|r")
+	cast.icon:SetTexture(FISH_ICON)
+	cast.icon.wanted = true
+	cast.bar:SetStatusBarColor(0.35, 0.7, 1)
+	cast.bar:SetMinMaxValues(0, 1)
+	cast.start, cast.finish, cast.channel, cast.timed = status.start, status.finish, true, true
+	cast.active = true
+	cast:Tick()
+	local details = {}
+	if status.catches > 0 then details[#details + 1] = L.FISH_COUNT:format(status.catches) end
+	if status.noLure then details[#details + 1] = "|cff999999" .. L.FISH_NO_LURE .. "|r" end
+	detailText:SetText(table.concat(details, SEPARATOR))
+	return true
+end
+
+-- The line still in the water after the bobber was hovered.
+local function FishingLocked()
+	if not (fishLock and objectMode and ns.FishingWords) then return false end
+	local _, active = ns.FishingWords()
+	return active and true or false
+end
+
 local function UpdateObjectContent(data)
 	local db = ns.db.label
 	local lines = U.TooltipLines(data and data.lines)
@@ -1171,12 +902,32 @@ local function UpdateObjectContent(data)
 	end
 	detailText:SetText(table.concat(details, SEPARATOR))
 	current.highlight = PickHighlight(current)
+	if RenderFishing() then
+		fishLock = true
+		current.highlight = "action"
+	end
 	skin:SetHighlight(current.highlight)
 	Layout()
 	return true
 end
 
-function ns.GetHighlightMode() return skin and skin:GetHighlight() end
+-- The game tooltip's level line of an enemy, in the color of its difficulty.
+ColorLevelLine = function(tooltip, unit)
+	if not Clean(Safe(UnitCanAttack, "player", unit)) then return end
+	local level = Clean(Safe(UnitLevel, unit))
+	if not level then return end
+	local name = tooltip.GetName and tooltip:GetName()
+	for index = 2, math.min(tooltip:NumLines(), 5) do
+		local line = name and _G[name .. "TextLeft" .. index]
+		local text = line and Clean(line:GetText())
+		if text and text:find(LEVEL, 1, true) then
+			line:SetTextColor(World.LevelColor(level, false, unit))
+			return
+		end
+	end
+end
+
+function ns.GetHighlightMode() return skin and skin:GetHighlight() end -- (tests)
 
 -- Debug --------------------------------------------------------------------------
 
@@ -1207,7 +958,7 @@ local function DebugReport(anchor)
 		#quests > 0 and table.concat(quests, ", ") or "-", L.DEBUG_LOOT, a.loot and L.DEBUG_YES or "-",
 		L.DEBUG_ROLE, DebugText(a.role), L.DEBUG_RELATION, DebugText(a.relation)))
 	if a.isPlayer then
-		local entry = inspected[a.guid or ""]
+		local entry = Inspect.cache[a.guid or ""]
 		local trees = {}
 		for _, tree in ipairs(entry and entry.talents or {}) do trees[#trees + 1] = tree.name .. " " .. tree.points end
 		ns.Print(("  %s %s (%s) | %s %s"):format(L.DETAILS_TALENTS, #trees > 0 and table.concat(trees, ", ") or "-",
@@ -1284,9 +1035,19 @@ local function LabelAllowed()
 end
 
 -- Your target stays described while nothing else is hovered (option).
+-- In a fight the game loses and finds the hovered character again several
+-- times a second (it moves under the mouse): such a blink is not leaving it.
+local HOVER_GRACE = 0.25 -- seconds
+local lastHover = 0 -- when something was hovered last
+
+local function Hovering()
+	if Clean(Safe(UnitExists, "mouseover")) then lastHover = GetTime() return true end
+	return GetTime() - lastHover < HOVER_GRACE
+end
+
 local function StickyTarget()
 	local db = ns.db
-	return db and db.label.stickyTarget and not objectMode and not Clean(Safe(UnitExists, "mouseover"))
+	return db and db.label.stickyTarget and not objectMode and not Hovering()
 		and Clean(Safe(UnitExists, "target")) and true or false
 end
 
@@ -1305,17 +1066,22 @@ local function ShouldShow()
 	if clicking then lastClick = GetTime() end
 	local present
 	if objectMode then
-		present = IsObjectStillHovered()
+		present = IsObjectStillHovered() or FishingLocked()
 	else
 		-- Your target: only while it is on screen (its nameplate shown).
 		local onScreen = UNIT ~= "target" or (U.NameplateFor(UNIT)) ~= nil
 		present = Clean(Safe(UnitExists, UNIT)) and onScreen
 			and (UNIT == "target" or not db.label.worldOnly or IsOverWorld() or clicking or OverOwnPortrait())
 	end
-	if present then return true, false end
+	if present then
+		if UNIT == "mouseover" and not objectMode then lastHover = GetTime() end
+		return true, false
+	end
 	-- Missing only because of a click: keep it during the click and just after.
 	-- (Never for your target: it is either on screen or gone.)
 	if current and UNIT ~= "target" and (clicking or (lastClick and GetTime() - lastClick < HOLD_GRACE)) then return true, true end
+	-- The hovered character blinked out a moment (a fight): it stays.
+	if current and current.kind == "unit" and UNIT == "mouseover" and GetTime() - lastHover < HOVER_GRACE then return true, true end
 	return false
 end
 
@@ -1326,13 +1092,15 @@ end
 
 local anchoredPlate, anchoredLow -- nameplate the label is attached to, if any; low: on the head
 local anchoredGUID -- the character that plate carried then
+local plateSeen = 0 -- when the plate of the one described was there last
+local PLATE_GRACE = 0.3 -- seconds a missing plate is waited for
 
 -- Returns "head" or "cursor", the place actually used. An anchor to a
 -- nameplate follows it by itself: it is only set again when the plate changes.
 -- The game hands its nameplates over to other characters (the camera turns,
 -- someone leaves the screen): a plate still carrying the one described?
 local function StillTheirs(plate)
-	local token = plate and plate:IsShown() and plate.namePlateUnitToken
+	local token = plate and plate:IsShown() and U.PlateUnit(plate)
 	local guid = token and Clean(Safe(UnitGUID, token))
 	return guid ~= nil and guid == anchoredGUID
 end
@@ -1345,8 +1113,22 @@ local function Vanish()
 end
 
 local function Position()
+	if FishingLocked() and not IsObjectStillHovered() then
+		-- The bobber's own plate when the game gives one (soft interact), else where it was.
+		local plate = U.NameplateFor("softinteract")
+		if plate and plate ~= anchoredPlate then
+			frame:ClearAllPoints()
+			frame:SetPoint("BOTTOM", plate, "TOP", 0, HEAD_OFFSET)
+			anchoredPlate = plate
+		end
+		return "head"
+	end
 	local plate = ns.db.label.anchor == "head" and not OverOwnPortrait() and GetNameplate()
+	if plate then plateSeen = GetTime() end
 	if not plate and anchoredPlate then
+		-- The game lost the plate an instant (a fight): the label stays where it is,
+		-- never a jump to the cursor and back.
+		if targetAlpha > 0 and anchoredPlate:IsShown() and GetTime() - plateSeen < PLATE_GRACE then return "head" end
 		-- Fading away (the mouse left): above the head it came from, while it is theirs.
 		if targetAlpha == 0 and StillTheirs(anchoredPlate) then return "head" end
 		-- Your target gone from the screen, or the plate given to another: gone.
@@ -1386,12 +1168,25 @@ local KEPT_TOOLTIPS = {
 }
 local hiddenTooltips = {}
 
+-- Parts the game draws apart from its tooltip (its health bar may not follow
+-- the tooltip's opacity): hidden and given back with it.
+local TOOLTIP_PARTS = { GameTooltip = { "GameTooltipStatusBar" } }
+
 local function SetTooltipHidden(tooltip, hide)
+	local name = tooltip.GetName and Clean(Safe(tooltip.GetName, tooltip))
+	local parts = name and TOOLTIP_PARTS[name] or {}
 	if hide then
 		if tooltip:GetAlpha() > 0 then tooltip:SetAlpha(0) end
+		for _, part in ipairs(parts) do
+			local piece = _G[part]
+			if piece and piece:GetAlpha() > 0 then piece:SetAlpha(0) end
+		end
 		hiddenTooltips[tooltip] = true
 	elseif hiddenTooltips[tooltip] then
 		tooltip:SetAlpha(1)
+		for _, part in ipairs(parts) do
+			if _G[part] then _G[part]:SetAlpha(1) end
+		end
 		hiddenTooltips[tooltip] = nil
 	end
 end
@@ -1427,7 +1222,12 @@ end
 
 local function UpdateTooltipVisibility(tooltip)
 	local name = tooltip.GetName and Clean(Safe(tooltip.GetName, tooltip))
-	local hide = not KEPT_TOOLTIPS[name or ""] and (ReplacesGameTooltip() and LabelHandlesWorld() or UnitFrameTooltip(tooltip))
+	-- A fight with the label hidden (option): no tooltip over characters either.
+	local db = ns.db
+	-- (Whatever the game says is hovered at that instant: it loses it now and then in a fight.)
+	local quietFight = db and db.label.hideInCombat and ns.inCombat
+	local hide = not KEPT_TOOLTIPS[name or ""]
+		and (ReplacesGameTooltip() and (LabelHandlesWorld() or quietFight) or UnitFrameTooltip(tooltip))
 	SetTooltipHidden(tooltip, hide or false)
 end
 
@@ -1456,7 +1256,9 @@ local function OnUpdate(self, elapsed)
 	if not objectMode then
 		local wanted = StickyTarget() and "target" or "mouseover"
 		if SetUnit(wanted) and Clean(Safe(UnitExists, UNIT)) then
-			UpdateContent(true)
+			-- The same character under another name (hovered, then your target): nothing to redo.
+			local same = current and current.guid and current.guid == Clean(Safe(UnitGUID, UNIT))
+			if not same then UpdateContent(true) end
 			targetAlpha = 1
 		end
 	end
@@ -1465,7 +1267,7 @@ local function OnUpdate(self, elapsed)
 	local alpha = ns.Skin.Fade(self, targetAlpha, elapsed, FADE_IN, FADE_OUT)
 	if alpha == 0 and targetAlpha == 0 then
 		if objectMode then SetTooltipHidden(GameTooltip, false) end
-		objectMode = false
+		objectMode, fishLock = false, false
 		current = nil
 		skin:SetHighlight(nil)
 		self:Hide()
@@ -1488,11 +1290,15 @@ local function OnUpdate(self, elapsed)
 		shiftDown = shift
 		sinceRefresh = REFRESH_DELAY
 	end
-	TickCast(cast)
-	TickCast(targetCast)
+	cast:Tick()
+	targetCast:Tick()
 	if targetAlpha > 0 and sinceRefresh >= REFRESH_DELAY then
 		sinceRefresh = 0
-		if objectMode then
+		if objectMode and not IsObjectStillHovered() and FishingLocked() then
+			-- Away from the bobber: only the words change, the label stays where it is.
+			RenderFishing()
+			Layout()
+		elseif objectMode then
 			UpdateObjectContent()
 		else
 			local full = sinceScan >= SCAN_DELAY
@@ -1531,10 +1337,7 @@ end
 
 local function OnEvent(_, event, guid)
 	if event == "INSPECT_READY" then
-		if not pendingGUID or not Clean(guid) or guid ~= pendingGUID then return end
-		pendingGUID = nil
-		if Clean(Safe(UnitGUID, UNIT)) ~= guid then return end
-		ReadInspection(guid, 0)
+		if not Inspect.OnReady(guid, UNIT) then return end
 		if targetAlpha > 0 and not objectMode then UpdateContent(true) end
 		return
 	end
@@ -1590,24 +1393,6 @@ local function CreateLine(template, r, g, b)
 	return ns.Skin.CreateText(frame, template, r, g, b)
 end
 
-local function CreateCast()
-	local c = { active = false }
-	c.icon = frame:CreateTexture(nil, "ARTWORK")
-	c.icon:SetSize(CAST_ICON, CAST_ICON)
-	c.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	c.text = CreateLine("GameTooltipTextSmall", 1, 1, 1)
-	c.bar = CreateFrame("StatusBar", nil, frame)
-	c.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-	c.bar:SetHeight(CAST_BAR_HEIGHT)
-	local background = c.bar:CreateTexture(nil, "BACKGROUND")
-	background:SetAllPoints()
-	background:SetColorTexture(0, 0, 0, 0.6)
-	c.icon:Hide()
-	c.text:Hide()
-	c.bar:Hide()
-	return c
-end
-
 function ns.InitLabel()
 	-- Background, border, badges and highlights: the shared engine.
 	frame, skin = ns.Skin.CreateWindow("WandererLabel", "TOOLTIP")
@@ -1632,6 +1417,10 @@ function ns.InitLabel()
 	-- The quest objectives come right after the level and the status; the
 	-- closer look (Shift) right under the level.
 	LINES = { alertText, titleText, questStatusText, identityText, actionText, detailText, moreText, questText }
+	-- One line each: cut at the frame's edge rather than folded under it.
+	for _, line in ipairs({ nameText, alertText, titleText, questStatusText, identityText, detailText }) do
+		if line.SetWordWrap then line:SetWordWrap(false) end
+	end
 
 	unitPortrait = ns.Skin.RoundPortrait(frame, PORTRAIT_SIZE)
 	unitPortrait:Hide()
@@ -1652,7 +1441,7 @@ function ns.InitLabel()
 	targetBackground:SetColorTexture(0, 0, 0, 0.6)
 	for _, part in ipairs({ target.line, target.portrait, target.portrait.ring, targetText, target.info, target.bar }) do part:Hide() end
 
-	cast, targetCast = CreateCast(), CreateCast()
+	cast, targetCast = ns.Casts.New(frame), ns.Casts.New(frame)
 
 	healthBar = CreateFrame("StatusBar", nil, frame)
 	healthBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
@@ -1683,48 +1472,17 @@ function ns.InitLabel()
 			-- Characters: the label follows the mouseover itself. Objects: read now.
 			if not (data and Enum.TooltipDataType and data.type == Enum.TooltipDataType.Unit) then
 				OnWorldTooltip(data)
-			elseif ns.db and ns.db.enabled and ns.db.label.shiftDetails and not IsOverWorld() then
-				-- Over a portrait or a group frame: what Wanderer knows of the player.
+			elseif ns.db and ns.db.enabled and not IsOverWorld() then
 				local _, unit = Safe(tooltip.GetUnit, tooltip)
-				local lines = Clean(unit) and KnownDetails(unit)
+				unit = Clean(unit)
+				-- Over a frame: an enemy's level in its difficulty color.
+				if unit and ns.db.label.showDifficulty then ColorLevelLine(tooltip, unit) end
+				-- Over a portrait or a group frame: what Wanderer knows of the player.
+				local lines = unit and ns.db.label.shiftDetails and KnownDetails(unit)
 				for _, line in ipairs(lines or {}) do tooltip:AddLine(line, 1, 1, 1) end
 			end
 			-- Decided before the tooltip is drawn: no flash of the game tooltip.
 			UpdateTooltipVisibility(GameTooltip)
 		end)
 	end
-end
-
--- What the game answers about talents and what Wanderer reads from it, for
--- you and for the last player inspected (/wanderer talents).
-function ns.DebugTalents()
-	local function show(value)
-		if IsSecret(value) then return "<secret>" end
-		return value == nil and "-" or tostring(value)
-	end
-	-- The points bought in each configuration of today's talent system.
-	local function traits(configID)
-		if not (C_Traits and configID) then return "-" end
-		local info = Safe(C_Traits.GetConfigInfo, configID)
-		if type(info) ~= "table" then return "no config" end
-		local trees, nodes, ranks = 0, 0, 0
-		for _, treeID in ipairs(info.treeIDs or {}) do
-			trees = trees + 1
-			for _, nodeID in ipairs(Safe(C_Traits.GetTreeNodes, treeID) or {}) do
-				local node = Safe(C_Traits.GetNodeInfo, configID, nodeID)
-				local bought = type(node) == "table" and Clean(node.ranksPurchased)
-				if bought and bought > 0 then nodes, ranks = nodes + 1, ranks + bought end
-			end
-		end
-		return ("%d trees, %d nodes, %d ranks"):format(trees, nodes, ranks)
-	end
-	local function branches(list)
-		local out = {}
-		for _, tree in ipairs(list or {}) do out[#out + 1] = tree.name .. " " .. tree.points end
-		return #out > 0 and table.concat(out, ", ") or "-"
-	end
-	local inspectID = Constants and Constants.TraitConsts and Constants.TraitConsts.INSPECT_TRAIT_CONFIG_ID
-	local ownID = C_ClassTalents and Safe(C_ClassTalents.GetActiveConfigID)
-	ns.Print("Traits: inspect (" .. show(inspectID) .. ") " .. traits(inspectID) .. " | own (" .. show(ownID) .. ") " .. traits(ownID))
-	ns.Print("Branches: inspect " .. branches(ReadTalents(true, "target")) .. " | own " .. branches(ReadTalents(false, "player")))
 end

@@ -63,7 +63,7 @@ local afterScene = false
 
 local function IsWindowOpen()
 	for _, name in ipairs(UISpecialFrames or {}) do
-		local window = _G[name]
+		local window = name ~= "WandererScene" and _G[name]
 		if window and window.IsShown and window:IsShown() then return true end
 	end
 	return false

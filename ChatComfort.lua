@@ -1,7 +1,7 @@
 local _, ns = ...
 local L = ns.L
 
--- Three comforts of the chat (options):
+-- Four comforts of the chat (options):
 -- * Your sent messages with the arrow keys: Up and Down bring them back while
 --   you type, the last one first (as in a terminal), Left and Right move in
 --   the text instead of turning your character. Wanderer keeps them itself,
@@ -14,6 +14,8 @@ local L = ns.L
 --   the game shows them) from one session to the next, for each character;
 --   after a reload or a new session they are back in their tab, a little
 --   dimmed, under a quiet line. Secret lines are never kept.
+-- * Web addresses become links: a click opens the address, ready to copy
+--   (the game lets nothing be copied from the chat).
 
 local U = ns.Util
 
@@ -88,6 +90,7 @@ end
 
 local function Keep(index, text, r, g, b)
 	if restoring or not LogOn() or type(text) ~= "string" or U.IsSecret(text) or text == "" then return end
+	if text:find("|K", 1, true) or text:find("|HBNplayer", 1, true) then return end
 	-- The Wanderer tab (diagnostic mode) is never kept.
 	if ns.IsDebugTab and ns.IsDebugTab(index) then return end
 	local log = Log()
@@ -98,8 +101,18 @@ local function Keep(index, text, r, g, b)
 end
 
 -- The lines of before, back in their tab, under a quiet line.
+-- An addon that keeps the chat's history itself (ElvUI): the lines are not shown twice.
+local function OtherHistory()
+	local ok, on = pcall(function()
+		local E = _G.ElvUI and _G.ElvUI[1]
+		return E and E.private and E.private.chat and E.private.chat.enable and E.db and E.db.chat
+			and E.db.chat.chatHistory and true or false
+	end)
+	return ok and on
+end
+
 local function Restore()
-	if not LogOn() then return end
+	if not LogOn() or OtherHistory() then return end
 	local log = Log()
 	restoring = true
 	for index, lines in pairs(log) do
@@ -134,6 +147,83 @@ local function WatchLog()
 		end
 	end
 end
+
+-- Web addresses --------------------------------------------------------------------------
+
+local LINK = "addon:Wanderer:url:"
+local LINK_COLOR = "|cff9fd4ff"
+local LINK_EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER",
+	"CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_INSTANCE_CHAT",
+	"CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_CHANNEL", "CHAT_MSG_WHISPER", "CHAT_MSG_WHISPER_INFORM",
+	"CHAT_MSG_BN_WHISPER", "CHAT_MSG_BN_WHISPER_INFORM" }
+
+local function LinksOn()
+	local settings = Settings()
+	return settings and settings.links and true or false
+end
+
+-- Each word that is an address becomes a link (its last mark of punctuation stays outside).
+local function Linkify(text)
+	if type(text) ~= "string" or U.IsSecret(text) or text:find("|H", 1, true) then return text end
+	return (text:gsub("%S+", function(word)
+		if not (word:match("^https?://%S") or word:match("^www%.[%w%-]+%.%a")) then return nil end
+		local address, tail = word:match("^(.-)([%.,;:!%?%)]*)$")
+		return LINK_COLOR .. "|H" .. LINK .. address .. "|h[" .. address .. "]|h|r" .. tail
+	end))
+end
+ns.Linkify = Linkify -- (tests)
+
+local function LinkFilter(_, _, message, ...)
+	if U.IsSecret(message) or not LinksOn() then return false end
+	local linked = Linkify(message)
+	if linked ~= message then return false, linked, ... end
+	return false
+end
+
+-- A click on an address: shown ready to copy.
+local lastLink, lastLinkTime
+local function OpenLink(link)
+	if type(link) ~= "string" or link:sub(1, #LINK) ~= LINK then return end
+	-- Heard twice (the registry and SetItemRef): opened once.
+	if link == lastLink and GetTime() - lastLinkTime < 0.3 then return end
+	lastLink, lastLinkTime = link, GetTime()
+	if StaticPopup_Show then StaticPopup_Show("WANDERER_LINK", nil, nil, link:sub(#LINK + 1)) end
+end
+
+if StaticPopupDialogs then
+	StaticPopupDialogs.WANDERER_LINK = {
+		text = L.CHAT_LINK_COPY,
+		button1 = CLOSE or OKAY,
+		hasEditBox = true,
+		editBoxWidth = 340,
+		OnShow = function(self, address)
+			local box = self.editBox or self.EditBox
+			if box then
+				box:SetText(address or "")
+				box:HighlightText()
+				box:SetFocus()
+			end
+		end,
+		EditBoxOnEnterPressed = function(self) self:GetParent():Hide() end,
+		EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+	}
+end
+
+local function WatchLinks()
+	local addFilter = ChatFrame_AddMessageEventFilter or (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter)
+	if addFilter then
+		for _, event in ipairs(LINK_EVENTS) do pcall(addFilter, event, LinkFilter) end
+	end
+	-- The game hands the addons' links over through its registry; older games through SetItemRef.
+	if EventRegistry and EventRegistry.RegisterCallback then
+		EventRegistry:RegisterCallback("SetItemRef", function(_, link) OpenLink(link) end, {})
+	end
+	if SetItemRef then hooksecurefunc("SetItemRef", OpenLink) end
+end
+ns.OpenChatLink = OpenLink -- (tests)
 
 -- The copy button of a chat frame.
 local function Button(frame)
@@ -219,13 +309,18 @@ local function Watch()
 	end
 end
 
+local arrowsApplied = false -- Wanderer set the arrows (else they are the game's or another addon's)
+
 function ns.RefreshChatComfort()
 	Watch()
 	local settings = Settings()
 	local arrows = settings and settings.arrowHistory and true or false
-	for _, box in ipairs(EditBoxes()) do
-		if box.SetAltArrowKeyMode then U.Safe(box.SetAltArrowKeyMode, box, not arrows) end
+	if arrows or arrowsApplied then
+		for _, box in ipairs(EditBoxes()) do
+			if box.SetAltArrowKeyMode then U.Safe(box.SetAltArrowKeyMode, box, not arrows) end
+		end
 	end
+	arrowsApplied = arrows
 	local copy = settings and settings.copyButton and true or false
 	for _, button in pairs(buttons) do
 		if not copy then
@@ -241,6 +336,7 @@ function ns.InitChatComfort()
 	-- The lines of before first, then every new one kept.
 	Restore()
 	WatchLog()
+	WatchLinks()
 	Watch()
 	ns.RefreshChatComfort()
 	local since = 0

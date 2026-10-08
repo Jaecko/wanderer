@@ -152,7 +152,7 @@ function ns.InitIcons()
 		elseif event == "PLAYER_ENTERING_WORLD" then
 			for _, delay in ipairs(RESCAN_DELAYS) do C_Timer.After(delay, ns.GatherIcons) end
 		else
-			ns.GatherIcons()
+			ns.RefreshIcons()
 		end
 	end)
 end

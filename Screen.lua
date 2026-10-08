@@ -24,7 +24,7 @@ local gameHandler -- the game's own handler of the error messages
 local filtering = false
 
 local function IsFiltered(message)
-	return type(message) == "string" and filtered[message] == true
+	return type(message) == "string" and not ns.Util.IsSecret(message) and filtered[message] == true
 end
 
 -- The game's messages go through Wanderer's frame: filtered ones are dropped,

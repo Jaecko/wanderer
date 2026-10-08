@@ -6,7 +6,8 @@ local L = ns.L
 --
 -- Travel: on a flight master's route, a moment after taking off, the
 -- interface fades, the camera steps back and a title card names the
--- destination. Moving the mouse brings the interface back for a moment.
+-- destination. The interface comes back only while the mouse is over one of
+-- its parts.
 --
 -- Photo: a key (or /wanderer photo) hides everything but the label of what
 -- you hover. The same key, Escape or a fight brings everything back.
@@ -19,18 +20,15 @@ local Safe, Clean = U.Safe, U.Clean
 
 local FADE_OUT, FADE_IN = 2, 0.8 -- seconds of a full fade
 local TRAVEL_DELAY = 3 -- after taking off
-local PEEK_TIME = 4 -- interface back after the mouse moved
-local PEEK_DISTANCE = 12 -- pixels the mouse must move
+local PEEK_TIME = 2 -- seconds the interface stays after the mouse left it
 local TRAVEL_ZOOM = 8 -- yards the camera steps back
-local CARD_TIME = 5
+local CARD_TIME = 12 -- seconds the destination is shown fully
 
 local reasons = {} -- reason -> true
 local current, target = 1, 1
 local tween = U.Tween(1)
 local peekUntil = 0
-local lastX, lastY
-local travelZoom -- camera distance before the flight
-local destination
+local destination -- name of the flight's end
 local card, cardText, cardShown = nil, nil, 0
 local driver
 local chatKept = {} -- chat frame -> true while it ignores the fading
@@ -115,37 +113,38 @@ local function ShowCard()
 	cardShown = 0
 end
 
+-- ns.root.travelZoom: yards the camera stepped back (kept through a /reload).
 local function StartTravel()
+	if reasons.travel then return end
 	if not (ns.db and ns.db.enabled and ns.db.travel.enabled) then return end
 	if not Clean(Safe(UnitOnTaxi, "player")) then return end
 	SetReason("travel", true)
 	ShowCard()
-	if ns.db.travel.camera and GetCameraZoom and CameraZoomOut then
-		travelZoom = Clean(Safe(GetCameraZoom))
+	if ns.db.travel.camera and CameraZoomOut and not ns.root.travelZoom then
+		ns.root.travelZoom = TRAVEL_ZOOM
 		Safe(CameraZoomOut, TRAVEL_ZOOM)
 	end
 end
 
 local function EndTravel()
-	if not reasons.travel and not travelZoom then return end
+	if not reasons.travel and not ns.root.travelZoom then return end
 	SetReason("travel", false)
-	destination = nil
-	if travelZoom and GetCameraZoom and CameraZoomIn then
-		local now = Clean(Safe(GetCameraZoom))
-		if now and now > travelZoom then Safe(CameraZoomIn, now - travelZoom) end
+	if not Clean(Safe(UnitOnTaxi, "player")) then destination = nil end
+	card:Hide()
+	-- Still flying (a loading screen): the camera stays back.
+	if ns.root.travelZoom and CameraZoomIn and not Clean(Safe(UnitOnTaxi, "player")) then
+		Safe(CameraZoomIn, ns.root.travelZoom)
+		ns.root.travelZoom = nil
 	end
-	travelZoom = nil
 end
 
 -- Motion -------------------------------------------------------------------------------
 
 local function OnUpdate(self, elapsed)
-	-- The mouse moved during a flight: the interface comes back a moment.
-	if reasons.travel and not reasons.photo then
-		local x, y = GetCursorPosition()
-		if lastX and (math.abs(x - lastX) + math.abs(y - lastY)) > PEEK_DISTANCE then peekUntil = GetTime() + PEEK_TIME end
-		lastX, lastY = x, y
-	end
+	-- During a flight the interface stays away, whatever the mouse does, and
+	-- comes back only while the mouse is over one of its parts (invisible, they
+	-- still answer the mouse), a moment longer after.
+	if reasons.travel and not reasons.photo and not U.IsOverWorld() then peekUntil = GetTime() + PEEK_TIME end
 	target = Wanted()
 	-- Photo hides everything; a flight or an absence keeps the chat.
 	local keep = (reasons.travel or reasons.away) and not reasons.photo and true or false
@@ -175,6 +174,7 @@ local function Clear()
 end
 
 function ns.InitCurtain()
+	if ns.root then ns.root.flights = nil end -- flight times, no longer kept
 	driver = CreateFrame("Frame")
 	driver:Hide()
 	driver:SetScript("OnUpdate", OnUpdate)
