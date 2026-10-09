@@ -11,7 +11,6 @@ local L = ns.L
 --                  front of them: a key of Wanderer lights it (the game's
 --                  "Basic Campfire") and settles you there. Nothing added;
 --   panorama       the camera steps far back and turns over the landscape;
---   journal        a page of the journal: what you lived today.
 -- The camera only turns around your character (the free camera, as with the
 -- left mouse button: your character never turns) and changes its distance;
 -- Wanderer counts every degree and every yard it moved, and when the
@@ -24,7 +23,7 @@ local L = ns.L
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
 
-ns.AWAY_STYLES = { "contemplation", "hearth", "panorama", "journal" }
+ns.AWAY_STYLES = { "contemplation", "hearth", "panorama" }
 
 local TURN_SPEED = 0.025 -- of the game's camera turning speed: slow, like a film
 local BACK_SPEED = 0.6 -- of the game's camera turning speed: the way back, soft but quick
@@ -35,7 +34,6 @@ local RESUME_AFTER = 30 -- seconds of calm, still away, before the ambiance come
 local ZOOM_SETTLES = 3 -- seconds for the ambiance's own camera moves to end
 local ZOOM_MOVED = 0.5 -- yards: the wheel turned by you
 local FADE_IN, FADE_OUT = 1.5, 0.6
-local TODAY_LINES = 8
 local CHECK_EVERY = 1
 
 -- By the fire: facing the character, a little aside, a few yards away. The
@@ -57,6 +55,7 @@ local since -- when the absence began
 local paused = false -- away, but you are here: the ambiance waits
 local lastSign = 0 -- the last time you gave a sign
 local zoomBefore -- your distance when the ambiance began
+local zoomSent, sentUntil -- where the ambiance sent the camera, and until when it may still be moving
 local yaw = 0 -- degrees the ambiance turned the camera (right is positive), moves ended
 local spin -- the turn going on: direction, degrees a second, start, end
 local followBefore -- your setting, while Wanderer holds the camera still
@@ -84,20 +83,14 @@ local function Place()
 	return Clean(Safe(GetSubZoneText)) or Clean(Safe(GetZoneText))
 end
 
--- The card: who, where, since when; or today's page of the journal.
+-- The card: who, where, since when.
 local function Fill()
 	local minutes = math.floor((GetTime() - since) / 60)
 	local text = minutes < 1 and L.AWAY_MOMENT or L.AWAY_SINCE:format(minutes)
 	local place = Place()
-	if place and style ~= "journal" then text = text .. "  ·  " .. place end
+	if place then text = text .. "  ·  " .. place end
 	line:SetText(text)
 	local rows = {}
-	if style == "journal" then
-		for _, entry in ipairs(ns.JournalToday and ns.JournalToday(TODAY_LINES) or {}) do
-			rows[#rows + 1] = ("|T%s:16:16:0:0|t  %s  |cff8c8070%s|r"):format(entry.icon or "", entry.text, entry.time or "")
-		end
-		if not rows[1] then rows[1] = "|cffa09080" .. L.AWAY_TODAY_EMPTY .. "|r" end
-	end
 	list:SetText(table.concat(rows, "\n"))
 	list:SetShown(rows[1] ~= nil)
 	local margin = ns.Skin.Margin() + 14
@@ -188,6 +181,8 @@ local function CameraAway()
 	end
 	local back = STEP_BACK[style]
 	if back and CameraZoomOut then Safe(CameraZoomOut, back) end
+	zoomSent = zoomBefore and ((style == "hearth" and CLOSE or zoomBefore) + (back or 0)) or nil
+	sentUntil = GetTime() + ZOOM_SETTLES
 	if TURNING[style] then Spin(-1, TURN_SPEED) end
 end
 
@@ -206,7 +201,8 @@ local function CameraBack()
 		wait = math.abs(turned) / (CameraSpeed("cameraYawMoveSpeed", 180) * BACK_SPEED)
 	end
 	if zoomBefore and GetCameraZoom then
-		local now = Clean(Safe(GetCameraZoom))
+		-- Where it is, or where it was sent while it may still be moving there.
+		local now = (zoomSent and sentUntil and GetTime() < sentUntil) and zoomSent or Clean(Safe(GetCameraZoom))
 		if now and now > zoomBefore and CameraZoomIn then Safe(CameraZoomIn, now - zoomBefore) end
 		if now and now < zoomBefore and CameraZoomOut then Safe(CameraZoomOut, zoomBefore - now) end
 	end
@@ -228,12 +224,10 @@ local function Begin()
 	since = since or GetTime()
 	ns.SetCurtainReason("away", true)
 	CameraAway()
-	kicker:SetText((style == "journal" and L.AWAY_TODAY or L.AWAY_KICKER):upper())
+	kicker:SetText(L.AWAY_KICKER:upper())
 	nameText:SetText(U.FullName("player") or "")
 	card:ClearAllPoints()
-	if style == "journal" then
-		card:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
-	elseif style == "hearth" then
+	if style == "hearth" then
 		card:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -140, 120) -- aside, the character in the middle
 	else
 		card:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 140)
@@ -290,7 +284,7 @@ function ns.InitAway()
 	card = ns.Skin.CreateWindow("WandererAwayCard", "DIALOG")
 	card:EnableMouse(false)
 	local margin = ns.Skin.Margin() + 14
-	kicker = ns.Skin.CreateText(card, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
+	kicker = ns.Skin.CreateKicker(card)
 	kicker:SetPoint("TOP", card, "TOP", 0, -margin)
 	kicker:SetJustifyH("CENTER")
 	nameText = ns.Skin.CreateText(card, "GameFontNormalHuge", 1, 0.82, 0)

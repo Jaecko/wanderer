@@ -65,8 +65,16 @@ function ns.InitBarSlots()
 	events:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 	events:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
 	events:RegisterEvent("PET_BAR_UPDATE")
+	local pending = false
 	events:SetScript("OnEvent", function(_, event)
 		if event ~= "PLAYER_ENTERING_WORLD" and event ~= "PLAYER_REGEN_ENABLED" and applied == nil then return end
-		ns.RefreshBarSlots()
+		-- Out of a fight or a loading screen: at once; slot changes: once for many.
+		if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_ENABLED" then return ns.RefreshBarSlots() end
+		if pending then return end
+		pending = true
+		C_Timer.After(0, function()
+			pending = false
+			ns.RefreshBarSlots()
+		end)
 	end)
 end

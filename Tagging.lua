@@ -27,11 +27,13 @@ local Safe, Clean = U.Safe, U.Clean
 local CHECK_DELAY = 0.2
 local MARK_OFFSET = 26 -- above the place of the names
 local ICON = "Interface\\Icons\\Ability_SteelMelee"
+ns.UNTAGGED_ICON = ICON -- (the target block's line too)
 
 local marks = {} -- nameplate -> mark window
 local sinceCheck = 0
 local touched = {} -- monster (its GUID, or its nameplate) -> time of the blow that touched it
 local struck -- time a monster last struck you
+local TOUCH_KEEP = 120 -- seconds a blow is remembered
 local BLOWS = { WOUND = true, BLOCK = true, ABSORB = true, RESIST = true }
 
 -- How a monster is known: its GUID, or (when the game keeps it) its nameplate.
@@ -54,7 +56,13 @@ local function OnBlow(unit, action)
 	end
 	if now == struck then return end
 	local key = Key(unit)
-	if key and not touched[key] then touched[key] = now end
+	if key and not touched[key] then
+		-- Blows of long ago forgotten (out of a fight too).
+		for known, at in pairs(touched) do
+			if now - at > TOUCH_KEEP then touched[known] = nil end
+		end
+		touched[key] = now
+	end
 end
 
 -- The monster is after you: you are on its threat list, or it targets you.

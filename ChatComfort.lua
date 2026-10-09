@@ -15,7 +15,7 @@ local L = ns.L
 --   after a reload or a new session they are back in their tab, a little
 --   dimmed, under a quiet line. Secret lines are never kept.
 -- * Web addresses become links: a click opens the address, ready to copy
---   (the game lets nothing be copied from the chat).
+--   (the game lets nothing be copied from the chat), in the guild's windows too.
 
 local U = ns.Util
 
@@ -225,6 +225,86 @@ local function WatchLinks()
 end
 ns.OpenChatLink = OpenLink -- (tests)
 
+-- Web addresses in the guild's windows ------------------------------------------------------
+-- The guild's information and its message of the day are shown by the game's
+-- own windows, outside the chat: the addresses in what they show become links
+-- too (only what is shown: the text kept by the guild never changes).
+
+local GUILD_WINDOWS = { "CommunitiesFrame", "GuildFrame", "GuildInfoFrame" }
+local GUILD_ADDONS = { Blizzard_Communities = true, Blizzard_GuildUI = true }
+local GUILD_DEPTH = 10 -- frames looked into, at most, under a guild window
+local GUILD_AGAIN = 0.5 -- seconds: the game fills its texts just after showing them
+local listening = setmetatable({}, { __mode = "k" }) -- frame -> its links answer clicks
+
+local function HearClicks(frame)
+	if listening[frame] or not frame.HookScript then return end
+	listening[frame] = true
+	if frame.SetHyperlinksEnabled then pcall(frame.SetHyperlinksEnabled, frame, true) end
+	pcall(frame.HookScript, frame, "OnHyperlinkClick", function(_, link) OpenLink(link) end)
+end
+
+-- Every text of a frame and of its children: its addresses made links. Returns how many texts.
+local function LinkTexts(frame, depth)
+	if depth > GUILD_DEPTH or not frame.GetRegions or (frame.IsForbidden and frame:IsForbidden()) then return 0 end
+	local count = 0
+	for _, region in ipairs({ frame:GetRegions() }) do
+		if region.GetObjectType and region:GetObjectType() == "FontString" and region.GetText then
+			local text = U.Clean(region:GetText())
+			if text and (text:find("https?://") or text:find("www%.")) then
+				local linked = Linkify(text)
+				if linked ~= text then
+					region:SetText(linked)
+					HearClicks(frame)
+					count = count + 1
+				end
+			end
+		end
+	end
+	for _, child in ipairs({ frame:GetChildren() }) do count = count + LinkTexts(child, depth + 1) end
+	return count
+end
+
+local function LinkGuildWindows()
+	if not LinksOn() then return end
+	for _, name in ipairs(GUILD_WINDOWS) do
+		local window = _G[name]
+		if window and window.IsShown and window:IsShown() then
+			local count = LinkTexts(window, 1)
+			if ns.debug and count > 0 then ns.Print(("guild links: %d text(s) in %s"):format(count, name)) end
+		end
+	end
+end
+ns.LinkGuildWindows = LinkGuildWindows -- (tests)
+
+local function WatchGuildWindows()
+	local hooked = {}
+	local function Hook()
+		for _, name in ipairs(GUILD_WINDOWS) do
+			local window = _G[name]
+			if window and not hooked[window] and window.HookScript then
+				hooked[window] = true
+				window:HookScript("OnShow", function()
+					LinkGuildWindows()
+					C_Timer.After(GUILD_AGAIN, LinkGuildWindows)
+				end)
+			end
+		end
+	end
+	Hook()
+	local events = CreateFrame("Frame")
+	events:RegisterEvent("ADDON_LOADED")
+	events:RegisterEvent("GUILD_MOTD")
+	events:RegisterEvent("GUILD_ROSTER_UPDATE")
+	events:SetScript("OnEvent", function(_, event, name)
+		if event == "ADDON_LOADED" then
+			if GUILD_ADDONS[name] then Hook() end
+			return
+		end
+		-- The game filled the guild's texts again: their links again.
+		C_Timer.After(GUILD_AGAIN, LinkGuildWindows)
+	end)
+end
+
 -- The copy button of a chat frame.
 local function Button(frame)
 	if buttons[frame] then return buttons[frame] end
@@ -311,7 +391,72 @@ end
 
 local arrowsApplied = false -- Wanderer set the arrows (else they are the game's or another addon's)
 
+-- One size for the text of every chat window -----------------------------------------------
+-- The game sets it window by window (right click on a tab): here once for all,
+-- new windows included. Each window's size before is kept (per character) and
+-- given back when Wanderer is turned off.
+
+local function ChatWindows()
+	local list = {}
+	for index = 1, (NUM_CHAT_WINDOWS or 10) do
+		local frame = _G["ChatFrame" .. index]
+		if frame then list[#list + 1] = { index = index, frame = frame } end
+	end
+	-- Whisper windows the game opened apart.
+	for _, name in ipairs(type(CHAT_FRAMES) == "table" and CHAT_FRAMES or {}) do
+		local frame = _G[name]
+		local index = frame and frame.GetID and frame:GetID()
+		if index and index > (NUM_CHAT_WINDOWS or 10) then list[#list + 1] = { index = index, frame = frame } end
+	end
+	return list
+end
+
+local function SizeOf(window)
+	local _, size = U.Safe(GetChatWindowInfo, window.index)
+	size = U.Clean(size)
+	if size then return size end
+	if not window.frame.GetFont then return end
+	local _, height = window.frame:GetFont()
+	return height and math.floor(height + 0.5)
+end
+
+local function SetSize(window, size)
+	if FCF_SetChatWindowFontSize then
+		U.Safe(FCF_SetChatWindowFontSize, nil, window.frame, size)
+	elseif window.frame.GetFont then
+		local font, _, flags = window.frame:GetFont()
+		if font then window.frame:SetFont(font, size, flags) end
+		if SetChatWindowSize then U.Safe(SetChatWindowSize, window.index, size) end
+	end
+end
+
+local function FontSizes()
+	if not ns.root then return end
+	ns.root.chatFontBefore = type(ns.root.chatFontBefore) == "table" and ns.root.chatFontBefore or {}
+	local key = ns.CharacterKey()
+	local before = ns.root.chatFontBefore[key] or {}
+	local settings = Settings()
+	local size = settings and settings.fontSize
+	if size then
+		for _, window in ipairs(ChatWindows()) do
+			local current = SizeOf(window)
+			if before[window.index] == nil and current then before[window.index] = current end
+			if current ~= size then SetSize(window, size) end
+		end
+		ns.root.chatFontBefore[key] = before
+	elseif next(before) then
+		-- Wanderer turned off: each window as it was.
+		for _, window in ipairs(ChatWindows()) do
+			local old = before[window.index]
+			if old and SizeOf(window) ~= old then SetSize(window, old) end
+		end
+		ns.root.chatFontBefore[key] = nil
+	end
+end
+ns.ApplyChatFontSize = FontSizes
+
 function ns.RefreshChatComfort()
+	FontSizes()
 	Watch()
 	local settings = Settings()
 	local arrows = settings and settings.arrowHistory and true or false
@@ -333,10 +478,14 @@ function ns.RefreshChatComfort()
 end
 
 function ns.InitChatComfort()
+	-- A window opened later (a whisper apart, a new tab): at the same size.
+	if FCF_OpenTemporaryWindow then hooksecurefunc("FCF_OpenTemporaryWindow", function() FontSizes() end) end
+	if FCF_OpenNewWindow then hooksecurefunc("FCF_OpenNewWindow", function() FontSizes() end) end
 	-- The lines of before first, then every new one kept.
 	Restore()
 	WatchLog()
 	WatchLinks()
+	WatchGuildWindows()
 	Watch()
 	ns.RefreshChatComfort()
 	local since = 0

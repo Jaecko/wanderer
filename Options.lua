@@ -120,7 +120,7 @@ end
 -- Slider bound to a number of a sub-table of the profile ("label.scale"),
 -- with the bounds shared with the checks of saved settings (ns.RANGES).
 local function Slider(variable, label, path, format, onChange)
-	local section, key = path:match("^(%w+)%.(%w+)$")
+	local section, key = ns.Util.SplitPath(path)
 	local min, max, step = unpack(ns.RANGES[path])
 	local setting = Proxy(variable, Settings.VarType.Number, label, ns.DEFAULTS[section][key],
 		function() return ns.db[section][key] end,
@@ -213,6 +213,15 @@ local function RegisterDialogs()
 			box:SetFocus()
 		end,
 	}
+	StaticPopupDialogs.WANDERER_IMPORT_SCALE = {
+		text = L.UPGRADE_IMPORT_PROMPT, button1 = ACCEPT, button2 = CANCEL, hasEditBox = true, editBoxWidth = 350,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+		OnAccept = function(self)
+			local ok, result = ns.ImportPawnScale(EditBoxOf(self):GetText())
+			ns.Print(ok and L.UPGRADE_IMPORT_DONE:format(result.name) or result)
+			if ns.RefreshWeights then ns.RefreshWeights() end
+		end,
+	}
 	StaticPopupDialogs.WANDERER_IMPORT_PROFILE = {
 		text = L.PROFILE_IMPORT_PROMPT, button1 = ACCEPT, button2 = CANCEL, hasEditBox = true, editBoxWidth = 350,
 		timeout = 0, whileDead = true, hideOnEscape = true,
@@ -244,7 +253,7 @@ end
 
 -- Wanderer's keys, set right here with the game's own key binding rows (the
 -- same as in its Key Bindings page). Returns false when the game has none.
-local KEYS = { "WANDERER_REVEAL", "WANDERER_MARKERS", "WANDERER_TODO", "WANDERER_JOURNAL", "WANDERER_MESSAGES", "WANDERER_PHOTO",
+local KEYS = { "WANDERER_REVEAL", "WANDERER_MARKERS", "WANDERER_TODO", "WANDERER_MESSAGES", "WANDERER_PHOTO",
 	"CLICK WandererCampfire:LeftButton" }
 
 local function KeyRows()
@@ -380,6 +389,9 @@ local function NamesPage()
 	Checkbox("GROUP_MARKS", L.GROUP_MARKS, L.GROUP_MARKS_DESC, true,
 		function() return ns.db.groupMarks end,
 		function(value) ns.db.groupMarks = value; ns.RefreshPlates() end)
+	Checkbox("GUILD_MARKS", L.GUILD_MARKS, L.GUILD_MARKS_DESC, true,
+		function() return ns.db.guildMarks end,
+		function(value) ns.db.guildMarks = value; ns.RefreshPlates() end)
 
 	Header(L.SECTION_REVEAL)
 	Dropdown("REVEAL_MODE", L.REVEAL_MODE, L.REVEAL_DESC, "hold",
@@ -421,6 +433,7 @@ local function LabelPage()
 	end), enabled, labelOn)
 	Under(LabelCheckbox("worldOnly", L.LABEL_WORLD_ONLY, L.LABEL_WORLD_ONLY_DESC), enabled, labelOn)
 	Under(LabelCheckbox("hideInCombat", L.LABEL_COMBAT, L.LABEL_COMBAT_DESC), enabled, labelOn)
+	Under(LabelCheckbox("combatLight", L.LABEL_COMBAT_LIGHT, L.LABEL_COMBAT_LIGHT_DESC), enabled, labelOn)
 	Under(LabelCheckbox("stickyTarget", L.LABEL_STICKY_TARGET, L.LABEL_STICKY_TARGET_DESC), enabled, labelOn)
 
 	Header(L.SECTION_HIGHLIGHTS)
@@ -473,7 +486,6 @@ local function ContentPage()
 	ContentCheckbox("showNPCRole", L.LABEL_NPC_ROLE, L.LABEL_NPC_ROLE_DESC)
 	ContentCheckbox("showReputation", L.LABEL_REPUTATION, L.LABEL_REPUTATION_DESC)
 	ContentCheckbox("showTameable", L.LABEL_TAMEABLE, L.LABEL_TAMEABLE_DESC)
-	ContentCheckbox("showRareKills", L.LABEL_RARE_KILLS, L.LABEL_RARE_KILLS_DESC)
 	ContentCheckbox("untagged", L.LABEL_UNTAGGED, L.LABEL_UNTAGGED_DESC)
 
 	Header(L.SECTION_EVERYONE)
@@ -482,6 +494,7 @@ local function ContentPage()
 	ContentCheckbox("showXP", L.LABEL_XP, L.LABEL_XP_DESC)
 	ContentCheckbox("showPortrait", L.LABEL_PORTRAIT, L.LABEL_PORTRAIT_DESC)
 	ContentCheckbox("showHealth", L.LABEL_HEALTH, L.LABEL_HEALTH_DESC)
+	ContentCheckbox("showPower", L.LABEL_POWER, L.LABEL_POWER_DESC)
 	ContentCheckbox("showTarget", L.LABEL_TARGET, L.LABEL_TARGET_DESC)
 	ContentCheckbox("showCasts", L.LABEL_CASTS, L.LABEL_CASTS_DESC)
 
@@ -504,6 +517,13 @@ local function TooltipsPage()
 	Under(TableCheckbox("tooltips", "cursor", L.TOOLTIPS_CURSOR, L.TOOLTIPS_CURSOR_DESC), styled, styledOn)
 	Under(TableCheckbox("tooltips", "icon", L.TOOLTIPS_ICON, L.TOOLTIPS_ICON_DESC), styled, styledOn)
 	Under(TableCheckbox("tooltips", "quality", L.TOOLTIPS_QUALITY, L.TOOLTIPS_QUALITY_DESC), styled, styledOn)
+	local upgrade = TableCheckbox("tooltips", "upgrade", L.TOOLTIPS_UPGRADE, L.TOOLTIPS_UPGRADE_DESC)
+	Under(Button(L.WEIGHTS_OPEN, L.WEIGHTS_OPEN_BUTTON, L.WEIGHTS_OPEN_DESC, function()
+		CloseSettings()
+		ns.ToggleWeights()
+	end), upgrade, IsOn("tooltips", "upgrade"))
+	Under(Button(L.UPGRADE_IMPORT, L.UPGRADE_IMPORT_BUTTON, L.UPGRADE_IMPORT_DESC, function() Popup("WANDERER_IMPORT_SCALE") end),
+		upgrade, IsOn("tooltips", "upgrade"))
 	Checkbox("HIDE_TOOLTIP", L.HIDE_TOOLTIP, L.HIDE_TOOLTIP_DESC, ns.DEFAULTS.hideUnitTooltip,
 		function() return ns.db.hideUnitTooltip end,
 		function(value) ns.db.hideUnitTooltip = value end)
@@ -528,10 +548,6 @@ local function InterfacePage()
 	TableCheckbox("world", "cleanTracker", L.CLEAN_TRACKER, L.CLEAN_TRACKER_DESC, ns.RefreshClean)
 	TableCheckbox("world", "gatherIcons", L.GATHER_ICONS, L.GATHER_ICONS_DESC, ns.RefreshIcons)
 	TableCheckbox("world", "moveFrames", L.MOVE_FRAMES, L.MOVE_FRAMES_DESC, ns.RefreshGameFrames)
-
-	Header(L.SECTION_THREAT_GROUP)
-	TableCheckbox("threat", "show", L.THREAT_SHOW, L.THREAT_SHOW_DESC, ns.RefreshTargetInfo)
-	TableCheckbox("threat", "alert", L.THREAT_ALERT, L.THREAT_ALERT_DESC)
 
 	Header(L.SECTION_SCREEN)
 	TableCheckbox("world", "filterErrors", L.WORLD_ERRORS, L.WORLD_ERRORS_DESC, ns.RefreshScreen)
@@ -622,8 +638,15 @@ local function ConversationsPage()
 	TableCheckbox("quest", "skipGossip", L.QUEST_SKIP_GOSSIP, L.QUEST_SKIP_GOSSIP_DESC)
 end
 
-local function MerchantsPage()
-	Page(L.PAGE_MERCHANTS)
+-- Every day: merchants, mail and loot, trainers, fishing and professions, the reminders.
+local function PracticalPage()
+	Page(L.PAGE_PRACTICAL)
+	Header(L.TODO_TITLE)
+	Button(L.TODO_TITLE, L.MESSAGES_OPEN_BUTTON, L.TODO_OPEN_DESC, function()
+		CloseSettings()
+		ns.ToggleTodo()
+	end)
+
 	Header(L.SECTION_MERCHANT)
 	TableCheckbox("merchant", "sellJunk", L.MERCHANT_SELL_JUNK, L.MERCHANT_SELL_JUNK_DESC)
 	TableCheckbox("merchant", "repairReminder", L.REPAIR_REMINDER, L.REPAIR_REMINDER_DESC)
@@ -636,29 +659,7 @@ local function MerchantsPage()
 
 	Header(L.SECTION_LOOT)
 	TableCheckbox("loot", "fast", L.LOOT_FAST, L.LOOT_FAST_DESC)
-end
 
-local function AdventurePage()
-	Page(L.PAGE_ADVENTURE)
-	Header(L.SECTION_JOURNAL)
-	local journal = TableCheckbox("journal", "enabled", L.JOURNAL_ENABLE, L.JOURNAL_ENABLE_DESC)
-	local journalOn = IsOn("journal", "enabled")
-	Under(Button(L.JOURNAL_OPEN, L.JOURNAL_OPEN_BUTTON, L.JOURNAL_OPEN_DESC, function() ns.ToggleJournal() end),
-		journal, journalOn)
-	Under(TableCheckbox("journal", "notices", L.JOURNAL_NOTICES, L.JOURNAL_NOTICES_DESC), journal, journalOn)
-	Under(TableCheckbox("journal", "sound", L.JOURNAL_SOUND, L.JOURNAL_SOUND_DESC), journal, journalOn)
-	Under(TableCheckbox("journal", "deaths", L.JOURNAL_DEATHS, L.JOURNAL_DEATHS_DESC), journal, journalOn)
-	TableCheckbox("journal", "threshold", L.THRESHOLD, L.THRESHOLD_DESC)
-
-	Header(L.SECTION_SESSION)
-	Slider("SESSION_BREAK", L.SESSION_BREAK, "session.breakEvery",
-		function(value) return value == 0 and L.NEVER or L.MINUTES:format(value) end, ns.RefreshSession)
-	Button(L.SESSION_SHOW, L.SESSION_SHOW_BUTTON, L.SESSION_SHOW_DESC, function() ns.PrintSession() end)
-end
-
--- Fishing and professions, a page of their own.
-local function CraftsPage()
-	Page(L.PAGE_CRAFTS)
 	Header(L.SECTION_FISHING)
 	TableCheckbox("fishing", "doubleClick", L.FISHING_DOUBLE_CLICK, L.FISHING_DOUBLE_CLICK_DESC)
 	TableCheckbox("fishing", "tell", L.FISHING_TELL, L.FISHING_TELL_DESC)
@@ -666,7 +667,17 @@ local function CraftsPage()
 
 	Header(L.SECTION_CRAFTS)
 	TableCheckbox("crafts", "skillUps", L.CRAFTS_SKILL_UPS, L.CRAFTS_SKILL_UPS_DESC)
-	TableCheckbox("crafts", "firstCrafts", L.CRAFTS_FIRST, L.CRAFTS_FIRST_DESC)
+end
+
+-- In a group: threat, the blessings to cast again, the dungeon's door.
+local function GroupPage()
+	Page(L.PAGE_GROUP)
+	Header(L.SECTION_THREAT_GROUP)
+	TableCheckbox("threat", "show", L.THREAT_SHOW, L.THREAT_SHOW_DESC, ns.RefreshTargetInfo)
+	TableCheckbox("threat", "alert", L.THREAT_ALERT, L.THREAT_ALERT_DESC)
+	Header(L.SECTION_GROUP_HELP)
+	TableCheckbox("buffs", "remind", L.BUFF_REMIND, L.BUFF_REMIND_DESC)
+	TableCheckbox("world", "threshold", L.THRESHOLD, L.THRESHOLD_DESC)
 end
 
 local function SocialPage()
@@ -684,6 +695,14 @@ local function SocialPage()
 	Under(TableCheckbox("messages", "hideInChat", L.MESSAGES_HIDE_CHAT, L.MESSAGES_HIDE_CHAT_DESC), messages, messagesOn)
 	Under(TableCheckbox("messages", "sound", L.MESSAGES_SOUND, L.MESSAGES_SOUND_DESC), messages, messagesOn)
 	Under(Button(L.MESSAGES_OPEN, L.MESSAGES_OPEN_BUTTON, nil, function() ns.ToggleMessages() end), messages, messagesOn)
+	for _, side in ipairs({ "me", "them" }) do
+		Under(Button(L["MESSAGES_COLOR_" .. side:upper()], L.MESSAGES_COLOR_BUTTON, L.MESSAGES_COLOR_DESC, function()
+			local r, g, b = ns.MessageColor(side)
+			ns.Skin.PickColor(r, g, b, function(nr, ng, nb) ns.SetMessageColor(side, nr, ng, nb) end)
+		end), messages, messagesOn)
+	end
+	Under(Button(L.MESSAGES_COLOR_RESET, L.MESSAGES_COLOR_RESET_BUTTON, nil, function() ns.SetMessageColor(nil) end),
+		messages, messagesOn)
 
 	Header(L.SECTION_CHAT)
 	TableCheckbox("chat", "group", L.CHAT_TAB_GROUP, L.CHAT_TAB_GROUP_DESC)
@@ -693,6 +712,7 @@ local function SocialPage()
 	TableCheckbox("chat", "copyButton", L.CHAT_COPY_BUTTON, L.CHAT_COPY_BUTTON_DESC, ns.RefreshChatComfort)
 	TableCheckbox("chat", "keepLog", L.CHAT_KEEP_LOG, L.CHAT_KEEP_LOG_DESC)
 	TableCheckbox("chat", "links", L.CHAT_LINKS, L.CHAT_LINKS_DESC)
+	Slider("CHAT_FONT_SIZE", L.CHAT_FONT_SIZE, "chat.fontSize", "%d", ns.ApplyChatFontSize)
 	Button(L.CHAT_TABS, L.CHAT_TABS_BUTTON, L.CHAT_TABS_DESC, function() ns.CreateChatTabs() end)
 end
 
@@ -738,7 +758,7 @@ function ns.InitOptions()
 	-- First folded page: the predefined styles (cards with previews).
 	if ns.RegisterThemesPage and Settings.RegisterVerticalLayoutSubcategory then ns.RegisterThemesPage(mainCategory) end
 	for _, page in ipairs({ NamesPage, LabelPage, ContentPage, TooltipsPage, InterfacePage, ActionBarsPage, ImmersionPage,
-		ConversationsPage, MerchantsPage, AdventurePage, CraftsPage, SocialPage, ProfilesPage }) do
+		ConversationsPage, PracticalPage, GroupPage, SocialPage, ProfilesPage }) do
 		page()
 	end
 	Settings.RegisterAddOnCategory(mainCategory)

@@ -29,6 +29,9 @@ local TRACKER_MODULES = { "QuestObjectiveTracker", "CampaignQuestObjectiveTracke
 
 local driver
 local since = 0
+local sinceButtons = 0
+local buttonsAlpha -- the opacity the minimap buttons were given last
+local BUTTONS_AGAIN = 2 -- seconds: buttons added by other addons meanwhile take the opacity too
 local hoverMinimap, hoverTracker = 0, 1 -- current opacities of the faded parts
 local minimapTween, trackerTween = U.Tween(0), U.Tween(1)
 local pendingLayout = false
@@ -78,7 +81,11 @@ local function OnUpdate(_, elapsed)
 	if world and world.cleanMinimap and MinimapCluster then
 		local over = ns.Util.IsMouseOver(MinimapCluster)
 		hoverMinimap = minimapTween:Step(over and 1 or 0, elapsed, FADE_IN, FADE_OUT)
-		SetAlphas(MinimapButtons(), hoverMinimap)
+		sinceButtons = sinceButtons + elapsed
+		if hoverMinimap ~= buttonsAlpha or sinceButtons >= BUTTONS_AGAIN then
+			sinceButtons, buttonsAlpha = 0, hoverMinimap
+			SetAlphas(MinimapButtons(), hoverMinimap)
+		end
 	end
 	if world and world.cleanTracker and ObjectiveTrackerFrame then
 		local over = ObjectiveTrackerFrame:IsShown() and ns.Util.IsMouseOver(ObjectiveTrackerFrame) or false
@@ -297,16 +304,31 @@ local function OtherBars(layout, visible, mainY, fourth)
 	BarAt(layout, "ExtraBar3", visible, BLOCK, "BOTTOMLEFT", "BOTTOM", BLOCK_X, mainY)
 end
 
+-- The swing timer, the game's own: small (70 %, no title, its time kept),
+-- shown in fights only. The game keeps its scale as a step of its slider
+-- (50 % to 200 %, by 10: step 2 is 70 %).
+local SWING_SCALE_STEP = 2
+local function SmallSwing(entry)
+	local settings = Enum.EditModeSwingTimerSetting or {}
+	if settings.Scale then SetSetting(entry, settings.Scale, SWING_SCALE_STEP) end
+	if settings.ShowBarTitle then SetSetting(entry, settings.ShowBarTitle, 0) end
+	local visibility = Enum.EditModeSwingTimerVisibility
+	if settings.Visibility and visibility and visibility.InCombat then SetSetting(entry, settings.Visibility, visibility.InCombat) end
+end
+
 local function OverTheBars(layout, top, mainY)
 	local system = Enum.EditModeSystem
 	local function At(entry, point, relativePoint, x, y) Place(entry, point, relativePoint, x, y) end
 	if system.CastBar then At(SystemEntry(layout, system.CastBar, nil), "BOTTOM", "BOTTOM", 0, top + 50) end
 	local swing = Enum.EditModeSwingTimerSystemIndices
 	if system.SwingTimer and swing then
+		-- Small, just over the cast bar.
 		local y = top + 80
 		for _, index in ipairs({ swing.MainHand, swing.OffHand, swing.Ranged }) do
-			At(SystemEntry(layout, system.SwingTimer, index), "BOTTOM", "BOTTOM", 0, y)
-			y = y + 22
+			local entry = SystemEntry(layout, system.SwingTimer, index)
+			At(entry, "BOTTOM", "BOTTOM", 0, y)
+			if entry then SmallSwing(entry) end
+			y = y + 16
 		end
 	end
 	if system.ExtraAbilities then At(SystemEntry(layout, system.ExtraAbilities, nil), "BOTTOM", "BOTTOM", 0, top + 160) end
@@ -318,6 +340,8 @@ local function OverTheBars(layout, top, mainY)
 	-- Totems on the left of the cast bar, over the stance bar: clear of both.
 	if system.TotemActionBar then At(SystemEntry(layout, system.TotemActionBar, nil), "BOTTOMRIGHT", "BOTTOM", -120, top + 44) end
 end
+
+local STRIKERS = { WARRIOR = true, ROGUE = true, PALADIN = true, HUNTER = true, SHAMAN = true, DRUID = true }
 
 local LAYOUTS = {
 	-- Bars 1 to 4 stacked at the bottom, portraits just over them; the others
@@ -415,6 +439,8 @@ function ns.MakeLayout(key)
 	-- games keep the raid style there, not in Edit Mode), set once here; yours after.
 	if key ~= "blizzard" and ns.WriteCVar then
 		ns.WriteCVar("useCompactPartyFrames", "1")
+		-- The swing timer, for the classes that strike (never a caster's bother).
+		if STRIKERS[Clean(select(2, Safe(UnitClass, "player"))) or ""] then ns.WriteCVar("showSwingTimer", "1") end
 		ns.WriteCVar("raidFramesDisplayClassColor", "1")
 		if CompactPartyFrame_UpdateShown and CompactPartyFrame then Safe(CompactPartyFrame_UpdateShown, CompactPartyFrame) end
 	end

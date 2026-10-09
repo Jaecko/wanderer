@@ -54,7 +54,7 @@ end
 
 local function Settings()
 	local db = ns.db
-	return db and db.enabled and db.journal or nil
+	return db and db.enabled and db.world or nil
 end
 
 local function OnEnter()

@@ -115,38 +115,7 @@ function World.IsTameable(lines)
 	return false
 end
 
--- Rares already defeated ----------------------------------------------------------------
 
-local RARE = { rare = true, rareelite = true }
-
-local function Kills()
-	local key = ns.CharacterKey()
-	ns.root.rareKills = ns.root.rareKills or {}
-	ns.root.rareKills[key] = ns.root.rareKills[key] or {}
-	return ns.root.rareKills[key]
-end
-
--- A rare lying dead that this character (or its group) had engaged counts as
--- defeated. Checked on mouseover and on target; dated once per kill (looking
--- at the body again within RESPAWN_GUARD keeps the first date).
-local RESPAWN_GUARD = 3600
-function World.NoteRare(unit)
-	if not RARE[Clean(Safe(UnitClassification, unit)) or ""] then return end
-	if not Clean(Safe(UnitIsDead, unit)) or Clean(Safe(UnitIsTapDenied, unit)) then return end
-	local npc = U.NpcID(Safe(UnitGUID, unit))
-	if not npc then return end
-	local kills = Kills()
-	if kills[npc] and time() - kills[npc] < RESPAWN_GUARD then return end
-	kills[npc] = time()
-	if ns.JournalRare then ns.JournalRare(npc, Safe(UnitName, unit)) end
-end
-
--- Seconds since this character defeated the rare, or nil.
-function World.RareKilledAgo(guid)
-	local npc = U.NpcID(guid)
-	local when = npc and Kills()[npc]
-	return when and (time() - when) or nil
-end
 
 -- Experience ---------------------------------------------------------------------------
 -- Learned from the game's own messages ("Wolf dies, you gain 45 experience"),
@@ -154,24 +123,7 @@ end
 
 local xpByName, xpByLevel, levelByName = {}, {}, {}
 local xpPatterns -- built from the game's messages, once
-local SLOT = string.char(1) -- stands for a value while the pattern is built
 
--- Turns a message of the game ("%s dies, you gain %d experience.") into a
--- pattern that captures its values, in their order.
-local function ToPattern(format)
-	local kinds = {}
-	local text = format:gsub("%%%d?%$?([sd])", function(kind)
-		kinds[#kinds + 1] = kind
-		return SLOT
-	end)
-	text = text:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
-	local index = 0
-	text = text:gsub(SLOT, function()
-		index = index + 1
-		return kinds[index] == "d" and "(%d+)" or "(.-)"
-	end)
-	return "^" .. text, kinds
-end
 
 local function XPPatterns()
 	if not xpPatterns then
@@ -180,7 +132,7 @@ local function XPPatterns()
 			"COMBATLOG_XPGAIN_FIRSTPERSON_GROUP", "COMBATLOG_XPGAIN_FIRSTPERSON_RAID" }) do
 			local format = _G[name]
 			if type(format) == "string" then
-				local pattern, kinds = ToPattern(format)
+				local pattern, kinds = U.FormatPattern(format, true)
 				xpPatterns[#xpPatterns + 1] = { pattern = pattern, kinds = kinds }
 			end
 		end
@@ -240,13 +192,10 @@ end
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("UPDATE_FACTION")
-events:RegisterEvent("PLAYER_TARGET_CHANGED")
 events:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN")
 events:RegisterEvent("PLAYER_LEVEL_UP")
 events:SetScript("OnEvent", function(_, event, message)
-	if event == "PLAYER_TARGET_CHANGED" then
-		if ns.root then World.NoteRare("target") end
-	elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
+	if event == "CHAT_MSG_COMBAT_XP_GAIN" then
 		OnXPMessage(message)
 	elseif event == "PLAYER_LEVEL_UP" then
 		-- Each kill is worth differently at the new level.

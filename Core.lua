@@ -42,8 +42,8 @@ ns.ENEMY_NAMES = { "names", "always", "never", "near" }
 -- with them), complete (the defaults) or all of it. Each line can still be
 -- set alone below ("custom").
 ns.LABEL_CONTENT_KEYS = { "showRace", "showClass", "showSpec", "shiftDetails", "showGuild", "showFaction", "showNPCFaction",
-	"showStatus", "showCreatureType", "showClassification", "showNPCRole", "showReputation", "showTameable", "showRareKills",
-	"untagged", "showLevel", "showDifficulty", "showXP", "showPortrait", "showHealth", "showTarget", "showCasts",
+	"showStatus", "showCreatureType", "showClassification", "showNPCRole", "showReputation", "showTameable",
+	"untagged", "showLevel", "showDifficulty", "showXP", "showPortrait", "showHealth", "showPower", "showTarget", "showCasts",
 	"showProfessions", "showLoot", "showObjects", "showQuests" }
 ns.LABEL_CONTENT_ORDER = { "essential", "complete", "all", "custom" }
 local ESSENTIAL = { showClass = true, shiftDetails = true, showStatus = true, showClassification = true, showNPCRole = true,
@@ -58,6 +58,7 @@ local DEFAULTS = {
 	show = {},
 	combatEnemies = false, -- enemy names in a fight: asked for (their health bars show anyway)
 	groupMarks = true, -- in the world, the name of each member of your group, small, over their head
+	guildMarks = true, -- and of each member of your guild, in the guild's color
 	enemyNames = "names", -- "names" (as the names settings say), "always", "never", "near" (as you come near)
 	nearNames = {
 		distance = 45, -- yards from the camera beyond which the enemies' names are gone
@@ -98,10 +99,10 @@ local DEFAULTS = {
 		showTarget = true,
 		showPortrait = true,
 		showHealth = true, -- allies only
+		showPower = true, -- mana, rage, energy... under the health bar (label and game tooltip)
 		showDifficulty = true,
 		showReputation = true,
 		showTameable = true,
-		showRareKills = true,
 		showXP = true,
 		untagged = true,
 		showProfessions = true,
@@ -116,6 +117,7 @@ local DEFAULTS = {
 		threatSound = true,
 		threatVignette = true,
 		hideInCombat = false,
+		combatLight = true, -- in a fight, only what matters for it (level, health, cast, target...)
 		scale = 1,
 		offset = 22,
 		bgOpacity = 55,
@@ -128,6 +130,7 @@ local DEFAULTS = {
 		showStatus = true,
 	},
 	tooltips = {
+		upgrade = true, -- over an item: better or worse for the branch you play
 		enabled = true,
 		cursor = true,
 		icon = true,
@@ -165,14 +168,6 @@ local DEFAULTS = {
 	},
 	crafts = {
 		skillUps = true, -- a short notice for the points gained in a profession
-		firstCrafts = true, -- the first craft of each recipe written in the journal
-	},
-	journal = {
-		enabled = true,
-		notices = true, -- a short notice when something is written
-		sound = true, -- and the quill on paper
-		deaths = false,
-		threshold = true, -- at a dungeon's door: your quests there, your worn equipment
 	},
 	gestures = {
 		read = false, -- automations: off until the player asks
@@ -186,6 +181,9 @@ local DEFAULTS = {
 	away = {
 		enabled = false, -- an ambiance while away: asked for
 		style = "hearth",
+	},
+	buffs = {
+		remind = true, -- your long blessings that fade, to cast again (a notice, out of a fight)
 	},
 	threat = {
 		show = true, -- in groups and dungeons only
@@ -203,6 +201,7 @@ local DEFAULTS = {
 		copyButton = true, -- a discreet copy button in the corner of the chat
 		keepLog = true, -- each tab keeps its last lines from one session to the next
 		links = true, -- web addresses in the chat become links, ready to copy
+		fontSize = 16, -- every chat window at this size (the game sets it one by one)
 		guild = true,
 		whispers = true,
 	},
@@ -228,6 +227,7 @@ local DEFAULTS = {
 		background = 100, -- the background of each slot, %
 	},
 	world = {
+		threshold = true, -- at a dungeon's door: your quests there, your worn equipment
 		actionCam = false,
 		filterErrors = true,
 		hideTalkingHead = false,
@@ -254,8 +254,8 @@ ns.RANGES = {
 	["cinema.delay"] = { 1, 15, 1 },
 	["bars.border"] = { 0, 100, 5 },
 	["bars.background"] = { 0, 100, 5 },
-	["session.breakEvery"] = { 0, 240, 30 },
 	["scene.textSize"] = { 12, 22, 1 },
+	["chat.fontSize"] = { 10, 24, 1 },
 }
 local function Keys(list, field)
 	local keys = {}
@@ -650,7 +650,6 @@ function ns.RefreshAll()
 	if ns.RefreshTooltips then ns.RefreshTooltips() end
 	if ns.RefreshTrainer then ns.RefreshTrainer() end
 	if ns.RefreshScreen then ns.RefreshScreen() end
-	if ns.RefreshSession then ns.RefreshSession() end
 	if ns.RefreshSounds then ns.RefreshSounds() end
 	if ns.RefreshScene then ns.RefreshScene() end
 	if ns.RefreshClean then ns.RefreshClean() end
@@ -747,6 +746,13 @@ function ns.SetProfile(name, byPlace)
 	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
+	profile.scene.speak = nil -- 0.37: the voice, tried and dropped
+	root.rareKills = nil
+	-- 0.38: the travel journal, the session summary and the rares' victories are gone.
+	if type(profile.journal) == "table" and profile.journal.threshold == false then profile.world.threshold = false end
+	profile.journal, profile.session = nil, nil
+	profile.label.showRareKills, profile.crafts.firstCrafts = nil, nil
+	if profile.away.style == "journal" then profile.away.style = "contemplation" end
 	-- Not in DEFAULTS (nil means the game's own key): checked on its own.
 	-- Settings of modules that are gone (the game does it itself).
 	profile.interact, profile.questLog, profile.dev = nil, nil, nil
@@ -896,11 +902,11 @@ end
 BINDING_HEADER_WANDERER = L.ADDON_TITLE
 BINDING_NAME_WANDERER_REVEAL = L.BINDING_REVEAL
 BINDING_NAME_WANDERER_PHOTO = L.BINDING_PHOTO
-BINDING_NAME_WANDERER_MESSAGES = L.BINDING_MESSAGES
 BINDING_NAME_WANDERER_MARKERS = L.BINDING_MARKERS
 BINDING_NAME_WANDERER_TODO = L.BINDING_TODO
-_G["BINDING_NAME_CLICK WandererCampfire:LeftButton"] = L.BINDING_CAMPFIRE
+BINDING_NAME_WANDERER_MESSAGES = L.BINDING_MESSAGES
 function Wanderer_ToggleMessages() ns.ToggleMessages() end
+_G["BINDING_NAME_CLICK WandererCampfire:LeftButton"] = L.BINDING_CAMPFIRE
 
 -- Events --------------------------------------------------------------------
 
@@ -932,7 +938,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		if not ns.initialized then
 			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitCinema", "InitTooltips",
 				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
-				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSession", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitJournal", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
+				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitBuffs", "InitUpgrade", "InitWeights", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
 				if ns[init] then ns[init]() end
 			end
 			ns.initialized = true
@@ -1009,10 +1015,6 @@ SlashCmdList.WANDERER = function(msg)
 		ns.TogglePhotoMode()
 	elseif msg == "nouveautes" or msg == "nouveautés" or msg == "news" then
 		ns.ShowNews()
-	elseif msg == "carnet" or msg == "journal" then
-		ns.ToggleJournal()
-	elseif msg == "bilan" or msg == "session" then
-		ns.PrintSession()
 	elseif msg == "talents" and ns.DebugTalents then
 		ns.DebugTalents()
 	elseif msg == "todo" or msg == "afaire" or msg == "à faire" then
@@ -1029,6 +1031,10 @@ SlashCmdList.WANDERER = function(msg)
 			if ns.RefreshOptions then ns.RefreshOptions() end
 		end
 		ns.Print(L.ENEMY_NAMES .. " : " .. L["ENEMY_NAMES_" .. ns.db.enemyNames:upper()] .. " (" .. tostring(ns.profileName) .. ")")
+	elseif (msg == "poids" or msg == "weights" or msg == "pesos" or msg == "pesi" or msg == "gewichte") and ns.ToggleWeights then
+		ns.ToggleWeights()
+	elseif (msg == "objet" or msg == "item") and ns.DebugUpgrade then
+		ns.DebugUpgrade()
 	elseif msg == "plates" and ns.DebugPlates then
 		ns.DebugPlates()
 	elseif msg == "clear" or msg == "effacer" then

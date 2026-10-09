@@ -11,7 +11,7 @@ local L = ns.L
 local U = ns.Util
 local Safe, Clean, IsSecret = U.Safe, U.Clean, U.IsSecret
 local HasAtlas = U.HasAtlas
-local SEPARATOR = "  |cff808080·|r  "
+local SEPARATOR = ns.Util.SEPARATOR
 
 local INSPECT_DELAY = 1.5
 local INSPECT_KEEP = 300 -- seconds an inspection is trusted before asking again
@@ -178,6 +178,11 @@ end
 -- moment later, while the same player is hovered.
 local function ReadInspection(guid, unit, tries)
 	if Clean(Safe(UnitGUID, unit)) ~= guid then return end
+	-- The old inspections leave (they would be asked again anyway).
+	local now = GetTime()
+	for known, old in pairs(inspected) do
+		if old.time and now - old.time >= INSPECT_KEEP then inspected[known] = nil end
+	end
 	local entry = inspected[guid] or {}
 	inspected[guid] = entry
 	entry.time = GetTime()
@@ -278,7 +283,7 @@ local function OnReady(guid, unit)
 end
 
 ns.Inspect = {
-	Spec = GetSpec, Known = Known, InReach = InReach,
+	Spec = GetSpec, Known = Known, InReach = InReach, Own = function() return ReadTraits(false, "player") end,
 	TalentLine = TalentLine, ItemLevelText = ItemLevelText, OnReady = OnReady, cache = inspected,
 }
 

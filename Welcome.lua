@@ -23,7 +23,7 @@ local PLAYSTYLE_ORDER = { "immersion", "adventurer", "roleplay", "dungeons" }
 local HIGHLIGHTS = {
 	{ "Interface\\CURSOR\\Point", "WELCOME_HIGHLIGHT_NAMES" },
 	{ "Interface\\Icons\\INV_Misc_Note_06", "WELCOME_HIGHLIGHT_SCENES" },
-	{ "Interface\\Icons\\INV_Misc_Book_09", "WELCOME_HIGHLIGHT_JOURNAL" },
+	{ "Interface\\Icons\\INV_Misc_Spyglass_03", "WELCOME_HIGHLIGHT_ITEMS" },
 }
 -- The quieter interface: options from several pages, gathered for the start.
 local INTERFACE = {
@@ -55,6 +55,8 @@ local function Way(preset, values)
 		["world.cleanMinimap"] = false, ["world.cleanTracker"] = false, ["world.gatherIcons"] = false,
 		["quest.autoAccept"] = false, ["quest.autoTurnIn"] = false, ["quest.skipGossip"] = false,
 		["gestures.read"] = false, ["gestures.levelUp"] = false, ["gestures.greet"] = false,
+		["groupMarks"] = true, ["guildMarks"] = true, ["label.showPower"] = true,
+		["messages.enabled"] = false, ["fishing.splash"] = false,
 	}
 	for path, value in pairs(values) do all[path] = value end
 	return { preset = preset, values = all }
@@ -65,18 +67,21 @@ ns.PLAYSTYLES = {
 	immersion = Way("immersion", {
 		["enemyNames"] = "near",
 		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "contemplation",
-		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true }),
+		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
+		["label.showPower"] = false, ["fishing.splash"] = true }),
 	-- Enemies named, quests without delay, the whole interface at hand.
 	adventurer = Way("balanced", {
 		["scene.enabled"] = false, ["scene.camera"] = false, ["cinema.combatOnly"] = false,
 		["quest.autoAccept"] = true, ["quest.autoTurnIn"] = true, ["quest.skipGossip"] = true,
 		["merchant.sellJunk"] = true, ["merchant.repair"] = true, ["loot.fast"] = true }),
-	-- No names, quiet scenes, a character who lives, resting by the fire while away.
+	-- No names, quiet scenes, whispers as conversations, a character who lives,
+	-- resting by the fire while away.
 	roleplay = Way("immersion", {
 		["enemyNames"] = "near", ["nearNames.show"] = "name",
 		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "hearth",
 		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
-		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true }),
+		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true,
+		["messages.enabled"] = true, ["label.showPower"] = false, ["fishing.splash"] = true }),
 	-- Companions named and their health bars in dungeons and raids, the whole
 	-- interface, threat at a glance.
 	dungeons = Way("balanced", {
@@ -85,7 +90,7 @@ ns.PLAYSTYLES = {
 }
 
 local function Path(path)
-	return path:match("^(%w+)%.(%w+)$")
+	return U.SplitPath(path)
 end
 
 function ns.ApplyPlaystyle(key)
@@ -106,11 +111,7 @@ local current = 1
 local chosenStyle
 local refreshers = {} -- one per page, run when it shows
 
-local function Sound()
-	if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then
-		pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-	end
-end
+local function Sound() U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
 
 -- Pieces --------------------------------------------------------------------------------
 

@@ -15,7 +15,7 @@ local U = ns.Util
 local FADE_IN, FADE_OUT = 0.35, 0.8
 local CHECK_EVERY = 0.25
 local SEPARATOR = "|cff8c8c8c  ·  |r"
-local UNTAGGED_ICON = "|TInterface\\Icons\\Ability_SteelMelee:12:12:0:0:64:64:5:59:5:59|t "
+local UNTAGGED_ICON = "|T" .. ns.UNTAGGED_ICON .. ":12:12:0:0:64:64:5:59:5:59|t "
 local UNTAGGED_COLOR = { 1, 0.6, 0.2 }
 
 local frame, skin, text, driver

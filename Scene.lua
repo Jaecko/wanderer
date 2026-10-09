@@ -270,7 +270,7 @@ local function Prices(rewards)
 		if reward.kind == "choice" then
 			choices = choices + 1
 			local link = Safe(GetQuestItemLink, "choice", reward.index)
-			local price = link and Clean(select(11, Safe(C_Item and C_Item.GetItemInfo or GetItemInfo, link)))
+			local price = U.SellPrice(link)
 			if link and not price then
 				missing = true
 				if C_Item and C_Item.RequestLoadItemDataByID then Safe(C_Item.RequestLoadItemDataByID, link) end
@@ -352,8 +352,7 @@ end
 -- The game's own sounds, as its dialogue and quest windows play them (they
 -- are kept closed while the scene shows): open, close, a choice, a refusal.
 local function GameSound(key)
-	local sound = SOUNDKIT and SOUNDKIT[key]
-	if sound and PlaySound then pcall(PlaySound, sound) end
+	U.PlaySound(key)
 end
 
 -- Actions ----------------------------------------------------------------------------

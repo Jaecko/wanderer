@@ -113,17 +113,13 @@ local function CreatePreview(card, theme, height)
 	local font = ns.Skin.FontPath(theme.font)
 	local margin = 6 + math.floor(theme.padding / 2)
 	card.preview, card.font, card.margin, card.texts = preview, font, margin, {}
-	local lines = {
-		{ L.THEME_SAMPLE_NAME, 13, 1, 0.82, 0 },
-		{ L.THEME_SAMPLE_ROLE, 11, 0.82, 0.75, 0.56 },
-		{ L.THEME_SAMPLE_DETAIL, 10, 0.8, 0.8, 0.8 },
-	}
 	local previous
-	for _, line in ipairs(lines) do
+	-- The sample label, a size smaller on a card.
+	for _, line in ipairs(ns.Skin.SAMPLE_LINES) do
 		local text = ns.Skin.CreateText(preview, "GameTooltipText", line[3], line[4], line[5])
 		if text.SetWordWrap then text:SetWordWrap(false) end
-		text.size = line[2]
-		text:SetText(line[1])
+		text.size = line[2] - 1
+		text:SetText(L[line[1]])
 		card.texts[#card.texts + 1] = text
 		if previous then
 			text:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -2)
@@ -163,9 +159,7 @@ local function CreateCard(grid, index, theme)
 		ns.ApplyTheme(theme.key)
 		if not grid.quiet then ns.Print(L.MSG_THEME:format(L["STYLE_" .. theme.key:upper()])) end
 		RefreshGrids()
-		if PlaySound and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then
-			pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-		end
+		ns.Util.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
 	end)
 	card:SetScript("OnEnter", function(self)
 		self.hover:Show()

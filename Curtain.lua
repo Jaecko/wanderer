@@ -6,8 +6,8 @@ local L = ns.L
 --
 -- Travel: on a flight master's route, a moment after taking off, the
 -- interface fades, the camera steps back and a title card names the
--- destination. The interface comes back only while the mouse is over one of
--- its parts.
+-- destination, then stays all the way, discreet. The interface comes back
+-- only while the mouse is over one of its parts.
 --
 -- Photo: a key (or /wanderer photo) hides everything but the label of what
 -- you hover. The same key, Escape or a fight brings everything back.
@@ -23,6 +23,7 @@ local TRAVEL_DELAY = 3 -- after taking off
 local PEEK_TIME = 2 -- seconds the interface stays after the mouse left it
 local TRAVEL_ZOOM = 8 -- yards the camera steps back
 local CARD_TIME = 12 -- seconds the destination is shown fully
+local CARD_REST = 0.35 -- its opacity after, all the way to the landing
 
 local reasons = {} -- reason -> true
 local current, target = 1, 1
@@ -156,9 +157,10 @@ local function OnUpdate(self, elapsed)
 	MinimapAway(current <= MINIMAP_GONE and target == 0)
 	if card:IsShown() then
 		cardShown = cardShown + elapsed
-		local alpha = cardShown < 1 and cardShown or (cardShown > CARD_TIME and math.max(0, 1 - (cardShown - CARD_TIME)) or 1)
-		card:SetAlpha(alpha)
-		if cardShown > CARD_TIME + 1 then card:Hide() end
+		-- Fully at first, then discreet all the way: it goes when you land.
+		local alpha = cardShown < 1 and cardShown
+			or (cardShown > CARD_TIME and math.max(CARD_REST, 1 - (cardShown - CARD_TIME) * (1 - CARD_REST)) or 1)
+		if card:GetAlpha() ~= alpha then card:SetAlpha(alpha) end
 	end
 	if current == target and next(reasons) == nil and not card:IsShown() then self:Hide() end
 end
@@ -182,10 +184,9 @@ function ns.InitCurtain()
 	card = ns.Skin.CreateWindow("WandererTravelCard", "DIALOG")
 	card:SetPoint("TOP", UIParent, "TOP", 0, -150)
 	card:EnableMouse(false)
-	card.kicker = ns.Skin.CreateText(card, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
+	card.kicker = ns.Skin.CreateKicker(card, L.TRAVEL_KICKER)
 	card.kicker:SetPoint("TOP", card, "TOP", 0, -(ns.Skin.Margin() + 10))
 	card.kicker:SetJustifyH("CENTER")
-	card.kicker:SetText(L.TRAVEL_KICKER:upper())
 	cardText = ns.Skin.CreateText(card, "GameFontNormalHuge", 1, 0.82, 0)
 	cardText:SetPoint("TOP", card.kicker, "BOTTOM", 0, -6)
 	cardText:SetJustifyH("CENTER")

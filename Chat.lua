@@ -22,14 +22,16 @@ local function TabName(tab)
 end
 
 -- Whether a chat window already carries this name.
-local function Exists(name)
-	if not GetChatWindowInfo then return false end
+-- The chat window of this name, shown or docked (its index).
+local function WindowIndex(name)
+	if not GetChatWindowInfo then return end
 	for index = 1, NUM_CHAT_WINDOWS or 10 do
 		local existing, _, _, _, _, _, shown, _, docked = GetChatWindowInfo(index)
-		if Clean(existing) == name and (shown or docked) then return true end
+		if Clean(existing) == name and (shown or docked) then return index end
 	end
-	return false
 end
+
+local function Exists(name) return WindowIndex(name) ~= nil end
 
 -- The game's functions, wherever this version of the game keeps them.
 local function AddGroup(frame, group)
@@ -79,13 +81,7 @@ end
 -- of a fight), then found again by its name; it is the player's like any tab.
 local DEBUG_TAB = "Wanderer"
 
-local function DebugIndex()
-	if not GetChatWindowInfo then return end
-	for index = 1, NUM_CHAT_WINDOWS or 10 do
-		local name, _, _, _, _, _, shown, _, docked = GetChatWindowInfo(index)
-		if Clean(name) == DEBUG_TAB and (shown or docked) then return index end
-	end
-end
+local function DebugIndex() return WindowIndex(DEBUG_TAB) end
 
 function ns.IsDebugTab(index)
 	return index ~= nil and index == DebugIndex()

@@ -2,7 +2,7 @@ local _, ns = ...
 local L = ns.L
 
 -- Round button on the minimap edge: left click opens Wanderer's menu, right
--- click the travel journal, drag moves it around the minimap.
+-- click the reminders, drag moves it around the minimap.
 
 local ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
@@ -37,35 +37,24 @@ function ns.ShowMenu(owner)
 	GameTooltip:Hide()
 	MenuUtil.CreateContextMenu(owner or UIParent, function(_, root)
 		root:CreateTitle(L.ADDON_TITLE)
-		-- Every day: who wrote to you, what is left to do, the journey.
-		if ns.db.messages.enabled then
-			local unread = ns.UnreadMessages()
-			root:CreateButton(unread > 0 and L.MENU_MESSAGES_UNREAD:format(unread) or L.MENU_MESSAGES,
-				function() ns.ToggleMessages() end)
-		end
+		-- Every day: what is left to do, who wrote, what an item is worth to you.
 		local pending = ns.TodoPending and ns.TodoPending() or 0
 		root:CreateButton(pending > 0 and L.TODO_TITLE_COUNT:format(pending) or L.TODO_TITLE, function() ns.ToggleTodo() end)
-		root:CreateButton(L.MENU_JOURNAL, function() ns.ToggleJournal() end)
+		if ns.db.messages.enabled then
+			local unread = ns.UnreadMessages()
+			root:CreateButton(unread > 0 and L.MENU_MESSAGES_UNREAD:format(unread) or L.MESSAGES_TITLE,
+				function() ns.ToggleMessages() end)
+		end
+		if ns.db.tooltips.upgrade then root:CreateButton(L.WEIGHTS_TITLE, function() ns.ToggleWeights() end) end
 		-- Tools of the moment.
 		root:CreateDivider()
 		root:CreateButton(L.MENU_PHOTO, function() ns.TogglePhotoMode() end)
-		root:CreateButton(L.COPY_TITLE, function() ns.CopyChat() end)
 		if ns.db.world.gatherIcons then
 			ns.GatherIcons()
 			root:CreateButton(L.MENU_ICONS:format(ns.CountIcons()), function() ns.ToggleIconDrawer(button) end)
 		end
-		root:CreateButton(L.MENU_SESSION, function() ns.PrintSession() end)
 		-- Settings.
 		root:CreateDivider()
-		local names = root:CreateButton(L.PRESET)
-		for _, preset in ipairs({ "immersion", "balanced", "all" }) do
-			names:CreateRadio(L["PRESET_" .. preset:upper()],
-				function() return ns.db.preset == preset end,
-				function()
-					ns.db.enabled = true
-					ns.SetPreset(preset)
-				end)
-		end
 		root:CreateCheckbox(L.MENU_ENABLED, function() return ns.db.enabled end,
 			function() ns.SetEnabled(not ns.db.enabled) end)
 		root:CreateButton(L.MENU_OPTIONS, function() ns.OpenOptions() end)
@@ -81,20 +70,12 @@ local function ShowTooltip(self)
 	GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 	GameTooltip:AddLine(L.ADDON_TITLE)
 	GameTooltip:AddLine(L.MINIMAP_PRESET:format(L["PRESET_" .. ns.db.preset:upper()]), 1, 1, 1)
-	if ns.SessionSummary then
-		local lines = ns.SessionSummary()
-		if lines[1] then
-			GameTooltip:AddLine(" ")
-			GameTooltip:AddLine(L.SESSION_TITLE)
-			for _, line in ipairs(lines) do GameTooltip:AddLine(line, 1, 1, 1) end
-			GameTooltip:AddLine(" ")
-		end
-	end
 	GameTooltip:AddLine(L.MINIMAP_HINT, 0.7, 0.7, 0.7, true)
 	GameTooltip:Show()
 end
 
 function ns.RefreshMinimapButton()
+	if ns.RefreshChatWhisperButton then ns.RefreshChatWhisperButton() end
 	if not button then return end
 	button:SetShown(not ButtonSettings().hide)
 	UpdatePosition()
@@ -132,7 +113,7 @@ function ns.InitMinimapButton()
 
 	button:SetScript("OnClick", function(self, mouseButton)
 		if mouseButton == "RightButton" then
-			ns.ToggleJournal()
+			ns.ToggleTodo()
 		else
 			ns.ShowMenu(self)
 		end

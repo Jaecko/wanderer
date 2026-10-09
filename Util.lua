@@ -120,6 +120,74 @@ function Util.MouseFocus()
 	return focus
 end
 
+-- A thin status bar on a dark ground (health, power).
+function Util.NewBar(parent, height, name)
+	local bar = CreateFrame("StatusBar", name, parent)
+	bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+	bar:SetHeight(height)
+	local ground = bar:CreateTexture(nil, "BACKGROUND")
+	ground:SetAllPoints()
+	ground:SetColorTexture(0, 0, 0, 0.6)
+	bar:Hide()
+	return bar
+end
+
+-- A unit's power (mana, rage, energy, focus) in a bar, in the game's colors.
+-- Status bars take protected values; false when the unit has none.
+local POWER_FALLBACK = { r = 0, g = 0.55, b = 1 }
+function Util.FillPowerBar(bar, unit)
+	local maximum = Util.Safe(UnitPowerMax, unit)
+	if not Util.IsSecret(maximum) and (maximum == nil or maximum <= 0) then return false end
+	local power = Util.Safe(UnitPower, unit)
+	if not Util.IsSecret(power) and power == nil then return false end
+	if not (pcall(bar.SetMinMaxValues, bar, 0, maximum) and pcall(bar.SetValue, bar, power)) then return false end
+	local kind, token = Util.Safe(UnitPowerType, unit)
+	local colors = PowerBarColor or {}
+	local color = colors[Util.Clean(token) or ""] or colors[Util.Clean(kind) or -1] or POWER_FALLBACK
+	bar:SetStatusBarColor(color.r or 0, color.g or 0.55, color.b or 1)
+	return true
+end
+
+-- Between the parts of a line ("Mage  ·  Level 30").
+Util.SEPARATOR = "  |cff808080·|r  "
+
+-- What a merchant pays for an item (nil while the game has not loaded it).
+function Util.SellPrice(link)
+	if not link then return end
+	return Util.Clean((select(11, Util.Safe(C_Item and C_Item.GetItemInfo or GetItemInfo, link))))
+end
+
+-- A sound of the game, by its SOUNDKIT name or number; silent when missing.
+function Util.PlaySound(sound, channel)
+	if type(sound) == "string" then sound = SOUNDKIT and SOUNDKIT[sound] end
+	if sound and PlaySound then pcall(PlaySound, sound, channel) end
+end
+
+-- "label.scale" -> "label", "scale" (nil for a setting at the top).
+function Util.SplitPath(path)
+	return path:match("^(%w+)%.(%w+)$")
+end
+
+-- A message of the game ("%s dies, you gain %d experience.") as a pattern that
+-- reads its values back, in their order (kinds: "s" or "d" for each). Open: it
+-- may go on after (else the whole message).
+local SLOT = string.char(1)
+function Util.FormatPattern(format, open)
+	if type(format) ~= "string" then return end
+	local kinds = {}
+	local text = format:gsub("%%%d?%$?([sd])", function(kind)
+		kinds[#kinds + 1] = kind
+		return SLOT
+	end)
+	text = text:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+	local index = 0
+	text = text:gsub(SLOT, function()
+		index = index + 1
+		return kinds[index] == "d" and "(%d+)" or "(.-)"
+	end)
+	return "^" .. text .. (open and "" or "$"), kinds
+end
+
 -- True when the mouse is over the 3D world rather than the interface.
 function Util.IsOverWorld()
 	if not (GetMouseFoci or GetMouseFocus) then return false end

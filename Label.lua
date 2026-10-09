@@ -19,11 +19,13 @@ local UNIT = "mouseover"
 local TARGET = "mouseovertarget"
 local FADE_IN, FADE_OUT = 0.2, 0.45
 local HEALTH_HEIGHT = 4
+local POWER_HEIGHT = 3
 -- What the unit targets: a block under a thin line.
 local TARGET_PORTRAIT = 30
 local TARGET_GAP = 6
 local TARGET_BAR_HEIGHT = 4
 local TARGET_BAR_WIDTH = 90
+local TARGET_POWER_HEIGHT = 2
 local LINE_GAP = 2 -- as between the lines of the game's tooltips
 local RANK_ICON_SIZE = 20
 local PORTRAIT_SIZE = 40 -- the hovered character's portrait, left of the label
@@ -37,12 +39,30 @@ local HEAD_OFFSET = 4
 local HOLD_GRACE = 0.4 -- seconds the label waits after a click before leaving
 local MAX_QUEST_LINES = 3
 local IsInnkeeper, HearthLine -- (below, with the tooltip reading)
+-- What the label says: your choices, or in a fight (option) only what matters
+-- for it: level and difficulty, rank, health and power, the spell cast, who
+-- it looks at, a monster not yet yours. A Shift look stays yours to ask.
+local COMBAT_CONTENT = { showLevel = true, showDifficulty = true, showClassification = true, showHealth = true,
+	showPower = true, showCasts = true, showTarget = true, untagged = true, shiftDetails = true }
+local contentKeys = {}
+for _, key in ipairs(ns.LABEL_CONTENT_KEYS) do contentKeys[key] = true end
+contentKeys.showPower = true
+local combatView = setmetatable({}, { __index = function(_, key)
+	if contentKeys[key] and not COMBAT_CONTENT[key] then return false end
+	return ns.db.label[key]
+end })
+
+local function Content()
+	if ns.inCombat and ns.db.label.combatLight then return combatView end
+	return ns.db.label
+end
+
 local LOOT_ICON = "Interface\\Icons\\INV_Misc_Bag_08"
 local INTERACT_ICON = "Interface\\Cursor\\Interact"
 local TAME_ICON = "Interface\\Icons\\Ability_Hunter_BeastTaming"
 local MAX_OBJECT_DETAILS = 2
 -- Only characters present in the game fonts (Latin-1): no arrows or bullets.
-local SEPARATOR = "  |cff808080·|r  "
+local SEPARATOR = ns.Util.SEPARATOR
 
 local U = ns.Util
 local Safe, Clean, IsSecret = U.Safe, U.Clean, U.IsSecret
@@ -90,7 +110,7 @@ local CLASSIFICATIONS = {
 }
 
 local frame, skin, rankIcon
-local nameText, alertText, titleText, questStatusText, identityText, actionText, questText, detailText, moreText, targetText, healthBar
+local nameText, alertText, titleText, questStatusText, identityText, actionText, questText, detailText, moreText, targetText, healthBar, powerBar
 local cast, targetCast -- what the character casts, and what its target casts
 local shiftDown = false -- Shift held over a character: the closer look
 local unitPortrait -- round, left of the name; .wanted while a character is hovered
@@ -320,7 +340,7 @@ end
 
 -- Players: "Race Class (Spec)". Creatures: "Type · Elite/Rare/Boss".
 local function BuildIdentityLine(a)
-	local db = ns.db.label
+	local db = Content()
 	local isPlayer = a.isPlayer
 	local parts = {}
 	if isPlayer then
@@ -349,10 +369,6 @@ local function BuildIdentityLine(a)
 	end
 	if a.tameable then
 		parts[#parts + 1] = ("|T%s:14:14:0:0|t |cff9de04a%s|r"):format(TAME_ICON, L.TAMEABLE)
-	end
-	if a.rareKilled then
-		local ago = Safe(SecondsToTime, a.rareKilled, true) or ""
-		parts[#parts + 1] = "|cff999999" .. L.RARE_KILLED:format(ago) .. "|r"
 	end
 	return table.concat(parts, " · ")
 end
@@ -395,7 +411,7 @@ end
 
 -- "Level 60 · <Guild> · [icon] Alliance · Stormwind: Honored · Status"
 local function BuildDetailLine(a)
-	local db = ns.db.label
+	local db = Content()
 	local isPlayer = a.isPlayer
 	local parts = {}
 	if db.showLevel then
@@ -494,7 +510,7 @@ end
 local function UpdateTargetLine()
 	targetText:SetText("")
 	target.info:SetText("")
-	if not ns.db.label.showTarget or not Clean(Safe(UnitExists, TARGET)) then return false end
+	if not Content().showTarget or not Clean(Safe(UnitExists, TARGET)) then return false end
 	local isPlayer = Clean(Safe(UnitIsPlayer, TARGET)) and true or false
 	local shown = false
 	if Clean(Safe(UnitIsUnit, TARGET, "player")) then
@@ -516,7 +532,7 @@ local function UpdateTargetLine()
 	if level then
 		local text = LEVEL .. " " .. (level > 0 and level or "??")
 		-- An enemy: colored by difficulty, as in the label above.
-		if ns.db.label.showDifficulty and Clean(Safe(UnitCanAttack, "player", TARGET)) then
+		if Content().showDifficulty and Clean(Safe(UnitCanAttack, "player", TARGET)) then
 			text = ColorCode(World.LevelColor(level, false, TARGET)) .. text .. "|r"
 		end
 		parts[#parts + 1] = text
@@ -536,12 +552,13 @@ local function UpdateTargetLine()
 		and pcall(target.bar.SetMinMaxValues, target.bar, 0, maximum) and pcall(target.bar.SetValue, target.bar, health)
 	target.bar.wanted = bar and true or false
 	if bar then target.bar:SetStatusBarColor(GetUnitColor(TARGET, isPlayer)) end
+	target.power.wanted = bar and Content().showPower and U.FillPowerBar(target.power, TARGET) or false
 	return true
 end
 
 -- Every character and every ally; enemy players show theirs above them.
 local function UpdateHealth(isPlayer)
-	if not ns.db.label.showHealth then return false end
+	if not Content().showHealth then return false end
 	if isPlayer then
 		local hostile = Safe(UnitCanAttack, "player", UNIT)
 		if IsSecret(hostile) or hostile then return false end
@@ -557,6 +574,12 @@ local function UpdateHealth(isPlayer)
 	return true
 end
 
+-- Its power, right under its health, for the same characters.
+local function UpdatePower(healthShown)
+	if not (healthShown and Content().showPower) then return false end
+	return U.FillPowerBar(powerBar, UNIT)
+end
+
 -- A player who can attack you right now (both flagged for PvP, War Mode, duel...).
 local function IsThreat(isPlayer)
 	if not (isPlayer and ns.db.label.threatAlert) then return false end
@@ -567,8 +590,12 @@ end
 local function PlayAlertSound(guid)
 	if not ns.db.label.threatSound or not guid then return end
 	if lastAlert[guid] and GetTime() - lastAlert[guid] < ALERT_SOUND_DELAY then return end
-	lastAlert[guid] = GetTime()
-	if SOUNDKIT and SOUNDKIT.RAID_WARNING then pcall(PlaySound, SOUNDKIT.RAID_WARNING, "Master") end
+	local now = GetTime()
+	for known, at in pairs(lastAlert) do
+		if now - at >= ALERT_SOUND_DELAY then lastAlert[known] = nil end
+	end
+	lastAlert[guid] = now
+	U.PlaySound("RAID_WARNING", "Master")
 end
 
 -- Layout & look ----------------------------------------------------------------
@@ -597,10 +624,12 @@ local function Layout()
 	local block = targetText.forceShow and true or false
 	local info = block and Clean(target.info:GetText()) ~= nil
 	local bar = block and target.bar.wanted or false
+	local power = bar and target.power.wanted or false
 	for _, part in ipairs({ target.line, target.portrait, targetText }) do part:SetShown(block) end
 	target.portrait.ring:SetShown(block and target.portrait.ringShown or false)
 	target.info:SetShown(info)
 	target.bar:SetShown(bar)
+	target.power:SetShown(power)
 	if block then
 		local castWidth, castHeight = targetCast:Size(TextWidth)
 		local textWidth = math.max(TextWidth(targetText, FALLBACK_WIDTH),
@@ -609,12 +638,16 @@ local function Layout()
 		local textHeight = Measure(targetText, "GetStringHeight", 10)
 			+ (info and LINE_GAP + Measure(target.info, "GetStringHeight", 10) or 0)
 			+ (bar and TARGET_GAP + TARGET_BAR_HEIGHT or 0)
+			+ (power and 1 + TARGET_POWER_HEIGHT or 0)
 			+ (castHeight > 0 and TARGET_GAP + castHeight or 0)
 		height = height + TARGET_GAP * 2 + 1 + math.max(TARGET_PORTRAIT, textHeight)
 	end
 	-- Same margins as the tooltips, on every side; room at the top only for a badge.
 	if healthBar:IsShown() then
 		height = height + LINE_GAP * 2 + HEALTH_HEIGHT
+	end
+	if powerBar:IsShown() then
+		height = height + 1 + POWER_HEIGHT
 	end
 	local castWidth, castHeight = cast:Size(TextWidth)
 	if castHeight > 0 then
@@ -657,6 +690,12 @@ local function Layout()
 		healthBar:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
 		previous, offset = healthBar, 0
 	end
+	if powerBar:IsShown() then
+		powerBar:ClearAllPoints()
+		powerBar:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", offset, -1)
+		powerBar:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
+		previous, offset = powerBar, 0
+	end
 	if castHeight > 0 then
 		previous, offset = cast:Place(previous, offset, LINE_GAP * 2), 0
 	end
@@ -673,8 +712,11 @@ local function Layout()
 		target.bar:ClearAllPoints()
 		target.bar:SetPoint("TOPLEFT", info and target.info or targetText, "BOTTOMLEFT", 0, -TARGET_GAP)
 		target.bar:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
+		target.power:ClearAllPoints()
+		target.power:SetPoint("TOPLEFT", target.bar, "BOTTOMLEFT", 0, -1)
+		target.power:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
 		if targetCast.active then
-			targetCast:Place(bar and target.bar or (info and target.info or targetText), 0, TARGET_GAP)
+			targetCast:Place(power and target.power or (bar and target.bar or (info and target.info or targetText)), 0, TARGET_GAP)
 		end
 	end
 	if not block then
@@ -705,6 +747,7 @@ local function ClearLines()
 	target.guid = nil
 	cast.active, targetCast.active = false, false
 	healthBar:Hide()
+	powerBar:Hide()
 	unitPortrait.wanted = false
 	rankIcon:Hide()
 	skin:ClearTopBadge()
@@ -713,7 +756,7 @@ end
 -- Analysis ---------------------------------------------------------------------
 
 local function AnalyzeUnit()
-	local db = ns.db.label
+	local db = Content()
 	local isPlayer = Clean(Safe(UnitIsPlayer, UNIT)) and true or false
 	local guid = Clean(Safe(UnitGUID, UNIT))
 	local a = { kind = "unit", isPlayer = isPlayer, guid = guid, lines = {} }
@@ -730,8 +773,6 @@ local function AnalyzeUnit()
 		a.rank = classification and CLASSIFICATIONS[classification] or nil
 		a.reputation = db.showReputation and World.Reputation(clean) or nil
 		a.tameable = db.showTameable and World.IsTameable(clean) or nil
-		World.NoteRare(UNIT)
-		if db.showRareKills and a.rank and a.rank.highlight == "rare" then a.rareKilled = World.RareKilledAgo(guid) end
 		if db.showLoot and guid and Clean(Safe(UnitIsDead, UNIT)) and CanLootUnit then
 			a.loot = Clean(Safe(CanLootUnit, guid)) and true or nil
 		end
@@ -785,9 +826,10 @@ local function RefreshDynamic()
 	detailText:SetText(BuildDetailLine(a))
 	moreText:SetText(BuildMoreLines(a))
 	targetText.forceShow = UpdateTargetLine()
-	cast:Read(UNIT, ns.db.label.showCasts)
-	if targetText.forceShow then targetCast:Read(TARGET, ns.db.label.showCasts) else targetCast.active = false end
+	cast:Read(UNIT, Content().showCasts)
+	if targetText.forceShow then targetCast:Read(TARGET, Content().showCasts) else targetCast.active = false end
 	healthBar:SetShown(UpdateHealth(a.isPlayer))
+	powerBar:SetShown(UpdatePower(healthBar:IsShown()))
 	a.highlight = PickHighlight(a)
 	if skin:GetHighlight() ~= a.highlight then skin:SetHighlight(a.highlight) end
 	if a.threat then PlayAlertSound(a.guid) end
@@ -819,11 +861,11 @@ local function UpdateContent(full)
 			titleText:SetText("|cffd0c090" .. current.role .. "|r")
 		end
 		identityText:SetText(BuildIdentityLine(current))
-		if ns.db.label.showPortrait then
+		if Content().showPortrait then
 			Safe(SetPortraitTexture, unitPortrait, UNIT)
 			unitPortrait.wanted = true
 		end
-		local rank = ns.db.label.showClassification and current.rank
+		local rank = Content().showClassification and current.rank
 		if rank then
 			if HasAtlas(rank.atlas) then rankIcon:SetAtlas(rank.atlas) else rankIcon:SetTexture(rank.texture) end
 			rankIcon:Show()
@@ -877,7 +919,7 @@ local function FishingLocked()
 end
 
 local function UpdateObjectContent(data)
-	local db = ns.db.label
+	local db = Content()
 	local lines = U.TooltipLines(data and data.lines)
 	if not lines[1] then lines = ReadGameTooltipLines() end
 	if not lines[1] then current = nil return false end
@@ -1045,9 +1087,10 @@ local function Hovering()
 	return GetTime() - lastHover < HOVER_GRACE
 end
 
+-- In a fight the label never stays on your target: only what you hover.
 local function StickyTarget()
 	local db = ns.db
-	return db and db.label.stickyTarget and not objectMode and not Hovering()
+	return db and db.label.stickyTarget and not ns.inCombat and not objectMode and not Hovering()
 		and Clean(Safe(UnitExists, "target")) and true or false
 end
 
@@ -1170,7 +1213,7 @@ local hiddenTooltips = {}
 
 -- Parts the game draws apart from its tooltip (its health bar may not follow
 -- the tooltip's opacity): hidden and given back with it.
-local TOOLTIP_PARTS = { GameTooltip = { "GameTooltipStatusBar" } }
+local TOOLTIP_PARTS = { GameTooltip = { "GameTooltipStatusBar", "WandererTooltipPower" } }
 
 local function SetTooltipHidden(tooltip, hide)
 	local name = tooltip.GetName and Clean(Safe(tooltip.GetName, tooltip))
@@ -1341,6 +1384,15 @@ local function OnEvent(_, event, guid)
 		if targetAlpha > 0 and not objectMode then UpdateContent(true) end
 		return
 	end
+	if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+		-- A fight starts or ends: what is shown follows at once (its own lines in a fight).
+		C_Timer.After(0.1, function()
+			if targetAlpha > 0 and not objectMode then UpdateContent(true) end
+			-- The fight over: back on your target.
+			if event == "PLAYER_REGEN_ENABLED" then ShowSticky() end
+		end)
+		return
+	end
 	if event == "PLAYER_LOGIN" or event == "SKILL_LINES_CHANGED" then
 		RefreshProfessions()
 		return
@@ -1439,17 +1491,13 @@ function ns.InitLabel()
 	local targetBackground = target.bar:CreateTexture(nil, "BACKGROUND")
 	targetBackground:SetAllPoints()
 	targetBackground:SetColorTexture(0, 0, 0, 0.6)
+	target.power = U.NewBar(frame, TARGET_POWER_HEIGHT)
 	for _, part in ipairs({ target.line, target.portrait, target.portrait.ring, targetText, target.info, target.bar }) do part:Hide() end
 
 	cast, targetCast = ns.Casts.New(frame), ns.Casts.New(frame)
 
-	healthBar = CreateFrame("StatusBar", nil, frame)
-	healthBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-	healthBar:SetHeight(HEALTH_HEIGHT)
-	local healthBackground = healthBar:CreateTexture(nil, "BACKGROUND")
-	healthBackground:SetAllPoints()
-	healthBackground:SetColorTexture(0, 0, 0, 0.6)
-	healthBar:Hide()
+	healthBar = U.NewBar(frame, HEALTH_HEIGHT)
+	powerBar = U.NewBar(frame, POWER_HEIGHT)
 
 	frame:SetScript("OnUpdate", OnUpdate)
 	frame:SetScript("OnEvent", OnEvent)
@@ -1459,6 +1507,8 @@ function ns.InitLabel()
 	frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 	frame:RegisterEvent("PLAYER_LOGIN")
 	frame:RegisterEvent("SKILL_LINES_CHANGED")
+	frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+	frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 	ns.RefreshLabel()
 
 	-- Gatherable objects (herbs, ore...) only exist as game tooltips: read the

@@ -10,11 +10,7 @@ local U = ns.Util
 local CHECK_EVERY = 0.2
 local GAP = 16
 local BASE_WIDTH = 230
-local LINES = {
-	{ "THEME_SAMPLE_NAME", 14, 1, 0.82, 0 },
-	{ "THEME_SAMPLE_ROLE", 12, 0.82, 0.75, 0.56 },
-	{ "THEME_SAMPLE_DETAIL", 11, 0.8, 0.8, 0.8 },
-}
+local LINES = ns.Skin.SAMPLE_LINES
 
 local holder, preview, skin, kicker
 local texts = {}
@@ -104,9 +100,8 @@ function ns.InitPreview()
 	holder = CreateFrame("Frame", "WandererPreview", UIParent)
 	holder:SetFrameStrata("FULLSCREEN_DIALOG")
 	holder:Hide()
-	kicker = ns.Skin.CreateText(holder, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
+	kicker = ns.Skin.CreateKicker(holder, L.PREVIEW_TITLE)
 	kicker:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
-	kicker:SetText(L.PREVIEW_TITLE:upper())
 	preview, skin = ns.Skin.CreateWindow(nil, nil, holder)
 	preview:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -6)
 	preview:EnableMouse(false)

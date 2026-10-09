@@ -2,7 +2,7 @@
 
 Immersion and comfort for your journey through Azeroth, made for **World of Warcraft Forever**.
 
-Names leave the heads of everyone around you and a label appears right above someone when you look at them. Conversations with NPCs become quiet scenes, your journey is written day by day in a travel journal, and your interface steps aside when nothing happens. The small comforts you would install a dozen addons for (auto sell junk, auto repair, instant loot, double-click fishing, private messages, movable windows...) are gathered in one.
+Names leave the heads of everyone around you and a label appears right above someone when you look at them. Conversations with NPCs become quiet scenes, every item tells you whether it is better for the branch you play, and your interface steps aside when nothing happens. The small comforts you would install a dozen addons for (auto sell junk, auto repair, instant loot, double-click fishing, reminders, private messages, movable windows...) are gathered in one.
 
 - **Download:** [CurseForge](https://www.curseforge.com/wow/addons/wanderer)
 - **Trailer:** [YouTube](https://youtu.be/iptaXzImWI4)

@@ -81,9 +81,7 @@ local function MarkBestReward()
 	if count < 2 or not QuestInfo_GetRewardButton or not QuestInfoFrame then return end
 	local best, bestPrice = nil, 0
 	for index = 1, count do
-		local link = Safe(GetQuestItemLink, "choice", index)
-		local price = link and select(11, Safe(C_Item and C_Item.GetItemInfo or GetItemInfo, link))
-		price = Clean(price) or 0
+		local price = U.SellPrice(Safe(GetQuestItemLink, "choice", index)) or 0
 		if price > bestPrice then best, bestPrice = index, price end
 	end
 	local rewardButton = best and Safe(QuestInfo_GetRewardButton, QuestInfoFrame.rewardsFrame, best)

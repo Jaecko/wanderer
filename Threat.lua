@@ -72,9 +72,7 @@ local function Alert(name)
 	alertShown, alertTarget = 0, 1
 	alert:Show()
 	driver:Show()
-	if SOUNDKIT and SOUNDKIT.UI_RAID_BOSS_WHISPER_WARNING then
-		pcall(PlaySound, SOUNDKIT.UI_RAID_BOSS_WHISPER_WARNING, "SFX")
-	end
+	U.PlaySound("UI_RAID_BOSS_WHISPER_WARNING", "SFX")
 end
 
 local function OnThreat(unit)

@@ -238,8 +238,7 @@ end
 -- itself: a message, a notice).
 function Skin.Sounds(window, open, close)
 	local function Play(key)
-		local sound = SOUNDKIT and SOUNDKIT[key]
-		if sound and PlaySound then pcall(PlaySound, sound) end
+		U.PlaySound(key)
 	end
 	window:HookScript("OnShow", function(self) if not self.quiet then Play(open) end end)
 	window:HookScript("OnHide", function(self)
@@ -252,6 +251,40 @@ end
 -- ns.root[save] when given, else at point), closed by its cross and by
 -- Escape. The cross closes directly (or calls onClose), never through the
 -- game's panel manager, locked during a fight. Returns the cross.
+-- The lines of a sample label (the live preview and the style cards):
+-- locale key, size, color.
+Skin.SAMPLE_LINES = {
+	{ "THEME_SAMPLE_NAME", 14, 1, 0.82, 0 },
+	{ "THEME_SAMPLE_ROLE", 12, 0.82, 0.75, 0.56 },
+	{ "THEME_SAMPLE_DETAIL", 11, 0.8, 0.8, 0.8 },
+}
+
+-- The game's color picker: onPick(r, g, b) while choosing, the color before on Cancel.
+function Skin.PickColor(r, g, b, onPick)
+	local picker = rawget(_G, "ColorPickerFrame") -- (the game's, filled in below for older games)
+	if not picker then return end
+	local function Current() return picker:GetColorRGB() end
+	if picker.SetupColorPickerAndShow then
+		picker:SetupColorPickerAndShow({ r = r, g = g, b = b, hasOpacity = false,
+			swatchFunc = function() onPick(Current()) end,
+			cancelFunc = function() onPick(r, g, b) end })
+		return
+	end
+	picker.func = function() onPick(Current()) end
+	picker.cancelFunc = function() onPick(r, g, b) end
+	picker.hasOpacity, picker.previousValues = false, { r, g, b }
+	picker:SetColorRGB(r, g, b)
+	picker:Hide()
+	picker:Show()
+end
+
+-- The small golden heading over a window ("TRAVEL JOURNAL"), placed by its owner.
+function Skin.CreateKicker(parent, text)
+	local kicker = Skin.CreateText(parent, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
+	if text then kicker:SetText(text:upper()) end
+	return kicker
+end
+
 function Skin.Dress(window, point, save, onClose)
 	window:EnableMouse(true)
 	window:SetMovable(true)

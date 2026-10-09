@@ -187,14 +187,11 @@ local function OnLine(event, unit)
 	elseif event == "LOOT_OPENED" and Clean(Safe(IsFishingLoot)) then
 		status.catches, status.streak = status.catches + 1, status.streak + 1
 		status.result, status.ended = "caught", GetTime()
-		local icon, item = Safe(GetLootSlotInfo, 1)
+		local _, item = Safe(GetLootSlotInfo, 1)
 		status.item = Clean(item)
-		local new = status.item and ns.JournalCatch and ns.JournalCatch(status.item, Clean(icon))
 		if Told() and ns.Toast then
 			local said = L.FISH_COUNT:format(status.catches)
-			if new then
-				said = L.FISH_NEW
-			elseif status.streak % STREAK_EVERY == 0 then
+			if status.streak % STREAK_EVERY == 0 then
 				said = L.FISH_STREAK:format(status.streak)
 			end
 			local name = status.item and CatchName(Clean(Safe(GetLootSlotLink, 1)), status.item)

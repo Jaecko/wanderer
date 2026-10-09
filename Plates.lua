@@ -32,6 +32,7 @@ local count = 0 -- plates shown
 local quiet = setmetatable({}, { __mode = "k" }) -- plate -> true while kept invisible
 local marks = setmetatable({}, { __mode = "k" }) -- plate -> its group mark (a name)
 local MARK_SIZE = 10
+local GUILD_MARK_ALPHA = 0.5 -- a guild member's name: there, never loud
 
 -- Whether a plate is kept invisible (the label then stands lower, on the head).
 function ns.IsPlateQuiet(plate) return quiet[plate] == true end
@@ -68,9 +69,20 @@ local function Quiet(unit)
 end
 
 -- A member of your group, other than you.
+-- A player other than you.
+local function OtherPlayer(unit)
+	return not Clean(Safe(UnitIsUnit, unit, "player")) and Clean(Safe(UnitIsPlayer, unit)) and true or false
+end
+
 local function Companion(unit)
-	if Clean(Safe(UnitIsUnit, unit, "player")) or not Clean(Safe(UnitIsPlayer, unit)) then return false end
+	if not OtherPlayer(unit) then return false end
 	return (Clean(Safe(UnitInParty, unit)) or Clean(Safe(UnitInRaid, unit))) and true or false
+end
+
+-- A member of your guild (not yourself), out of your group.
+local function Guildmate(unit)
+	if not OtherPlayer(unit) then return false end
+	return Clean(Safe(UnitIsInMyGuild, unit)) and true or false
 end
 
 -- An enemy whose name comes as you come near (out of a fight).
@@ -81,7 +93,9 @@ end
 
 local function MarkWanted(unit, isQuiet, plate)
 	if not isQuiet then return false end
-	if not ((ns.db.groupMarks and Companion(unit)) or NearEnemy(unit)) then return false end
+	if not ((ns.db.groupMarks and Companion(unit)) or (ns.db.guildMarks and Guildmate(unit)) or NearEnemy(unit)) then
+		return false
+	end
 	if ns.GameShowsName and ns.GameShowsName(unit) then return false end
 	-- The label describes this character already: gone at once, never under it.
 	if ns.LabelPlate and ns.LabelPlate() == plate then return false, true end
@@ -97,6 +111,13 @@ local function PartyColor()
 	local info = ChatTypeInfo and ChatTypeInfo.PARTY
 	if info and info.r then return info.r, info.g, info.b end
 	return 0.67, 0.67, 1
+end
+
+-- And for your guild (its guild chat).
+local function GuildColor()
+	local info = ChatTypeInfo and ChatTypeInfo.GUILD
+	if info and info.r then return info.r, info.g, info.b end
+	return 0.25, 1, 0.25
 end
 
 local function Mark(plate)
@@ -136,19 +157,23 @@ local function Update(elapsed)
 			local markOn, underLabel = MarkWanted(unit, wanted == 0, plate)
 			if markOn or marks[plate] then
 				local mark = Mark(plate)
+				local full = 1
 				if markOn then
 					pcall(mark.SetText, mark, (Safe(UnitName, unit)))
 					if Companion(unit) then
 						mark:SetTextColor(PartyColor())
+					elseif ns.db.guildMarks and Guildmate(unit) then
+						mark:SetTextColor(GuildColor())
+						full = GUILD_MARK_ALPHA
 					elseif ns.UnitColor then
 						mark:SetTextColor(ns.UnitColor(unit, Clean(Safe(UnitIsPlayer, unit))))
 					end
 				end
 				if underLabel then mark.tween:Set(0) end
-				local markAlpha = mark.tween:Step(markOn and 1 or 0, elapsed, FADE_IN, FADE_OUT)
+				local markAlpha = mark.tween:Step(markOn and full or 0, elapsed, FADE_IN, FADE_OUT)
 				mark:SetAlpha(markAlpha)
 				mark:SetShown(markAlpha > 0)
-				if markAlpha ~= (markOn and 1 or 0) then moving = true end
+				if markAlpha ~= (markOn and full or 0) then moving = true end
 			end
 		end
 	end

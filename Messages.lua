@@ -17,6 +17,7 @@ local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
 
 local WIDTH, HEIGHT = 560, 340
+local MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT = 460, 260, 1100, 900 -- resized by its corner
 local LIST_WIDTH = 150
 local ROW_HEIGHT = 30
 local MAX_LINES = 200 -- kept per person
@@ -41,6 +42,9 @@ local session = {} -- Battle.net conversations (not saved)
 
 -- Data -----------------------------------------------------------------------------------
 
+-- A Battle.net conversation (kept for the session only).
+local function IsBattleNet(key) return key:sub(1, 3) == "BN:" end
+
 local function Store()
 	ns.root.messages = ns.root.messages or {}
 	local key = ns.CharacterKey()
@@ -49,7 +53,7 @@ local function Store()
 end
 
 local function Conversation(key)
-	if key:sub(1, 3) == "BN:" then
+	if IsBattleNet(key) then
 		session[key] = session[key] or { lines = {}, unread = 0, last = 0 }
 		return session[key]
 	end
@@ -76,7 +80,7 @@ local function Trim()
 	for index = MAX_PEOPLE + 1, #all do
 		local key = all[index].key
 		if not all[index].talk.pinned then -- a pinned conversation is never forgotten
-			if key:sub(1, 3) == "BN:" then session[key] = nil else Store()[key] = nil end
+			if IsBattleNet(key) then session[key] = nil else Store()[key] = nil end
 		end
 	end
 end
@@ -151,8 +155,6 @@ local SEEN_FRESH = 600 -- seconds: older information says when it was seen
 local WHO_WAIT = 6 -- seconds before a /who without answer counts as "not found"
 local WHO_MISS_SHOWN = 30 -- seconds the "not found" stays
 
-local function IsBattleNet(key) return key:sub(1, 3) == "BN:" end
-
 local function Short(talk, key)
 	return talk.name or (Ambiguate and Clean(Safe(Ambiguate, key, "short"))) or key
 end
@@ -212,6 +214,9 @@ local function InfoLine(talk, key)
 	if talk.className then who[#who + 1] = Hex(color) .. talk.className .. "|r" end
 	if who[1] then parts[#parts + 1] = table.concat(who, " ") end
 	if talk.guild then parts[#parts + 1] = "<" .. talk.guild .. ">" .. (talk.rank and (" " .. talk.rank) or "") end
+	-- Who they are on the first line, where and how they are on the second.
+	local identity = table.concat(parts, "  |cff808080·|r  ")
+	parts = {}
 	if talk.zone then parts[#parts + 1] = talk.zone end
 	if talk.looking then
 		parts[#parts + 1] = "|cff808080" .. L.MESSAGES_WHO_WAIT .. "|r"
@@ -226,7 +231,9 @@ local function InfoLine(talk, key)
 	if talk.seen and time() - talk.seen > SEEN_FRESH and talk.online ~= true then
 		parts[#parts + 1] = "|cff808080" .. L.MESSAGES_SEEN:format(Safe(SecondsToTime, time() - talk.seen, true) or "?") .. "|r"
 	end
-	return table.concat(parts, "  |cff808080·|r  ")
+	local state = table.concat(parts, "  |cff808080·|r  ")
+	if identity ~= "" and state ~= "" then return identity .. "\n" .. state end
+	return identity .. state
 end
 
 local function RefreshHeader()
@@ -250,6 +257,7 @@ local function AskWho(key)
 	C_Timer.After(WHO_WAIT, function()
 		if whoFor ~= key then return end
 		whoFor = nil
+		Safe(Friends("SetWhoToUi"), false)
 		talk.looking, talk.whoMiss = nil, time()
 		RefreshHeader()
 	end)
@@ -276,6 +284,8 @@ local function OnWho()
 		end
 	end
 	whoFor = nil
+	-- Your own /who afterwards answers in the chat, as the game does.
+	Safe(Friends("SetWhoToUi"), false)
 	talk.looking = nil
 	if not found then talk.whoMiss = time() end
 	-- The game's list may open for the answer: closed again if it was closed.
@@ -329,6 +339,38 @@ local BUBBLE_LOOK = {
 	them = { bg = { 0.05, 0.05, 0.07, 0.88 }, edge = { 0.55, 0.55, 0.6, 0.9 }, text = { 0.95, 0.93, 0.88 } },
 	me = { bg = { 0.2, 0.14, 0.04, 0.88 }, edge = { 1, 0.82, 0, 0.75 }, text = { 1, 0.95, 0.8 } },
 }
+
+-- A side's look: Wanderer's, or built on the color chosen for it (its
+-- border lighter, its text dark on a light color).
+local function Look(me)
+	local colors = ns.root and type(ns.root.messageColors) == "table" and ns.root.messageColors
+	local chosen = colors and colors[me and "me" or "them"]
+	if type(chosen) ~= "table" then return me and BUBBLE_LOOK.me or BUBBLE_LOOK.them end
+	local r, g, b = chosen[1] or 0, chosen[2] or 0, chosen[3] or 0
+	local light = 0.299 * r + 0.587 * g + 0.114 * b > 0.6
+	return { bg = { r, g, b, 0.9 }, edge = { (r + 1) / 2, (g + 1) / 2, (b + 1) / 2, 0.9 },
+		text = light and { 0.08, 0.08, 0.08 } or { 0.97, 0.95, 0.9 } }
+end
+
+-- The color of a side, to choose (Wanderer's own when none was chosen).
+function ns.MessageColor(side)
+	local colors = ns.root and type(ns.root.messageColors) == "table" and ns.root.messageColors
+	local chosen = colors and colors[side]
+	if type(chosen) == "table" then return chosen[1], chosen[2], chosen[3] end
+	local bg = BUBBLE_LOOK[side].bg
+	return bg[1], bg[2], bg[3]
+end
+
+-- side: "me" or "them"; nil color: Wanderer's again (both sides when side is nil).
+function ns.SetMessageColor(side, r, g, b)
+	ns.root.messageColors = type(ns.root.messageColors) == "table" and ns.root.messageColors or {}
+	if side then
+		ns.root.messageColors[side] = r and { r, g, b } or nil
+	else
+		ns.root.messageColors = nil
+	end
+	if window and window:IsShown() and ns.RedrawMessages then ns.RedrawMessages() end
+end
 
 local bubbles, stamps = {}, {} -- pools
 local used = { bubbles = 0, stamps = 0, height = 0 }
@@ -410,7 +452,7 @@ local function AddBubble(entry, secretText)
 		and t - (lastShown.t or 0) <= TOGETHER
 	used.height = used.height + (lastShown and (together and SAME_GAP or OTHER_GAP) or 4)
 	local bubble = Bubble()
-	local look = entry.me and BUBBLE_LOOK.me or BUBBLE_LOOK.them
+	local look = Look(entry.me)
 	if bubble.SetBackdropColor then
 		bubble:SetBackdropColor(look.bg[1], look.bg[2], look.bg[3], look.bg[4])
 		bubble:SetBackdropBorderColor(look.edge[1], look.edge[2], look.edge[3], look.edge[4])
@@ -459,7 +501,7 @@ local function ShowConversation(key)
 end
 
 local function Forget(key)
-	if key:sub(1, 3) == "BN:" then session[key] = nil else Store()[key] = nil end
+	if IsBattleNet(key) then session[key] = nil else Store()[key] = nil end
 	if current == key then current = nil end
 	ns.RefreshMessages()
 end
@@ -610,7 +652,7 @@ local function Send()
 	input:SetText("")
 	Echo(current, text)
 	local ok, problem
-	if current:sub(1, 3) == "BN:" then
+	if IsBattleNet(current) then
 		if BNSendWhisper then ok, problem = pcall(BNSendWhisper, tonumber(current:sub(4)), text) end
 	else
 		local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
@@ -623,8 +665,17 @@ end
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererMessages", "MEDIUM")
 	ns.Skin.Sounds(window, "IG_CHARACTER_INFO_OPEN", "IG_CHARACTER_INFO_CLOSE")
-	window:SetSize(WIDTH, HEIGHT)
+	-- The size chosen last time, within reason.
+	local size = type(ns.root.messagesSize) == "table" and ns.root.messagesSize or {}
+	window:SetSize(math.min(MAX_WIDTH, math.max(MIN_WIDTH, tonumber(size[1]) or WIDTH)),
+		math.min(MAX_HEIGHT, math.max(MIN_HEIGHT, tonumber(size[2]) or HEIGHT)))
 	ns.Skin.Dress(window, { "LEFT", UIParent, "LEFT", 40, 60 }, "messagesPos")
+	-- A window of its own: the game's windows (the spellbook...) and Escape never
+	-- close it, the interface fades around it, and it stays in a fight (to
+	-- answer, if you wish). Its cross closes it, or Escape while writing.
+	for index = #(UISpecialFrames or {}), 1, -1 do
+		if UISpecialFrames[index] == "WandererMessages" then table.remove(UISpecialFrames, index) end
+	end
 	local margin = ns.Skin.Margin() + 6
 
 	-- The people, on the left.
@@ -632,6 +683,7 @@ local function CreateWindow()
 	list:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
 	list:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin)
 	list:SetWidth(LIST_WIDTH)
+	if list.SetClipsChildren then list:SetClipsChildren(true) end -- a short window: the last people under the rest
 	local line = window:CreateTexture(nil, "ARTWORK")
 	line:SetColorTexture(1, 0.82, 0, 0.2)
 	line:SetWidth(1)
@@ -694,10 +746,17 @@ local function CreateWindow()
 		window:Hide()
 	end)
 	thread = CreateFrame("ScrollFrame", "WandererMessagesHistory", window)
-	thread:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -10)
+	-- Room for the name and both lines of who they are, always: nothing
+	-- moves when a line comes (an answer to "look them up").
+	header:SetText("Ag")
+	info:SetText("Ag\nAg")
+	local tall = 3 + U.Measure(header, "GetStringHeight", 16) + 4 + U.Measure(info, "GetStringHeight", 26)
+	header:SetText("")
+	info:SetText("")
+	thread:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -10 - math.max(0, math.ceil(tall - PORTRAIT)))
 	thread:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 0, 8)
 	-- Its width is known from the window's (the frame may not be laid out yet).
-	thread.width = WIDTH - margin * 2 - LIST_WIDTH - 16
+	thread.width = window:GetWidth() - margin * 2 - LIST_WIDTH - 16
 	thread.content = CreateFrame("Frame", nil, thread)
 	thread.content:SetSize(thread.width, 1)
 	thread:SetScrollChild(thread.content)
@@ -708,11 +767,48 @@ local function CreateWindow()
 		self:SetVerticalScroll(math.min(range, math.max(0, value)))
 	end)
 
+	-- The corner: dragged, the window grows or shrinks; the bubbles follow once let go.
+	if window.SetResizable then
+		window:SetResizable(true)
+		if window.SetResizeBounds then
+			window:SetResizeBounds(MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT)
+		elseif window.SetMinResize then
+			window:SetMinResize(MIN_WIDTH, MIN_HEIGHT)
+			if window.SetMaxResize then window:SetMaxResize(MAX_WIDTH, MAX_HEIGHT) end
+		end
+		local grip = CreateFrame("Button", "WandererMessagesGrip", window)
+		grip:SetSize(16, 16)
+		grip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -3, 3)
+		grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+		grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+		grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+		grip:SetScript("OnMouseDown", function(_, button)
+			if button == "LeftButton" then window:StartSizing("BOTTOMRIGHT") end
+		end)
+		grip:SetScript("OnMouseUp", function()
+			window:StopMovingOrSizing()
+			local width, height = math.floor(window:GetWidth() + 0.5), math.floor(window:GetHeight() + 0.5)
+			ns.root.messagesSize = { width, height }
+			-- Its place kept as it is now (sizing may anchor it again).
+			local anchor, _, _, x, y = window:GetPoint(1)
+			if anchor then ns.root.messagesPos = { anchor, x, y } end
+			thread.width = width - margin * 2 - LIST_WIDTH - 16
+			thread.content:SetWidth(thread.width)
+			if current then ShowConversation(current) else ns.RefreshMessages() end
+		end)
+		window:HookScript("OnSizeChanged", function() ns.Skin.Get(window):Layout() end)
+	end
+
 	window:HookScript("OnShow", function(self)
 		self:SetScale(ns.Skin.Scale())
 		if current then ShowConversation(current) else ns.RefreshMessages() end
 	end)
 	ns.Skin.Get(window):Layout()
+end
+
+-- The conversation shown, drawn again (a color changed).
+function ns.RedrawMessages()
+	if current then ShowConversation(current) end
 end
 
 function ns.ToggleMessages(key)
@@ -757,7 +853,7 @@ local function OnMessage(event, text, name, guid, bnID)
 	end
 	local talk = Conversation(key)
 	local me = EVENTS[event] == "me"
-	if key:sub(1, 3) == "BN:" then
+	if IsBattleNet(key) then
 		-- The game gives a protected name: shown as is, never kept.
 		if not U.IsSecret(name) then talk.name = name end
 	else
@@ -800,8 +896,7 @@ local function OnMessage(event, text, name, guid, bnID)
 	-- with the game's own whisper sound instead (never both).
 	if not me and ns.db.messages.sound and ns.db.messages.hideInChat and GetTime() - lastSound >= SOUND_COOLDOWN then
 		lastSound = GetTime()
-		local sound = SOUNDKIT and SOUNDKIT.TELL_MESSAGE
-		if sound and PlaySound then pcall(PlaySound, sound) end
+		U.PlaySound("TELL_MESSAGE")
 	end
 	if current == key and window and window:IsShown() then
 		AddBubble(entry, not entry.text and text or nil)
@@ -830,7 +925,290 @@ local function Filter(_, event, _, name, ...)
 	return Clean(name) ~= nil
 end
 
+-- The button beside the chat ------------------------------------------------------------
+-- At the right of the game's social button, the very same button: its frame,
+-- every texture and its count copied as they are, only the friends' icon
+-- changed for a speech bubble and the friends online for what is unread (0
+-- included). It comes and goes with that button (another addon may hide it)
+-- and with its fading.
+
+local chatButton
+local CHAT_BUTTON_REFRESH = 0.5
+local BUBBLE = "Interface\\GossipFrame\\GossipGossipIcon"
+-- The game's own speech bubble of the chat buttons, when it has one.
+local BUBBLE_ATLASES = { "communities-icon-chat", "chatframe-button-icon-speech", "chatframe-button-icon-chat" }
+local BUBBLE_SIZE = 18
+-- A patch of the social picture's empty inside (pixels of its 32), at the
+-- lower left: away from its figure and its count.
+local INSIDE_PATCH = { 5, 9, 21, 25 }
+local INSIDE_INSET = 4
+
+local function SetBubble(texture)
+	for _, atlas in ipairs(BUBBLE_ATLASES) do
+		if C_Texture and C_Texture.GetAtlasInfo and Safe(C_Texture.GetAtlasInfo, atlas) and texture.SetAtlas then
+			texture:SetAtlas(atlas)
+			return
+		end
+	end
+	texture:SetTexture(BUBBLE)
+	texture:SetTexCoord(0, 1, 0, 1)
+end
+
+-- The yellow of the social button's figure.
+local BUBBLE_COLOR = { 1, 0.82, 0 }
+local GLOW_LOOPS = 3 -- times the button glows for a new whisper
+
+-- A new whisper: the button glows softly a few times, as the game's buttons do.
+local function MakeGlow(button, social)
+	if not button.CreateAnimationGroup then return end
+	local glow = button:CreateTexture(nil, "OVERLAY")
+	local highlight = social.GetHighlightTexture and social:GetHighlightTexture()
+	local file = highlight and Clean(Safe(highlight.GetTexture, highlight))
+	glow:SetTexture(file or "Interface\\Buttons\\ButtonHilight-Square")
+	glow:SetBlendMode("ADD")
+	glow:SetAllPoints(button)
+	glow:SetAlpha(0)
+	local pulse = button:CreateAnimationGroup()
+	if not pulse then return end
+	local rise = pulse:CreateAnimation("Alpha")
+	local fall = pulse:CreateAnimation("Alpha")
+	if not (rise and fall) then return end
+	rise:SetTarget(glow)
+	rise:SetFromAlpha(0)
+	rise:SetToAlpha(1)
+	rise:SetDuration(0.4)
+	rise:SetOrder(1)
+	fall:SetTarget(glow)
+	fall:SetFromAlpha(1)
+	fall:SetToAlpha(0)
+	fall:SetDuration(0.6)
+	fall:SetOrder(2)
+	pulse:SetLooping("REPEAT")
+	local loops = 0
+	pulse:SetScript("OnLoop", function(self)
+		loops = loops + 1
+		if loops >= GLOW_LOOPS then self:Stop() end
+	end)
+	pulse:SetScript("OnStop", function() glow:SetAlpha(0) end)
+	button.glow = function()
+		loops = 0
+		pulse:Stop()
+		pulse:Play()
+	end
+end
+
+local function SocialButton()
+	for _, name in ipairs({ "QuickJoinToastButton", "FriendsMicroButton", "ChatFrameSocialButton" }) do
+		local button = _G[name]
+		if button and not (button.IsForbidden and button:IsForbidden()) then return button end
+	end
+end
+
+-- The social button's own button textures, and only those it has.
+local function Dress(button, social)
+	local parts = {
+		{ "GetNormalTexture", "SetNormalAtlas", "SetNormalTexture" },
+		{ "GetPushedTexture", "SetPushedAtlas", "SetPushedTexture" },
+		{ "GetHighlightTexture", "SetHighlightAtlas", "SetHighlightTexture" },
+	}
+	for _, part in ipairs(parts) do
+		local get, setAtlas, setTexture = part[1], part[2], part[3]
+		local texture = social[get] and social[get](social)
+		local atlas = texture and texture.GetAtlas and Clean(Safe(texture.GetAtlas, texture))
+		local file = texture and texture.GetTexture and Clean(Safe(texture.GetTexture, texture))
+		if atlas and button[setAtlas] then
+			Safe(button[setAtlas], button, atlas)
+		elseif file then
+			Safe(button[setTexture], button, file)
+		end
+	end
+end
+
+-- Placed as the original is, on the copy's own parts.
+local function CopyPoints(copy, region, button, copies)
+	for index = 1, (region.GetNumPoints and region:GetNumPoints() or 0) do
+		local point, relative, relativePoint, x, y = region:GetPoint(index)
+		if point then
+			local to = (relative and copies[relative]) or button
+			copy:SetPoint(point, to, relativePoint or point, x or 0, y or 0)
+		end
+	end
+end
+
+-- Its friends' icon and count, as they are (its other layers, flashes and
+-- queue icons, only show while they play: never copied).
+local function CopyRegions(button, social)
+	local wanted = {}
+	for _, key in ipairs({ "FriendsButton", "FriendCount" }) do
+		if type(social[key]) == "table" then wanted[#wanted + 1] = social[key] end
+	end
+	local copies, order = {}, {}
+	for _, region in ipairs(wanted) do
+		if region.GetObjectType then
+			local kind = region:GetObjectType()
+			local copy
+			if kind == "Texture" then
+				local layer, sublevel = region:GetDrawLayer()
+				copy = button:CreateTexture(nil, layer, nil, sublevel)
+				local atlas = Clean(Safe(region.GetAtlas, region))
+				if atlas then
+					copy:SetAtlas(atlas)
+				else
+					local file = Clean(Safe(region.GetTexture, region))
+					if file then copy:SetTexture(file) end
+					Safe(copy.SetTexCoord, copy, region:GetTexCoord())
+				end
+				Safe(copy.SetVertexColor, copy, region:GetVertexColor())
+				Safe(copy.SetBlendMode, copy, region:GetBlendMode())
+			elseif kind == "FontString" then
+				local layer = region:GetDrawLayer()
+				copy = button:CreateFontString(nil, layer)
+				local font, size, flags = region:GetFont()
+				if font then copy:SetFont(font, size, flags) else copy:SetFontObject("GameFontNormalSmall") end
+				Safe(copy.SetTextColor, copy, region:GetTextColor())
+				Safe(copy.SetShadowOffset, copy, region:GetShadowOffset())
+				Safe(copy.SetShadowColor, copy, region:GetShadowColor())
+				Safe(copy.SetJustifyH, copy, region:GetJustifyH())
+			end
+			if copy then
+				local width, height = region:GetSize()
+				if width and width > 0 and height and height > 0 then copy:SetSize(width, height) end
+				copy:SetAlpha(region:GetAlpha() or 1)
+				copy:SetShown(region:IsShown())
+				copies[region] = copy
+				order[#order + 1] = region
+			end
+		end
+	end
+	for _, region in ipairs(order) do CopyPoints(copies[region], region, button, copies) end
+	return copies
+end
+
+function ns.RefreshChatWhisperButton()
+	if not chatButton then return end
+	local social = chatButton.social
+	-- The social button's own size and scale (known once the chat is laid out).
+	local width, height = social:GetSize()
+	if width and width > 0 and height and height > 0 then
+		if math.abs(chatButton:GetWidth() - width) > 0.5 or math.abs(chatButton:GetHeight() - height) > 0.5 then
+			chatButton:SetSize(width, height)
+		end
+		if chatButton.ownIcon then chatButton.icon:SetSize(width * 0.5, width * 0.5) end
+	end
+	local scale = Clean(Safe(social.GetScale, social))
+	if scale and scale > 0 and chatButton:GetScale() ~= scale then chatButton:SetScale(scale) end
+	chatButton:SetShown((Enabled() and social:IsShown()) and true or false)
+	local unread = ns.UnreadMessages()
+	chatButton.count:SetText(unread > 99 and "99+" or tostring(unread))
+	-- Where the friends' count is drawn on the social button, measured once
+	-- it is laid out: the same spot here.
+	local friends = chatButton.friends
+	if friends and not chatButton.countPlaced and friends.GetCenter then
+		local countX, countY = friends:GetCenter()
+		local left, top = social:GetLeft(), social:GetTop()
+		if countX and countY and left and top then
+			chatButton.count:ClearAllPoints()
+			chatButton.count:SetPoint("CENTER", chatButton, "TOPLEFT", countX - left, countY - top)
+			chatButton.countPlaced = true
+		end
+	end
+	chatButton.count:Show()
+	-- More unread than a moment ago, the window closed: a short glow.
+	if unread > (chatButton.lastUnread or unread) and chatButton.glow and not (window and window:IsShown()) then
+		chatButton.glow()
+	end
+	chatButton.lastUnread = unread
+end
+
+local function MakeChatButton()
+	local social = SocialButton()
+	if not social then return end
+	local button = CreateFrame("Button", "WandererChatWhisperButton", social:GetParent() or UIParent)
+	button.social = social
+	local width, height = social:GetSize()
+	button:SetSize((width and width > 0) and width or 32, (height and height > 0) and height or 32)
+	button:SetPoint("TOPLEFT", social, "TOPRIGHT", 0, 0)
+	button:SetFrameStrata(social:GetFrameStrata())
+	button:SetFrameLevel(social:GetFrameLevel())
+	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	Dress(button, social)
+	local copies = CopyRegions(button, social)
+	-- The friends' icon becomes a speech bubble, at the same place and size.
+	local picture = type(social.FriendsButton) == "table" and copies[social.FriendsButton]
+	local atlas = picture and Clean(Safe(picture.GetAtlas, picture))
+	local sheet = atlas and C_Texture and C_Texture.GetAtlasInfo and Safe(C_Texture.GetAtlasInfo, atlas)
+	if type(sheet) == "table" and sheet.leftTexCoord then
+		-- The social button's whole picture (its frame and its figure) stays;
+		-- its figure is covered by a piece of its own empty inside.
+		local function Across(px) return sheet.leftTexCoord + (sheet.rightTexCoord - sheet.leftTexCoord) * px / 32 end
+		local function Down(px) return sheet.topTexCoord + (sheet.bottomTexCoord - sheet.topTexCoord) * px / 32 end
+		local inside = button:CreateTexture(nil, "BACKGROUND", nil, 1)
+		inside:SetTexture(sheet.file or sheet.filename)
+		inside:SetTexCoord(Across(INSIDE_PATCH[1]), Across(INSIDE_PATCH[2]), Down(INSIDE_PATCH[3]), Down(INSIDE_PATCH[4]))
+		inside:SetPoint("TOPLEFT", button, "TOPLEFT", INSIDE_INSET, -INSIDE_INSET)
+		inside:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -INSIDE_INSET, INSIDE_INSET)
+		button.icon = button:CreateTexture(nil, "ARTWORK")
+		SetBubble(button.icon)
+		button.icon:SetSize(BUBBLE_SIZE, BUBBLE_SIZE)
+		button.icon:SetPoint("CENTER", button, "CENTER", 0, 3)
+	elseif picture then
+		SetBubble(picture)
+		picture:ClearAllPoints()
+		picture:SetPoint("CENTER", button, "CENTER", 0, 3)
+		picture:SetSize(BUBBLE_SIZE, BUBBLE_SIZE)
+		button.icon = picture
+	else
+		button.icon = button:CreateTexture(nil, "ARTWORK")
+		SetBubble(button.icon)
+		button.icon:SetPoint("TOP", button, "TOP", 0, -4)
+		button.icon:SetSize(button:GetWidth() * 0.5, button:GetWidth() * 0.5)
+		button.ownIcon = true
+	end
+	-- Yellow, as the social button's figure.
+	button.icon:SetVertexColor(BUBBLE_COLOR[1], BUBBLE_COLOR[2], BUBBLE_COLOR[3])
+	-- The friends online become what is unread: a text of its own, on top of
+	-- everything, in the friends' count's font and at its place on the button.
+	local friends = type(social.FriendCount) == "table" and social.FriendCount or nil
+	local copied = friends and copies[friends]
+	if copied then copied:Hide() end
+	button.count = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	if friends then
+		local font, size, flags = friends:GetFont()
+		if font then button.count:SetFont(font, size, flags) end
+		Safe(button.count.SetTextColor, button.count, friends:GetTextColor())
+	end
+	button.count:SetPoint("BOTTOM", button, "BOTTOM", 0, 3)
+	button.friends = friends
+	button:SetScript("OnClick", function() ns.ToggleMessages() end)
+	button:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		local unread = ns.UnreadMessages()
+		GameTooltip:AddLine(unread > 0 and L.MENU_MESSAGES_UNREAD:format(unread) or L.MESSAGES_TITLE)
+		GameTooltip:Show()
+	end)
+	button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	-- With the social button: shown, hidden and faded as it is.
+	social:HookScript("OnShow", ns.RefreshChatWhisperButton)
+	social:HookScript("OnHide", ns.RefreshChatWhisperButton)
+	local since = 0
+	local watcher = CreateFrame("Frame", nil, UIParent)
+	watcher:SetScript("OnUpdate", function(_, elapsed)
+		since = since + elapsed
+		if since < CHAT_BUTTON_REFRESH then return end
+		since = 0
+		local alpha = Clean(Safe(social.GetAlpha, social))
+		if alpha and button:GetAlpha() ~= alpha then button:SetAlpha(alpha) end
+		ns.RefreshChatWhisperButton()
+	end)
+	MakeGlow(button, social)
+	chatButton = button
+	ns.RefreshChatWhisperButton()
+end
+
 function ns.InitMessages()
+	-- A surprise in the social button's parts never stops the messages.
+	local ok, failure = pcall(MakeChatButton)
+	if not ok and ns.debug then ns.Print("chat button: " .. tostring(failure)) end
 	local frame = CreateFrame("Frame")
 	for event in pairs(EVENTS) do frame:RegisterEvent(event) end
 	frame:RegisterEvent("PLAYER_REGEN_ENABLED")

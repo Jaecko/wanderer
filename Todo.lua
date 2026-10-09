@@ -172,10 +172,7 @@ local function Row(index)
 			return OpenMenu(self)
 		else
 			self.item.done = not self.item.done or nil
-			-- Done: written in the journal's chronicle, as the rest of the journey.
-			if self.item.done and ns.JournalNote then ns.JournalNote("todo", self.item.text) end
-			local sound = SOUNDKIT and SOUNDKIT[self.item.done and "IG_MAINMENU_OPTION_CHECKBOX_ON" or "IG_MAINMENU_OPTION_CHECKBOX_OFF"]
-			if sound then pcall(PlaySound, sound) end
+			U.PlaySound(self.item.done and "IG_MAINMENU_OPTION_CHECKBOX_ON" or "IG_MAINMENU_OPTION_CHECKBOX_OFF")
 		end
 		Refresh()
 	end)
@@ -258,10 +255,8 @@ local function CreateWindow()
 	window:SetWidth(WIDTH)
 	ns.Skin.Dress(window, { "RIGHT", UIParent, "RIGHT", -260, 80 }, "todoPos")
 	local margin = ns.Skin.Margin() + 6
-	-- Under the journal's heading, like its pages.
-	kicker = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
+	kicker = ns.Skin.CreateKicker(window, L.ADDON_TITLE)
 	kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
-	kicker:SetText(L.JOURNAL_OPEN:upper())
 	title = ns.Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
 	title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
 	empty = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.6, 0.6, 0.6)

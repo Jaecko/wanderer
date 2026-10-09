@@ -154,7 +154,46 @@ local function OnDefaultAnchor(tooltip, parent)
 	end
 end
 
+-- The power under the game's health bar of its tooltip, kept up to date.
+local powerBar
+local POWER_REFRESH = 0.2
+
+local function UpdateTooltipPower()
+	if not powerBar then return end
+	local unit = GameTooltip:IsShown() and select(2, Safe(GameTooltip.GetUnit, GameTooltip))
+	local health = _G.GameTooltipStatusBar
+	local on = unit and ns.db and ns.db.enabled and ns.db.label.showPower and health and health:IsShown()
+	powerBar:SetShown(on and ns.Util.FillPowerBar(powerBar, unit) or false)
+end
+
+local function MakeTooltipPower()
+	local health = _G.GameTooltipStatusBar
+	if not (GameTooltip and health) then return end
+	powerBar = ns.Util.NewBar(GameTooltip, 3, "WandererTooltipPower")
+	powerBar:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, -1)
+	powerBar:SetPoint("TOPRIGHT", health, "BOTTOMRIGHT", 0, -1)
+	local since = 0
+	powerBar:SetScript("OnUpdate", function(_, elapsed)
+		since = since + elapsed
+		if since < POWER_REFRESH then return end
+		since = 0
+		UpdateTooltipPower()
+	end)
+	GameTooltip:HookScript("OnHide", function() powerBar:Hide() end)
+	if TooltipDataProcessor and Enum and Enum.TooltipDataType and Enum.TooltipDataType.Unit then
+		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tooltip)
+			if tooltip == GameTooltip then UpdateTooltipPower() end
+		end)
+	elseif GameTooltip.HasScript and GameTooltip:HasScript("OnTooltipSetUnit") then
+		GameTooltip:HookScript("OnTooltipSetUnit", UpdateTooltipPower)
+	end
+	if GameTooltip.HasScript and GameTooltip:HasScript("OnTooltipCleared") then
+		GameTooltip:HookScript("OnTooltipCleared", function() powerBar:Hide() end)
+	end
+end
+
 function ns.InitTooltips()
+	MakeTooltipPower()
 	for _, name in ipairs(TOOLTIPS) do Track(_G[name]) end
 	-- Blizzard sets up the frame of every tooltip here, including ones Wanderer
 	-- does not know by name (options, pets, quests...): the engine applies over it.
