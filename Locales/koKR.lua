@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "새로운 기능",
 	NEWS_SHOW_BUTTON = "보기",
 	NEWS_SHOW_DESC = "이번 Wanderer 버전의 변경 사항.",
-	NEWS_LINES = "착용할 수 있는 아이템 위에: Pawn처럼 지금 전문화에 더 좋은지 알려 주며, 가중치는 직접 정하거나 가져올 수 있습니다.\n야성 드루이드는 곰과 표범을 따로 봅니다. 캐릭터 창의 버튼으로 가중치를 엽니다.\n길드원의 이름이 머리 위에 흐릿하게 떠오르고, 사라진 강화 효과를 알려 줍니다.\n전투 중 라벨은 핵심만 남기고 대상을 떠납니다. 생명력 아래에 자원 바가 생깁니다.\n귓속말: 전용 창, 대화창 옆 버튼, 원하는 색.\n모든 대화창에 같은 글자 크기, 길드 창의 링크, 배치에서 작아진 자동 공격 타이머.\n쓰임새별로 정리된 설정(일상, 파티). 더 가벼운 Wanderer를 위해 여행 일지와 세션 요약을 뺐습니다.",
+	NEWS_LINES = "이제 Wanderer에 확장 애드온을 더할 수 있습니다: 각각 설정에 자기 페이지가 있고 프로필을 따릅니다.\n첫 번째인 Wanderer Bags는 가방과 은행을 Wanderer 창 하나에 모읍니다: 종류별 정리, 검색, 어디서나 볼 수 있는 은행. CurseForge와 Wago에서.",
 	PREVIEW_TITLE = "미리 보기",
 	GESTURES_GREET = "대화하는 인물에게 인사",
 	GESTURES_GREET_DESC = "대화를 시작할 때 가끔 캐릭터가 말없이 손을 흔들어 인사합니다(게임의 /손흔들기 감정 표현, 주변 플레이어에게 보입니다).",
@@ -812,6 +812,7 @@ for key, text in pairs({
 	WELCOME_HIGHLIGHT_ITEMS = "그리고 한눈에, 아이템이 지금 전문화에 더 좋은지 알 수 있습니다.",
 
 	WEIGHTS_BUTTON = "가중치",
+
 
 
 }) do L[key] = text end

@@ -239,6 +239,41 @@ local DEFAULTS = {
 	},
 }
 ns.DEFAULTS = DEFAULTS
+
+-- Extensions --------------------------------------------------------------------------------
+-- Another addon of the family (Wanderer Bags...) joins Wanderer through the
+-- global Wanderer: its settings live in Wanderer's profiles (spec.key), its
+-- options page among Wanderer's, it is refreshed with the rest, and it draws
+-- with the same engine (Skin) as every Wanderer window.
+ns.EXTENSIONS = {}
+
+local function RegisterExtension(spec)
+	if type(spec) ~= "table" or type(spec.key) ~= "string" or DEFAULTS[spec.key] then return false end
+	ns.EXTENSIONS[#ns.EXTENSIONS + 1] = spec
+	DEFAULTS[spec.key] = spec.defaults or {}
+	for path, range in pairs(spec.ranges or {}) do ns.RANGES[path] = range end
+	-- The active profile gets them now; the others when they are chosen.
+	if ns.db then
+		ns.db[spec.key] = type(ns.db[spec.key]) == "table" and ns.db[spec.key] or {}
+		for key, value in pairs(DEFAULTS[spec.key]) do
+			if type(ns.db[spec.key][key]) ~= type(value) then ns.db[spec.key][key] = value end
+		end
+	end
+	return true
+end
+
+_G.Wanderer = setmetatable({
+	RegisterExtension = RegisterExtension,
+	Settings = function(key) return ns.db and ns.db.enabled and ns.db[key] or nil end,
+	Util = ns.Util,
+	Print = function(text) ns.Print(text) end,
+	-- What an item is worth to you: { text, r, g, b } lines, the first one the best.
+	UpgradeLines = function(link) return ns.UpgradeLines and ns.UpgradeLines(link) or {} end,
+	IsUpgrade = function(link) return ns.IsUpgrade and ns.IsUpgrade(link) or false end,
+}, {
+	-- The engine is made after this file: given when asked.
+	__index = function(_, key) if key == "Skin" then return ns.Skin end end,
+})
 for _, cat in ipairs(ns.CATEGORIES) do DEFAULTS.show[cat.key] = false end
 
 -- Allowed values, shared by the options panel and the checks of saved and
@@ -643,6 +678,9 @@ end
 -- Refreshes every module after a settings change.
 function ns.RefreshAll()
 	ns.Apply()
+	for _, extension in ipairs(ns.EXTENSIONS) do
+		if extension.refresh then pcall(extension.refresh) end
+	end
 	if ns.RefreshOptions then ns.RefreshOptions() end
 	if ns.RefreshLabel then ns.RefreshLabel() end
 	if ns.RefreshMinimapButton then ns.RefreshMinimapButton() end
@@ -947,6 +985,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		-- Values are restored on every clean logout, so the current ones are the
 		-- player's own. After a crash (dirty), keep the previous snapshot.
 		if not ns.root.dirty or not ns.root.original then Snapshot() end
+		if ns.FinishOptions then ns.FinishOptions() end
 		ns.inCombat = InCombatLockdown()
 		ns.zone = DetectZone()
 		ns.Apply()

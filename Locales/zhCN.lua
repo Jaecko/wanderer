@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "更新内容",
 	NEWS_SHOW_BUTTON = "显示",
 	NEWS_SHOW_DESC = "此版本 Wanderer 的变化。",
-	NEWS_LINES = "在你可以装备的物品上：像 Pawn 一样显示对你的天赋系是更好还是更差；权重可以自己调整或导入。\n野性德鲁伊会同时看到熊和猎豹；角色面板上的按钮可打开权重。\n公会成员的名字淡淡地浮在头顶；消失的增益会提醒你重新施放。\n战斗中标签只保留要点并离开你的目标；生命条下方新增能量条。\n密语：独立的窗口、聊天旁的按钮、你选择的颜色。\n所有聊天窗口统一文字大小，公会窗口中的链接，布局中缩小的攻击计时条。\n设置按用途整理（日常、队伍）；移除旅行日志和本次游戏总结，让 Wanderer 更轻。",
+	NEWS_LINES = "Wanderer 现在可以加入扩展：每个扩展在设置中都有自己的页面，并跟随你的配置。\n第一个扩展 Wanderer Bags 把你的背包和银行放进一个 Wanderer 窗口：按类别排列，可搜索，随处查看银行。见 CurseForge 和 Wago。",
 	PREVIEW_TITLE = "预览",
 	GESTURES_GREET = "向交谈的人物打招呼",
 	GESTURES_GREET_DESC = "开始与某角色交谈时，你的角色偶尔会无声地向其挥手（游戏的 /挥手 表情，附近玩家可见）。",
@@ -812,6 +812,7 @@ for key, text in pairs({
 	WELCOME_HIGHLIGHT_ITEMS = "一眼就能看出物品是否更适合你所玩的天赋系。",
 
 	WEIGHTS_BUTTON = "权重",
+
 
 
 }) do L[key] = text end

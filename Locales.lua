@@ -436,7 +436,7 @@ local L = {
 	NEWS_SHOW = "What's new",
 	NEWS_SHOW_BUTTON = "Show",
 	NEWS_SHOW_DESC = "The changes in this version of Wanderer.",
-	NEWS_LINES = "Over an item you could wear: better or worse for the branch you play, like Pawn; the weights are yours to set, or to import.\nThe feral druid sees the bear and the cat; a small button on the character sheet opens the weights.\nYour guild's names float faintly over their heads; your blessings that fade are said, to cast again.\nIn a fight the label keeps only what matters, and leaves your target; a power bar under the health bar.\nThe private messages: a window of their own, a button by the chat, the colors of your choice.\nOne text size for every chat window, links in the guild's windows, the swing timer small in the layouts.\nThe options sorted by use (Every day, Group); the travel journal and the session summary are gone, for a lighter Wanderer.",
+	NEWS_LINES = "Wanderer now welcomes extensions: each has its own page in the options and follows your profiles.\nThe first one, Wanderer Bags, puts your bags and your bank in one Wanderer window: sorted by kind, searchable, your bank viewable anywhere. On CurseForge and Wago.",
 	PREVIEW_TITLE = "Preview",
 	GESTURES_GREET = "Greet the characters you talk to",
 	GESTURES_GREET_DESC = "Your character waves at a character when starting to talk to them, once in a while, without a word (the game's /wave emote, seen by players nearby).",
@@ -826,6 +826,7 @@ local L = {
 	WELCOME_HIGHLIGHT_ITEMS = "And at a glance, whether an item is better for the branch you play.",
 
 	WEIGHTS_BUTTON = "Weights",
+
 
 
 }

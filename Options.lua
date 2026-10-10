@@ -758,8 +758,26 @@ function ns.InitOptions()
 	-- First folded page: the predefined styles (cards with previews).
 	if ns.RegisterThemesPage and Settings.RegisterVerticalLayoutSubcategory then ns.RegisterThemesPage(mainCategory) end
 	for _, page in ipairs({ NamesPage, LabelPage, ContentPage, TooltipsPage, InterfacePage, ActionBarsPage, ImmersionPage,
-		ConversationsPage, PracticalPage, GroupPage, SocialPage, ProfilesPage }) do
+		ConversationsPage, PracticalPage, GroupPage, SocialPage }) do
 		page()
 	end
+end
+
+-- Once logged in (the extensions are loaded by then): their pages, the
+-- profiles last, and the whole registered with the game.
+local finished = false
+function ns.FinishOptions()
+	if finished or not mainCategory then return end
+	finished = true
+	local tools = { Header = Header, Checkbox = TableCheckbox, Slider = Slider, Dropdown = Dropdown, Button = Button,
+		Under = Under, IsOn = IsOn, CloseSettings = CloseSettings }
+	for _, extension in ipairs(ns.EXTENSIONS) do
+		if extension.options then
+			Page(extension.title)
+			local ok, problem = pcall(extension.options, tools)
+			if not ok and ns.debug then ns.Print(tostring(problem)) end
+		end
+	end
+	ProfilesPage()
 	Settings.RegisterAddOnCategory(mainCategory)
 end

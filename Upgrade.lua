@@ -397,6 +397,22 @@ function ns.UpgradeLines(link)
 	return lines
 end
 
+-- Better for one of your scales (or a place left empty): the bags' green arrow.
+function ns.IsUpgrade(link)
+	if not (ns.db and ns.db.enabled and ns.db.tooltips.upgrade) or not link then return false end
+	local class = ClassFile()
+	if not class then return false end
+	local _, _, _, equip, _, itemClass, subclass = Safe(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant, link)
+	equip, itemClass, subclass = Clean(equip), Clean(itemClass), Clean(subclass)
+	local slots = equip and SLOTS[equip]
+	if not slots or not Wearable(class, itemClass, subclass, equip) then return false end
+	for _, scale in ipairs(Scales(class)) do
+		local change = Compare(link, equip, slots, scale.weights)
+		if change == "new" or change == "useful" or (type(change) == "number" and change >= 1) then return true end
+	end
+	return false
+end
+
 -- (tests) The first line's text.
 function ns.UpgradeLine(link)
 	local line = ns.UpgradeLines(link)[1]

@@ -13,7 +13,7 @@
 ## Notes-zhTW: 為你的旅程帶來沉浸與便利：隱藏名稱、豐富的滑鼠懸停標籤、安靜的對話場景、按天賦系評估物品以及許多貼心的小功能。
 ## Category: Immersion
 ## Category-frFR: Immersion
-## Version: 0.38.0
+## Version: 0.39.0
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 ## SavedVariables: WandererDB
 ## AddonCompartmentFunc: Wanderer_OnAddonCompartmentClick

@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "Novedades",
 	NEWS_SHOW_BUTTON = "Mostrar",
 	NEWS_SHOW_DESC = "Los cambios de esta versión de Wanderer.",
-	NEWS_LINES = "Sobre un objeto que podrías llevar: mejor o peor para tu rama, como Pawn; los pesos se ajustan o se importan.\nEl druida feral ve el oso y el felino; un botón en la ficha de personaje abre los pesos.\nLos nombres de tu hermandad flotan tenues sobre sus cabezas; tus mejoras disipadas se avisan.\nEn combate la etiqueta solo guarda lo esencial y deja tu objetivo; una barra de recurso bajo la salud.\nLos mensajes privados: una ventana propia, un botón junto al chat, los colores que elijas.\nUn mismo tamaño de texto para todos los chats, enlaces en las ventanas de hermandad, el temporizador de golpe pequeño en las disposiciones.\nOpciones ordenadas por uso (Día a día, Grupo); el diario de viaje y el resumen de sesión se van, para un Wanderer más ligero.",
+	NEWS_LINES = "Wanderer ahora acoge extensiones: cada una tiene su página en las opciones y sigue tus perfiles.\nLa primera, Wanderer Bags, reúne tus bolsas y tu banco en una ventana de Wanderer: ordenados por tipo, con búsqueda, tu banco consultable en cualquier lugar. En CurseForge y Wago.",
 	PREVIEW_TITLE = "Vista previa",
 	GESTURES_GREET = "Saludar a los personajes con los que hablas",
 	GESTURES_GREET_DESC = "Tu personaje saluda con la mano a un personaje al empezar a hablarle, de vez en cuando y sin decir nada (el emote /saludar del juego, visible para los jugadores cercanos).",
@@ -812,6 +812,7 @@ for key, text in pairs({
 	WELCOME_HIGHLIGHT_ITEMS = "Y de un vistazo, si un objeto es mejor para la rama que juegas.",
 
 	WEIGHTS_BUTTON = "Pesos",
+
 
 
 }) do L[key] = text end
