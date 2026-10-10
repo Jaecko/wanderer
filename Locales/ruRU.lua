@@ -815,4 +815,9 @@ for key, text in pairs({
 
 
 
+	SECTION_EXTENSIONS = "Дополнения",
+	EXT_GET_BUTTON = "Получить",
+	EXT_WELCOME_LINE = "|cffffd100%s|r: %s (щёлкните, чтобы получить адрес).",
+	EXT_BAGS_SHORT = "ваши сумки и банк в одном окне",
+	EXT_BAGS = "Ваши сумки и банк в одном окне Wanderer: по видам, с поиском, уровнем предметов и зелёной стрелкой, банк можно посмотреть где угодно. Отдельная загрузка: найдите Wanderer Bags в приложении CurseForge или скопируйте адрес.",
 }) do L[key] = text end

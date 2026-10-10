@@ -815,4 +815,9 @@ for key, text in pairs({
 
 
 
+	SECTION_EXTENSIONS = "Erweiterungen",
+	EXT_GET_BUTTON = "Holen",
+	EXT_WELCOME_LINE = "|cffffd100%s|r: %s (klicken für die Adresse).",
+	EXT_BAGS_SHORT = "deine Taschen und deine Bank in einem Fenster",
+	EXT_BAGS = "Deine Taschen und deine Bank in einem Wanderer-Fenster: nach Art geordnet, durchsuchbar, mit Gegenstandsstufe und grünem Pfeil, deine Bank überall einsehbar. Ein eigener Download: suche Wanderer Bags in der CurseForge-App oder kopiere die Adresse.",
 }) do L[key] = text end

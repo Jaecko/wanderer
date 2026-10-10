@@ -388,6 +388,22 @@ local function ReadyPage()
 	for index, tip in ipairs(TIPS) do
 		previous = IconLine(page, tip[1], L[tip[2]], previous, index == 1 and 16 or 12)
 	end
+	-- The extensions not installed yet: a line each, its address a click away.
+	for _, offer in ipairs(ns.MissingExtensions and ns.MissingExtensions() or {}) do
+		previous = IconLine(page, offer.icon, L.EXT_WELCOME_LINE:format(offer.name, L[offer.text .. "_SHORT"]), previous, 12)
+		local link = CreateFrame("Button", nil, page)
+		link:SetPoint("TOPLEFT", previous, "TOPLEFT", 0, 0)
+		link:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+		link:SetHeight(18)
+		link:SetScript("OnClick", function() ns.OfferExtension(offer) end)
+		link:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+			GameTooltip:AddLine(offer.name, 1, 0.82, 0)
+			GameTooltip:AddLine(L[offer.text], 1, 1, 1, true)
+			GameTooltip:Show()
+		end)
+		link:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	end
 	local options = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
 	options:SetText(L.WELCOME_OPTIONS)
 	options:SetSize(math.max(140, U.Measure(options:GetFontString() or options, "GetStringWidth", 110) + 30), 24)

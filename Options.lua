@@ -323,6 +323,15 @@ local function HomePage()
 	-- Where the other settings are.
 	Header(L.SECTION_PAGES)
 
+	-- Wanderer's extensions not installed yet: where to find them.
+	local missing = ns.MissingExtensions and ns.MissingExtensions() or {}
+	if missing[1] then
+		Header(L.SECTION_EXTENSIONS)
+		for _, offer in ipairs(missing) do
+			Button(offer.name, L.EXT_GET_BUTTON, L[offer.text], function() ns.OfferExtension(offer) end)
+		end
+	end
+
 	Header(L.SECTION_RESTORE)
 	Button(L.RESTORE, L.RESTORE_BUTTON, L.RESTORE_DESC, function()
 		ns.SetEnabled(false)

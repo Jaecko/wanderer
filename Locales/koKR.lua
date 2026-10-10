@@ -815,4 +815,9 @@ for key, text in pairs({
 
 
 
+	SECTION_EXTENSIONS = "확장",
+	EXT_GET_BUTTON = "받기",
+	EXT_WELCOME_LINE = "|cffffd100%s|r: %s (클릭하면 주소).",
+	EXT_BAGS_SHORT = "가방과 은행을 창 하나에",
+	EXT_BAGS = "가방과 은행을 Wanderer 창 하나에: 종류별 정리, 검색, 아이템 레벨과 초록 화살표, 어디서나 볼 수 있는 은행. 별도 다운로드: CurseForge 앱에서 Wanderer Bags를 검색하거나 주소를 복사하세요.",
 }) do L[key] = text end

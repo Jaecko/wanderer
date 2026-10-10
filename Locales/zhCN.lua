@@ -815,4 +815,9 @@ for key, text in pairs({
 
 
 
+	SECTION_EXTENSIONS = "扩展",
+	EXT_GET_BUTTON = "获取",
+	EXT_WELCOME_LINE = "|cffffd100%s|r：%s（点击获取地址）。",
+	EXT_BAGS_SHORT = "背包和银行合在一个窗口",
+	EXT_BAGS = "你的背包和银行合在一个 Wanderer 窗口中：按类别排列，可搜索，显示物品等级和绿色箭头，随处查看银行。需另外下载：在 CurseForge 应用中搜索 Wanderer Bags，或复制它的地址。",
 }) do L[key] = text end

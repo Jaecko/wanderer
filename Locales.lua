@@ -829,6 +829,11 @@ local L = {
 
 
 
+	SECTION_EXTENSIONS = "Extensions",
+	EXT_GET_BUTTON = "Get it",
+	EXT_WELCOME_LINE = "|cffffd100%s|r: %s (click for its address).",
+	EXT_BAGS_SHORT = "your bags and your bank in one window",
+	EXT_BAGS = "Your bags and your bank in one Wanderer window: sorted by kind, searchable, the item level and the green arrow, your bank viewable anywhere. A separate download: search Wanderer Bags in the CurseForge app, or copy its address.",
 }
 
 
