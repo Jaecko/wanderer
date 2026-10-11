@@ -51,18 +51,7 @@ local function Change(stat, direction)
 	Refresh()
 end
 
--- A small text button, gold when hovered, as the journal's.
-local function TextButton(parent, text, onClick)
-	local button = CreateFrame("Button", nil, parent)
-	button.text = ns.Skin.CreateText(button, "GameTooltipTextSmall", 0.75, 0.68, 0.5)
-	button.text:SetPoint("CENTER")
-	button.text:SetText(text)
-	button:SetSize(U.Measure(button.text, "GetStringWidth", 60) + 10, 18)
-	button:SetScript("OnClick", onClick)
-	button:SetScript("OnEnter", function(self) self.text:SetTextColor(GOLD[1], GOLD[2], GOLD[3]) end)
-	button:SetScript("OnLeave", function(self) self.text:SetTextColor(0.75, 0.68, 0.5) end)
-	return button
-end
+local function TextButton(parent, text, onClick) return ns.Skin.CreateLink(parent, text, onClick) end
 
 local function Row(index)
 	if rows[index] then return rows[index] end

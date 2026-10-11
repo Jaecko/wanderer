@@ -533,6 +533,7 @@ local function TooltipsPage()
 	end), upgrade, IsOn("tooltips", "upgrade"))
 	Under(Button(L.UPGRADE_IMPORT, L.UPGRADE_IMPORT_BUTTON, L.UPGRADE_IMPORT_DESC, function() Popup("WANDERER_IMPORT_SCALE") end),
 		upgrade, IsOn("tooltips", "upgrade"))
+	TableCheckbox("tooltips", "reagents", L.TOOLTIPS_REAGENTS, L.TOOLTIPS_REAGENTS_DESC)
 	Checkbox("HIDE_TOOLTIP", L.HIDE_TOOLTIP, L.HIDE_TOOLTIP_DESC, ns.DEFAULTS.hideUnitTooltip,
 		function() return ns.db.hideUnitTooltip end,
 		function(value) ns.db.hideUnitTooltip = value end)
@@ -639,6 +640,7 @@ local function ConversationsPage()
 	TableCheckbox("scene", "camera", L.SCENE_CAMERA, L.SCENE_CAMERA_DESC)
 
 	Header(L.SECTION_QUESTS)
+	TableCheckbox("quest", "tags", L.QUEST_TAGS, L.QUEST_TAGS_DESC)
 	TableCheckbox("quest", "autoAccept", L.QUEST_AUTO_ACCEPT, L.QUEST_AUTO_ACCEPT_DESC)
 	TableCheckbox("quest", "autoTurnIn", L.QUEST_AUTO_TURNIN, L.QUEST_AUTO_TURNIN_DESC)
 	TableCheckbox("quest", "bestReward", L.QUEST_BEST_REWARD, L.QUEST_BEST_REWARD_DESC)
@@ -687,6 +689,22 @@ local function GroupPage()
 	Header(L.SECTION_GROUP_HELP)
 	TableCheckbox("buffs", "remind", L.BUFF_REMIND, L.BUFF_REMIND_DESC)
 	TableCheckbox("world", "threshold", L.THRESHOLD, L.THRESHOLD_DESC)
+	-- The game's damage meter: shown by profile (the dungeons' one: shown), text only is Wanderer's.
+	Header(L.SECTION_METER)
+	local meter = Dropdown("METER_SHOW", L.METER_SHOW, L.METER_SHOW_DESC, "own",
+		{ { "own", L.METER_SHOW_OWN }, { "on", L.METER_SHOW_ON }, { "off", L.METER_SHOW_OFF } },
+		function() return ns.db.meter.show end,
+		function(value)
+			ns.db.meter.show = value
+			ns.Apply()
+		end)
+	Under(Dropdown("METER_LOOK", L.METER_LOOK, L.METER_LOOK_DESC, "game",
+		{ { "game", L.METER_LOOK_GAME }, { "text", L.METER_LOOK_TEXT } },
+		function() return ns.db.meter.look end,
+		function(value)
+			ns.db.meter.look = value
+			if ns.ApplyMeter then ns.ApplyMeter() end
+		end), meter, function() return ns.db.meter.show ~= "off" end)
 end
 
 local function SocialPage()

@@ -224,7 +224,7 @@ local function Begin()
 	since = since or GetTime()
 	ns.SetCurtainReason("away", true)
 	CameraAway()
-	kicker:SetText(L.AWAY_KICKER:upper())
+	kicker:SetText(ns.Util.Upper(L.AWAY_KICKER))
 	nameText:SetText(U.FullName("player") or "")
 	card:ClearAllPoints()
 	if style == "hearth" then

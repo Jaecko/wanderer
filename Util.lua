@@ -327,7 +327,30 @@ function Util.Coins(copper)
 		or Util.Safe(GetCoinTextureString, copper) or tostring(copper))
 end
 
+-- Your bags' container ids: the backpack, the bags, the reagent bag where the game has one.
+function Util.BagIDs()
+	local list = {}
+	local last = NUM_BAG_SLOTS or 4
+	for bag = 0, last do list[#list + 1] = bag end
+	local reagent = Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag
+	local slots = reagent and C_Container and Util.Clean(Util.Safe(C_Container.GetContainerNumSlots, reagent)) or 0
+	if reagent and reagent > last and slots > 0 then list[#list + 1] = reagent end
+	return list
+end
+
 -- The text box of one of the game's dialogs (its name changed across versions).
 function Util.EditBoxOf(dialog)
 	return dialog.EditBox or dialog.editBox
+end
+
+-- Capitals in every language: the game's upper() changes only a to z, so the
+-- accented letters (é, ê, ç...) and the Cyrillic ones stay small without this.
+local UPPER = { ["\197\147"] = "\197\146", ["\209\145"] = "\208\129" } -- œ, ё
+for byte = 0xA0, 0xBE do
+	if byte ~= 0xB7 then UPPER["\195" .. string.char(byte)] = "\195" .. string.char(byte - 0x20) end -- à..þ (not ÷)
+end
+for byte = 0xB0, 0xBF do UPPER["\208" .. string.char(byte)] = "\208" .. string.char(byte - 0x20) end -- а..п
+for byte = 0x80, 0x8F do UPPER["\209" .. string.char(byte)] = "\208" .. string.char(byte + 0x20) end -- р..я
+function Util.Upper(text)
+	return (tostring(text):upper():gsub("[\195\197\208\209][\128-\191]", UPPER))
 end

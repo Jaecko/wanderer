@@ -436,7 +436,7 @@ local L = {
 	NEWS_SHOW = "What's new",
 	NEWS_SHOW_BUTTON = "Show",
 	NEWS_SHOW_DESC = "The changes in this version of Wanderer.",
-	NEWS_LINES = "Wanderer now welcomes extensions: each has its own page in the options and follows your profiles.\nThe first one, Wanderer Bags, puts your bags and your bank in one Wanderer window: sorted by kind, searchable, your bank viewable anywhere. On CurseForge and Wago.",
+	NEWS_LINES = "Over a crafting reagent, a line says which professions use it: yours in gold, with how many of your recipes need it.\nThe game's damage meter, shown or hidden by profile (shown in dungeons), with a text-only look if you wish.\nIn a group, quest objectives say who still needs what, and they stay during a fight.\nElite, dungeon and raid quests are said before you accept them.\nNew extension: Wanderer Auction brings the auction house into a Wanderer window, never selling below a merchant's price. Wanderer Bags grows too: items to keep, sections of your own, crafting by profession.",
 	PREVIEW_TITLE = "Preview",
 	GESTURES_GREET = "Greet the characters you talk to",
 	GESTURES_GREET_DESC = "Your character waves at a character when starting to talk to them, once in a while, without a word (the game's /wave emote, seen by players nearby).",
@@ -782,7 +782,7 @@ local L = {
 	BUFF_FADED_TEXT = "%s: %s",
 	BUFF_YOU = "you",
 	LABEL_COMBAT_LIGHT = "In a fight, only what matters",
-	LABEL_COMBAT_LIGHT_DESC = "During a fight the label keeps its level, its rank, its health and power, the spell cast and whom it looks at; its other lines (guild, reputation, quests, loot...) come back after.",
+	LABEL_COMBAT_LIGHT_DESC = "During a fight the label keeps its level, its rank, its health and power, the spell cast, whom it looks at and your quest objectives; its other lines (guild, reputation, loot...) come back after.",
 	TOOLTIPS_UPGRADE = "Better or worse for your branch",
 	TOOLTIPS_UPGRADE_DESC = "Over an item you could wear, a line says how it compares with what you wear there, for the branch you play (the one with the most talent points): an estimate from the characteristics each branch values, like the Pawn addon.",
 	UPGRADE_NEW = "%s: a place left empty",
@@ -834,6 +834,33 @@ local L = {
 	EXT_WELCOME_LINE = "|cffffd100%s|r: %s (click for its address).",
 	EXT_BAGS_SHORT = "your bags and your bank in one window",
 	EXT_BAGS = "Your bags and your bank in one Wanderer window: sorted by kind, searchable, the item level and the green arrow, your bank viewable anywhere. A separate download: search Wanderer Bags in the CurseForge app, or copy its address.",
+	REAGENT_USED_IN = "Used in: %s",
+	TOOLTIPS_REAGENTS = "Professions over crafting reagents",
+	TOOLTIPS_REAGENTS_DESC = "Over a crafting reagent, one line says which professions use it. Yours stand out in gold, with how many of your known recipes need it (learned when you open the profession's window). Nothing in a fight.",
+	SECTION_METER = "Damage meter",
+	METER_LOOK = "Its look",
+	METER_LOOK_DESC = "The game's: as it is. Text only: no frame, no background, no bar, only the names (in their class color) and the numbers; its menus show under the mouse.",
+	METER_LOOK_TEXT = "Text only",
+	METER_LOOK_GAME = "The game's",
+
+
+	METER_SHOW = "The game's damage meter",
+	METER_SHOW_DESC = "In this profile: as the game's own setting says (Options, Advanced), shown, or hidden. The dungeons' profile shows it, the others hide it. Its bars, sizes and place are set in Edit Mode.",
+	METER_SHOW_OWN = "As the game says",
+	METER_SHOW_ON = "Shown",
+	METER_SHOW_OFF = "Hidden",
+	QUEST_WHO = "%s: ",
+
+	QUEST_TAGS = "Elite and group quests in conversations",
+	QUEST_TAGS_DESC = "Under a quest's title in its scene, a line says it is elite, a dungeon's or a raid's, and how many players are advised, before you accept it; the same, shorter, in a character's list of quests.",
+	QUEST_ELITE = "Elite",
+	QUEST_KIND_DUNGEON = "Dungeon",
+	QUEST_KIND_RAID = "Raid",
+	QUEST_KIND_PVP = "PvP",
+	QUEST_GROUP = "group of %d advised",
+
+	EXT_AUCTION_SHORT = "the auction house in a Wanderer window",
+	EXT_AUCTION = "The auction house in a Wanderer window: to sell, to buy, your auctions and bids, the lowest price found for you, never below what a merchant gives. A separate download: search Wanderer Auction in the CurseForge app, or copy its address.",
 }
 
 

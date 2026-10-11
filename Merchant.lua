@@ -14,7 +14,6 @@ local Safe, Clean = U.Safe, U.Clean
 
 local SELL_DELAY = 0.15 -- seconds between two items, as the server expects
 local MAX_ITEMS = 120 -- safety: never more than the bags can hold
-local BAGS = { 0, 1, 2, 3, 4, 5 } -- backpack, bags and reagent bag
 local POOR = (Enum and Enum.ItemQuality and Enum.ItemQuality.Poor) or 0
 
 local frame
@@ -31,13 +30,28 @@ end
 
 local Container = C_Container or {}
 
--- Grey items with a value, in bag order.
+-- What is junk: grey, unless an extension says otherwise (an item kept, or
+-- marked as junk by the player): rule(item id, quality) -> true, false or nil.
+local junkRules = {}
+function ns.AddJunkRule(rule)
+	if type(rule) == "function" then junkRules[#junkRules + 1] = rule end
+end
+
+local function IsJunk(info)
+	for _, rule in ipairs(junkRules) do
+		local ok, verdict = pcall(rule, Clean(info.itemID), Clean(info.quality))
+		if ok and verdict ~= nil then return verdict end
+	end
+	return info.quality == POOR
+end
+
+-- Junk with a value, in bag order.
 local function FindJunk()
 	local found = {}
-	for _, bag in ipairs(BAGS) do
+	for _, bag in ipairs(U.BagIDs()) do
 		for slot = 1, (Clean(Safe(Container.GetContainerNumSlots, bag)) or 0) do
 			local info = Safe(Container.GetContainerItemInfo, bag, slot)
-			if type(info) == "table" and info.quality == POOR and not info.hasNoValue and not info.isLocked then
+			if type(info) == "table" and IsJunk(info) and not info.hasNoValue and not info.isLocked then
 				found[#found + 1] = { bag = bag, slot = slot, id = info.itemID }
 				if #found >= MAX_ITEMS then return found end
 			end
@@ -67,7 +81,7 @@ local function OnUpdate(_, elapsed)
 	if not item then return Stop() end
 	-- The slot is checked again: the bags may have changed in between.
 	local info = Safe(Container.GetContainerItemInfo, item.bag, item.slot)
-	if type(info) == "table" and info.itemID == item.id and info.quality == POOR and not info.isLocked then
+	if type(info) == "table" and info.itemID == item.id and not info.isLocked then
 		if open then Safe(Container.UseContainerItem, item.bag, item.slot) end
 	end
 	if not queue[1] then
@@ -100,6 +114,23 @@ local function Repair()
 	Safe(RepairAllItems, false)
 	ns.Print(L.MSG_REPAIRED:format(Coins(cost)))
 end
+
+ns.FindJunk = FindJunk
+
+-- Items to sell, chosen elsewhere ({ bag, slot, id }): sold one by one, the gain said. False when no merchant buys.
+function ns.SellItems(items)
+	if not (open and frame and MerchantBuys()) or type(items) ~= "table" or not items[1] then return false end
+	for _, item in ipairs(items) do
+		if #queue >= MAX_ITEMS then break end
+		queue[#queue + 1] = { bag = item.bag, slot = item.slot, id = item.id }
+	end
+	startMoney = startMoney or Clean(Safe(GetMoney))
+	sinceSell = SELL_DELAY
+	frame:SetScript("OnUpdate", OnUpdate)
+	return true
+end
+
+function ns.IsMerchantOpen() return open end
 
 local function Start()
 	if not (open and ns.db and ns.db.enabled and ns.db.merchant.sellJunk) then return end

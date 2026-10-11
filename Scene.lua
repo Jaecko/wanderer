@@ -180,11 +180,13 @@ local function GossipChoices()
 	local choices = {}
 	for _, quest in ipairs(Safe(Gossip.GetActiveQuests) or {}) do
 		local icon = quest.isComplete and QUEST_ICONS.complete or QUEST_ICONS.active
-		choices[#choices + 1] = { label = quest.title, atlas = icon.atlas, icon = icon.texture,
+		choices[#choices + 1] = { label = quest.title and (quest.title .. (ns.QuestChoiceTag and ns.QuestChoiceTag(quest.questID) or "")),
+			atlas = icon.atlas, icon = icon.texture,
 			action = function() Safe(Gossip.SelectActiveQuest, quest.questID) end }
 	end
 	for _, quest in ipairs(Safe(Gossip.GetAvailableQuests) or {}) do
-		choices[#choices + 1] = { label = quest.title, atlas = QUEST_ICONS.available.atlas, icon = QUEST_ICONS.available.texture,
+		choices[#choices + 1] = { label = quest.title and (quest.title .. (ns.QuestChoiceTag and ns.QuestChoiceTag(quest.questID) or "")),
+			atlas = QUEST_ICONS.available.atlas, icon = QUEST_ICONS.available.texture,
 			action = function() Safe(Gossip.SelectAvailableQuest, quest.questID) end }
 	end
 	local options = Safe(Gossip.GetOptions) or {}
@@ -212,14 +214,25 @@ local function GreetingChoices()
 end
 
 -- Items of the quest shown: { kind, index, name, texture, count, quality }.
+-- A reward's name: the game's, else the one in its link; nil while the game is still fetching it
+-- (it comes a moment later: GET_ITEM_INFO_RECEIVED, the scene drawn again then).
+local function RewardName(kind, index)
+	local name = Clean((Safe(GetQuestItemInfo, kind, index)))
+	if name then return name end
+	local link = Clean(Safe(GetQuestItemLink, kind, index))
+	return link and link:match("%[(.-)%]") or nil
+end
+
 local function Rewards(required)
 	local rewards = {}
 	local function add(kind, count)
 		for index = 1, count do
 			local name, texture, amount, quality, usable = Safe(GetQuestItemInfo, kind, index)
-			if name then
-				rewards[#rewards + 1] = { kind = kind, index = index, name = Clean(name) or "?", texture = texture,
-					count = Clean(amount) or 1, quality = Clean(quality), unusable = Clean(usable) == false }
+			if name ~= nil or texture ~= nil then
+				local known = RewardName(kind, index)
+				rewards[#rewards + 1] = { kind = kind, index = index, name = known or "", waiting = known == nil,
+					texture = Clean(texture), count = Clean(amount) or 1, quality = Clean(quality),
+					unusable = Clean(usable) == false }
 			end
 		end
 	end
@@ -323,6 +336,8 @@ local function Build(event)
 		s.choices = GreetingChoices()
 	elseif event == "QUEST_DETAIL" then
 		s.title = Safe(GetTitleText)
+		-- Elite, a group advised: said under the title, before you say yes.
+		s.tag = ns.QuestSceneTag and ns.QuestSceneTag(Clean(Safe(GetQuestID)))
 		s.pages = Pages(Safe(GetQuestText))
 		local objectives = Clean(Safe(GetObjectiveText))
 		if objectives then s.pages[#s.pages + 1] = "|cffffd100" .. L.SCENE_OBJECTIVES .. "|r " .. objectives end
@@ -593,7 +608,7 @@ Render = function()
 	if not pcall(nameText.SetText, nameText, scene.name or "") then nameText:SetText("") end
 	local title = Clean(scene.title)
 	titleText:SetWidth(textWidth)
-	titleText:SetText(title or "")
+	titleText:SetText(title and (scene.tag and (title .. "\n" .. scene.tag) or title) or "")
 	titleText:SetShown(title ~= nil)
 	-- The name and the quest stand beside the portrait, centered on it.
 	local textHeight = U.Measure(nameText, "GetStringHeight", NAME_SIZE)
@@ -660,7 +675,8 @@ Render = function()
 				if qr then r, g, b = qr, qg, qb end
 			end
 			item.border:SetColorTexture(r, g, b, 0.9)
-			local label = reward.name .. (reward.count > 1 and (" x" .. reward.count) or "")
+			local label = (reward.waiting and ("|cff8c8070" .. (RETRIEVING_ITEM_INFO or "...") .. "|r") or reward.name)
+				.. (reward.count > 1 and (" x" .. reward.count) or "")
 			if item.number then label = ("|cffffd100%d.|r %s"):format(item.number, label) end
 			item.text:SetText(label)
 			item:SetSize(column, REWARD_ICON + 4)
@@ -817,11 +833,26 @@ local function OnEvent(_, event, ...)
 		if scene and kinds[scene.kind] then Finish(false) end
 		return
 	end
-	if event == "GET_ITEM_INFO_RECEIVED" then
-		if scene and scene.waitingPrices then
-			scene.waitingPrices = Prices(scene.rewards)
-			Render()
+	if event == "GET_ITEM_INFO_RECEIVED" or event == "QUEST_ITEM_UPDATE" then
+		if not scene then return end
+		local changed = false
+		for _, reward in ipairs(scene.rewards or {}) do
+			if reward.waiting then
+				local name = RewardName(reward.kind, reward.index)
+				if name then
+					local _, texture, _, quality = Safe(GetQuestItemInfo, reward.kind, reward.index)
+					reward.name, reward.waiting = name, false
+					reward.texture = Clean(texture) or reward.texture
+					reward.quality = Clean(quality) or reward.quality
+					changed = true
+				end
+			end
 		end
+		if scene.waitingPrices then
+			scene.waitingPrices = Prices(scene.rewards)
+			changed = true
+		end
+		if changed then Render() end
 		return
 	end
 	if event == "PLAYER_REGEN_DISABLED" then
@@ -983,6 +1014,7 @@ function ns.InitScene()
 	panel:SetScript("OnEvent", OnEvent)
 	for event in pairs(SHOW_EVENTS) do panel:RegisterEvent(event) end
 	panel:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+	pcall(panel.RegisterEvent, panel, "QUEST_ITEM_UPDATE")
 	-- Should a game window show anyway, the scene steps aside: never both.
 	for _, name in ipairs({ "GossipFrame", "QuestFrame" }) do
 		local window = _G[name]

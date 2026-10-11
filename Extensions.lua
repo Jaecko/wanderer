@@ -7,6 +7,8 @@ local _, ns = ...
 ns.EXTENSION_OFFERS = {
 	{ addon = "WandererBags", name = "Wanderer Bags", icon = "Interface\\Icons\\INV_Misc_Bag_07", text = "EXT_BAGS",
 		url = "https://wanderer-addon.com/#bags" },
+	{ addon = "WandererAuction", name = "Wanderer Auction", icon = "Interface\\Icons\\INV_Misc_Coin_01", text = "EXT_AUCTION",
+		url = "https://wanderer-addon.com/#auction" },
 }
 
 local function Installed(addon)

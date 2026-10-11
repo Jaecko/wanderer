@@ -52,7 +52,7 @@ local ESSENTIAL = { showClass = true, shiftDetails = true, showStatus = true, sh
 
 -- Settings stored in each profile.
 local DEFAULTS = {
-	styleVersion = 9,
+	styleVersion = 10,
 	enabled = true,
 	preset = "immersion",
 	show = {},
@@ -131,6 +131,7 @@ local DEFAULTS = {
 	},
 	tooltips = {
 		upgrade = true, -- over an item: better or worse for the branch you play
+		reagents = true, -- over a crafting reagent: the professions that use it
 		enabled = true,
 		cursor = true,
 		icon = true,
@@ -185,6 +186,10 @@ local DEFAULTS = {
 	buffs = {
 		remind = true, -- your long blessings that fade, to cast again (a notice, out of a fight)
 	},
+	meter = {
+		show = "own", -- the game's damage meter: "own" (the game's own setting), "on" or "off" (the dungeons' profile: on)
+		look = "game", -- "game" (as it is) or "text" (text only)
+	},
 	threat = {
 		show = true, -- in groups and dungeons only
 		alert = true, -- in dungeons and raids, for the one holding the monsters
@@ -211,6 +216,7 @@ local DEFAULTS = {
 		textSize = 15,
 	},
 	quest = {
+		tags = true, -- elite and group quests said in their scene and in a character's list
 		autoAccept = false,
 		autoTurnIn = false,
 		bestReward = true,
@@ -263,6 +269,8 @@ local function RegisterExtension(spec)
 end
 
 _G.Wanderer = setmetatable({
+	-- What the extensions may count on: 2 = the reagents, the junk rules and sales, the links, the bags' ids.
+	API = 2,
 	RegisterExtension = RegisterExtension,
 	Settings = function(key) return ns.db and ns.db.enabled and ns.db[key] or nil end,
 	Util = ns.Util,
@@ -270,6 +278,14 @@ _G.Wanderer = setmetatable({
 	-- What an item is worth to you: { text, r, g, b } lines, the first one the best.
 	UpgradeLines = function(link) return ns.UpgradeLines and ns.UpgradeLines(link) or {} end,
 	IsUpgrade = function(link) return ns.IsUpgrade and ns.IsUpgrade(link) or false end,
+	-- Who uses a crafting reagent: { { name, mine, alt, count } }, see Reagents.lua.
+	ReagentUses = function(item) return ns.ReagentUses and ns.ReagentUses(item) or {} end,
+	-- At a merchant: what is junk (rule(item id, quality) -> true, false or nil), selling a list of { bag, slot, id }.
+	AddJunkRule = function(rule) if ns.AddJunkRule then ns.AddJunkRule(rule) end end,
+	SellItems = function(items) return ns.SellItems and ns.SellItems(items) or false end,
+	-- The junk of your bags as the rules say ({ bag, slot, id }).
+	FindJunk = function() return ns.FindJunk and ns.FindJunk() or {} end,
+	IsMerchantOpen = function() return ns.IsMerchantOpen and ns.IsMerchantOpen() or false end,
 }, {
 	-- The engine is made after this file: given when asked.
 	__index = function(_, key) if key == "Skin" then return ns.Skin end end,
@@ -307,6 +323,8 @@ local CHOICES = {
 	["label.anchor"] = function() return { "head", "cursor" } end,
 	["label.content"] = function() return ns.LABEL_CONTENT_ORDER end,
 	["away.style"] = function() return ns.AWAY_STYLES end,
+	["meter.show"] = function() return { "own", "on", "off" } end,
+	["meter.look"] = function() return { "game", "text" } end,
 }
 for _, zone in ipairs(ns.ZONES) do CHOICES["zones." .. zone] = function() return ns.ZONE_CHOICES end end
 
@@ -484,6 +502,13 @@ local MANAGED_CVARS = {
 	nameplateShowEnemyMinus = function(db) return AllHeads(db) and "1" or nil end,
 	-- Action camera (hidden settings of the game): pitch following the ground,
 	-- camera slightly over the shoulder.
+	-- The game's damage meter, shown or not by the profile (the dungeons': shown).
+	damageMeterEnabled = function(db)
+		local show = type(db.meter) == "table" and db.meter.show
+		if show == "on" then return "1" end
+		if show == "off" then return "0" end
+		return nil
+	end,
 	test_cameraDynamicPitch = function(db) return db.world.actionCam and "1" or nil end,
 	test_cameraOverShoulder = function(db) return db.world.actionCam and "0.5" or nil end,
 }
@@ -564,6 +589,8 @@ end
 function ns.Apply()
 	local db = ns.db
 	if not db then return end
+	-- The game's damage meter dressed (or given back its own look when Wanderer is off).
+	if ns.ApplyMeter then ns.ApplyMeter() end
 	if not db.enabled then
 		ns.RestoreOriginal()
 		return
@@ -643,6 +670,8 @@ local PLACE_SETTINGS = {
 	city = { enabled = false, combatOnly = true, alpha = 0, delay = 2 },
 	world = { enabled = true, combatOnly = false, alpha = 20, delay = 4 },
 }
+-- The game's damage meter: in dungeons (and raids, battlegrounds) only.
+local PLACE_METER = { dungeon = "on", city = "off", world = "off" }
 
 function ns.MakePlaceProfiles()
 	local map = ns.PlaceProfiles()
@@ -656,6 +685,8 @@ function ns.MakePlaceProfiles()
 		for key, value in pairs(PLACE_SETTINGS[zone]) do profile.cinema[key] = value end
 		profile.travel = profile.travel or {}
 		profile.travel.enabled = true
+		profile.meter = profile.meter or {}
+		profile.meter.show = PLACE_METER[zone]
 		map[zone] = name
 	end
 	map.raid = map.raid or map.dungeon
@@ -782,6 +813,18 @@ function ns.SetProfile(name, byPlace)
 		if type(profile.nearNames) == "table" and profile.nearNames.distance == 40 then profile.nearNames.distance = 45 end
 		profile.styleVersion = 9
 	end
+	-- 0.40: the damage meter by place, once for the places' profiles already made (dungeons: shown, elsewhere: not).
+	if (profile.styleVersion or 0) < 10 then
+		for _, places in pairs(root.placeProfiles or {}) do
+			for zone, placeName in pairs(places) do
+				if placeName == name then
+					profile.meter = type(profile.meter) == "table" and profile.meter or {}
+					profile.meter.show = (zone == "dungeon" or zone == "raid" or zone == "pvp") and "on" or "off"
+				end
+			end
+		end
+		profile.styleVersion = 10
+	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
 	profile.scene.speak = nil -- 0.37: the voice, tried and dropped
@@ -791,6 +834,8 @@ function ns.SetProfile(name, byPlace)
 	profile.journal, profile.session = nil, nil
 	profile.label.showRareKills, profile.crafts.firstCrafts = nil, nil
 	if profile.away.style == "journal" then profile.away.style = "contemplation" end
+	-- 0.40: the damage meter's Wanderer look, heavier than the game's, dropped.
+	if type(profile.meter) == "table" and profile.meter.look == "wanderer" then profile.meter.look = "game" end
 	-- Not in DEFAULTS (nil means the game's own key): checked on its own.
 	-- Settings of modules that are gone (the game does it itself).
 	profile.interact, profile.questLog, profile.dev = nil, nil, nil
@@ -976,7 +1021,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		if not ns.initialized then
 			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitCinema", "InitTooltips",
 				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
-				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitBuffs", "InitUpgrade", "InitWeights", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
+				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
 				if ns[init] then ns[init]() end
 			end
 			ns.initialized = true

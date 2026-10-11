@@ -41,9 +41,10 @@ local MAX_QUEST_LINES = 3
 local IsInnkeeper, HearthLine -- (below, with the tooltip reading)
 -- What the label says: your choices, or in a fight (option) only what matters
 -- for it: level and difficulty, rank, health and power, the spell cast, who
--- it looks at, a monster not yet yours. A Shift look stays yours to ask.
+-- it looks at, a monster not yet yours, your quest objectives. A Shift look
+-- stays yours to ask.
 local COMBAT_CONTENT = { showLevel = true, showDifficulty = true, showClassification = true, showHealth = true,
-	showPower = true, showCasts = true, showTarget = true, untagged = true, shiftDetails = true }
+	showPower = true, showCasts = true, showTarget = true, untagged = true, shiftDetails = true, showQuests = true }
 local contentKeys = {}
 for _, key in ipairs(ns.LABEL_CONTENT_KEYS) do contentKeys[key] = true end
 contentKeys.showPower = true
@@ -232,21 +233,31 @@ local function ReadGameTooltipLines()
 end
 
 -- "Wolf slain: 3/8" style lines, identified by type when the game provides it.
+-- In a group, the game names each member before their own objectives: each
+-- objective keeps whose it is.
 local function DetectQuests(lines)
 	local quests = {}
+	local who
 	for i, line in ipairs(lines) do
 		if i > 1 and line.text then
-			local isObjective = LineType and LineType.QuestObjective and line.type == LineType.QuestObjective
-			local done, total = line.text:match("(%d+)%s*/%s*(%d+)")
-			if isObjective or done then
-				local complete = done and tonumber(done) >= tonumber(total)
-				quests[#quests + 1] = { text = strtrim((line.text:gsub("^%s*%-%s*", ""))), complete = complete }
-				if #quests >= MAX_QUEST_LINES then break end
+			if LineType and LineType.QuestPlayer and line.type == LineType.QuestPlayer then
+				who = strtrim(line.text)
+			elseif LineType and LineType.QuestTitle and line.type == LineType.QuestTitle then
+				who = nil
+			else
+				local isObjective = LineType and LineType.QuestObjective and line.type == LineType.QuestObjective
+				local done, total = line.text:match("(%d+)%s*/%s*(%d+)")
+				if isObjective or done then
+					local complete = done and tonumber(done) >= tonumber(total)
+					quests[#quests + 1] = { text = strtrim((line.text:gsub("^%s*%-%s*", ""))), complete = complete, who = who }
+					if #quests >= MAX_QUEST_LINES then break end
+				end
 			end
 		end
 	end
 	return quests
 end
+ns.DetectQuests = DetectQuests -- (tests)
 
 -- NPC function such as "<Blacksmith>": the second line, when it is not the
 -- level/type line or another known line.
@@ -327,6 +338,21 @@ local function GetUnitColor(unit, isPlayer)
 end
 
 ns.UnitColor = GetUnitColor
+
+-- A member of your group, by the name the game gives: their class's color.
+local function MemberColorCode(name)
+	local raid = Clean(Safe(IsInRaid))
+	local units = { "player" }
+	for index = 1, raid and 40 or 4 do units[#units + 1] = (raid and "raid" or "party") .. index end
+	for _, unit in ipairs(units) do
+		local unitName = Clean(Safe(UnitName, unit))
+		if unitName and unitName == name then
+			local _, classFile = Safe(UnitClass, unit)
+			return ClassColorCode(Clean(classFile))
+		end
+	end
+	return "ffc8b896"
+end
 local ColorCode = U.ColorCode
 
 -- Without real specializations (WoW Forever), the only "spec" is the class
@@ -810,7 +836,9 @@ local function RenderActions(a)
 	local quests = {}
 	for _, quest in ipairs(a.quests or {}) do
 		local color = quest.complete and "|cff808080" or "|cffffee66"
-		quests[#quests + 1] = ("%s %s%s|r"):format(IconMarkup(nil, QUEST_STYLES.objective.texture, 12), color, quest.text)
+		-- In a group: whose objective it is, in their class's color.
+		local who = quest.who and ("|c%s%s|r"):format(MemberColorCode(quest.who), L.QUEST_WHO:format(quest.who)) or ""
+		quests[#quests + 1] = ("%s %s%s%s|r"):format(IconMarkup(nil, QUEST_STYLES.objective.texture, 12), who, color, quest.text)
 	end
 	questText:SetText(table.concat(quests, "\n"))
 end

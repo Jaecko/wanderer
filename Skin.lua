@@ -281,7 +281,7 @@ end
 -- The small golden heading over a window ("TRAVEL JOURNAL"), placed by its owner.
 function Skin.CreateKicker(parent, text)
 	local kicker = Skin.CreateText(parent, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
-	if text then kicker:SetText(text:upper()) end
+	if text then kicker:SetText(U.Upper(text)) end
 	return kicker
 end
 
@@ -376,6 +376,35 @@ function Skin.CreateText(owner, template, r, g, b)
 	if r then text:SetTextColor(r, g, b) end
 	text:SetJustifyH("LEFT")
 	return text
+end
+
+-- A small text link, gold when hovered (its tooltip under it, if any);
+-- link:SetLabel(text) changes its words and its width.
+local LINK_COLOR, LINK_HOVER = { 0.75, 0.68, 0.5 }, { 1, 0.82, 0 }
+function Skin.CreateLink(parent, text, onClick, tooltip)
+	local link = CreateFrame("Button", nil, parent)
+	link.text = Skin.CreateText(link, "GameTooltipTextSmall", LINK_COLOR[1], LINK_COLOR[2], LINK_COLOR[3])
+	link.text:SetPoint("CENTER")
+	link:SetHeight(18)
+	function link:SetLabel(label)
+		self.text:SetText(label)
+		self:SetWidth(U.Measure(self.text, "GetStringWidth", 60) + 10)
+	end
+	link:SetLabel(text)
+	link:SetScript("OnClick", onClick)
+	link:SetScript("OnEnter", function(self)
+		self.text:SetTextColor(LINK_HOVER[1], LINK_HOVER[2], LINK_HOVER[3])
+		if tooltip then
+			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+			GameTooltip:AddLine(tooltip, 1, 1, 1, true)
+			GameTooltip:Show()
+		end
+	end)
+	link:SetScript("OnLeave", function(self)
+		self.text:SetTextColor(LINK_COLOR[1], LINK_COLOR[2], LINK_COLOR[3])
+		if tooltip then GameTooltip:Hide() end
+	end)
+	return link
 end
 
 -- Moves a window's opacity toward target: fadeIn and fadeOut are the seconds
