@@ -217,8 +217,10 @@ function ns.InitFishing()
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("GLOBAL_MOUSE_DOWN")
 	frame:RegisterEvent("GLOBAL_MOUSE_UP")
-	for _, event in ipairs({ "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP", "LOOT_OPENED" }) do
-		frame:RegisterEvent(event)
+	frame:RegisterEvent("LOOT_OPENED")
+	-- (your own casts only, not every unit's around)
+	for _, event in ipairs({ "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" }) do
+		if frame.RegisterUnitEvent then frame:RegisterUnitEvent(event, "player") else frame:RegisterEvent(event) end
 	end
 	frame:SetScript("OnEvent", function(_, event, arg)
 		if event == "GLOBAL_MOUSE_DOWN" then OnMouseDown(arg)

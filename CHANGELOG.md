@@ -1,17 +1,10 @@
-# Wanderer 0.40.0
+# Wanderer 0.41.0
 
 ### New
-- Over a crafting reagent, a line under "Crafting Reagent" says which professions use it: yours in gold, with how many of your known recipes need it, then those of your other characters (an option of the tooltips).
-- The game's damage meter, by profile: as the game says, shown or hidden; the dungeons' profile shows it, the others hide it.
-- A text-only look for the damage meter: no frame, no background, no bar, only the names in their class color and the numbers.
-- In a group, the quest objectives over a creature or an object say who still needs it, each name in its class color.
-- Elite, dungeon and raid quests: under the title in the quest's scene, and in a character's list of quests, before you accept them, with the players advised.
-- Wanderer Auction, a new extension, is offered where it is missing, like Wanderer Bags.
+- Wanderer Quests, a new extension, is offered where it is missing, like Wanderer Bags and Wanderer Auction.
+- Wanderer's windows no longer cover each other: let go near another (or over it), a window holds against its nearest side, lined up with it; opened over another, the smaller one steps beside the larger. Let go with Shift to place one freely, even over another. The one clicked comes on top.
+- The reminders can be resized by their corner (their size kept), and open by themselves at login when something is left to do (an option, on).
+- The reminders take the lines the other addons give them: a quest's items to gather (Wanderer Quests) say how many you carry; such a line can go to Wanderer Auction's shopping list.
 
 ### Changed
-- During a fight the label keeps your quest objectives.
-- The extensions get more from Wanderer: the professions of a reagent, your junk rules, selling at a merchant.
-
-### Fixed
-- A quest's rewards no longer show "?" while the game is still fetching their names: they are said to be on their way, then appear.
-- Titles in capitals keep their accents (French) and their letters (Russian).
+- Lighter: the branch you play is read once (not for every item of your bags or every tooltip), the unread messages counted without sorting, the buffs left alone when their reminder is off, the threat heard for your target only, the fishing for your own casts only, the chat button idle when nothing moves.

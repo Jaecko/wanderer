@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "Neuigkeiten",
 	NEWS_SHOW_BUTTON = "Anzeigen",
 	NEWS_SHOW_DESC = "Die Änderungen dieser Version von Wanderer.",
-	NEWS_LINES = "Über einem Handwerksmaterial sagt eine Zeile, welche Berufe es nutzen: deine in Gold, mit der Zahl deiner Rezepte, die es brauchen.\nDer Schadensmesser des Spiels, je nach Profil gezeigt oder verborgen (in Dungeons gezeigt), auf Wunsch nur als Text.\nIn einer Gruppe sagen die Questziele, wer noch was braucht, und sie bleiben im Kampf.\nElite-, Dungeon- und Schlachtzugsquests werden genannt, bevor du sie annimmst.\nNeue Erweiterung: Wanderer Auction bringt das Auktionshaus in ein Wanderer-Fenster und verkauft nie unter dem Händlerpreis. Auch Wanderer Bags wächst: Gegenstände zum Behalten, eigene Abschnitte, Handwerk nach Beruf.",
+	NEWS_LINES = "Wanderers Fenster verdecken sich nicht mehr: sie halten wie Magnete zusammen. Mit Umschalt loslassen, um eines frei zu platzieren.\nDie Erinnerungen lassen sich in der Größe ändern, öffnen sich beim Einloggen von selbst, wenn noch etwas offen ist, und nehmen die Zeilen anderer Addons auf (die Gegenstände einer Quest, mit deiner Anzahl).\nLeichter: dein Zweig, deine ungelesenen Nachrichten und deine Buffs werden viel seltener gelesen.\nNeue Erweiterung: Wanderer Quests zeigt alle Quests deiner Klasse, deiner Dungeons und deiner Zonen als Ketten, mit dem Blatt jeder Quest. Wanderer Auction bekommt eine Einkaufsliste, Wanderer Bags eine Auswahl für viele Gegenstände auf einmal.",
 	PREVIEW_TITLE = "Vorschau",
 	GESTURES_GREET = "Figuren begrüßen, mit denen du sprichst",
 	GESTURES_GREET_DESC = "Dein Charakter winkt einem Charakter zu, wenn du mit ihm zu sprechen beginnst, ab und zu und ohne ein Wort (das Emote /winken des Spiels, für Spieler in der Nähe sichtbar).",
@@ -847,4 +847,9 @@ for key, text in pairs({
 
 	EXT_AUCTION_SHORT = "das Auktionshaus in einem Wanderer-Fenster",
 	EXT_AUCTION = "Das Auktionshaus in einem Wanderer-Fenster: verkaufen, kaufen, deine Auktionen und Gebote, der niedrigste Preis für dich gefunden, nie unter dem, was ein Händler zahlt. Ein eigener Download: suche Wanderer Auction in der CurseForge-App oder kopiere seine Adresse.",
+	TODO_AT_LOGIN = "Beim Einloggen öffnen, wenn noch etwas offen ist",
+	TODO_AT_LOGIN_DESC = "Wenn du dich einloggst und noch eine Erinnerung offen ist, öffnen sich die Erinnerungen von selbst, leise, ein paar Sekunden nach deiner Ankunft.",
+	TODO_SHOPPING = "Zur Einkaufsliste hinzufügen",
+	EXT_QUESTS_SHORT = "alle Quests deiner Klasse, deiner Dungeons und deiner Zonen",
+	EXT_QUESTS = "Alle Quests deiner Klasse, deiner Dungeons und deiner Zonen als Ketten: wo du stehst, was jede verlangt, wer sie vergibt und wo. Ein eigener Download: suche Wanderer Quests in der CurseForge-App oder kopiere seine Adresse.",
 }) do L[key] = text end

@@ -9,6 +9,8 @@ ns.EXTENSION_OFFERS = {
 		url = "https://wanderer-addon.com/#bags" },
 	{ addon = "WandererAuction", name = "Wanderer Auction", icon = "Interface\\Icons\\INV_Misc_Coin_01", text = "EXT_AUCTION",
 		url = "https://wanderer-addon.com/#auction" },
+	{ addon = "WandererQuests", name = "Wanderer Quests", icon = "Interface\\Icons\\INV_Misc_Book_09", text = "EXT_QUESTS",
+		url = "https://wanderer-addon.com/#quests" },
 }
 
 local function Installed(addon)

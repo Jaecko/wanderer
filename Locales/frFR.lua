@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "Nouveautés",
 	NEWS_SHOW_BUTTON = "Afficher",
 	NEWS_SHOW_DESC = "Les changements de cette version de Wanderer.",
-	NEWS_LINES = "Sur un composant d'artisanat, une ligne dit quels métiers l'utilisent : les vôtres en or, avec le nombre de vos recettes qui en ont besoin.\nLe compteur de dégâts du jeu, affiché ou caché selon le profil (affiché en donjon), avec un aspect texte seul si vous le souhaitez.\nEn groupe, les objectifs de quête disent qui a encore besoin de quoi, et restent pendant un combat.\nLes quêtes élites, de donjon et de raid sont signalées avant de les accepter.\nNouvelle extension : Wanderer Auction met l'hôtel des ventes dans une fenêtre Wanderer, sans jamais vendre sous le prix d'un marchand. Wanderer Bags grandit aussi : objets à garder, sections à vous, artisanat par métier.",
+	NEWS_LINES = "Les fenêtres de Wanderer ne se recouvrent plus : elles se tiennent comme des aimants. Lâchez avec Maj pour en placer une librement.\nLe pense-bête se redimensionne, s'ouvre de lui-même à la connexion s'il reste quelque chose, et reçoit les lignes des autres addons (les objets d'une quête, avec combien vous en avez).\nPlus léger : votre branche, vos messages non lus et vos buffs sont lus bien moins souvent.\nNouvelle extension : Wanderer Quests montre toutes les quêtes de votre classe, de vos donjons et de vos zones, en chaînes, avec la fiche de chaque quête. Wanderer Auction gagne une liste d'achats, Wanderer Bags une sélection pour agir sur plusieurs objets à la fois.",
 	PREVIEW_TITLE = "Aperçu",
 	GESTURES_GREET = "Saluer les personnages à qui vous parlez",
 	GESTURES_GREET_DESC = "Votre personnage fait un signe de la main à un personnage quand vous commencez à lui parler, de temps en temps, sans un mot (l'emote /signe du jeu, visible des joueurs proches).",
@@ -847,4 +847,9 @@ for key, text in pairs({
 
 	EXT_AUCTION_SHORT = "l'hôtel des ventes dans une fenêtre Wanderer",
 	EXT_AUCTION = "L'hôtel des ventes dans une fenêtre Wanderer : vendre, acheter, vos ventes et vos enchères, le prix le plus bas trouvé pour vous, jamais sous ce que donne un marchand. Un téléchargement à part : cherchez Wanderer Auction dans l'application CurseForge, ou copiez son adresse.",
+	TODO_AT_LOGIN = "Ouvrir à la connexion s'il reste quelque chose",
+	TODO_AT_LOGIN_DESC = "À la connexion, s'il reste une note à faire, le pense-bête s'ouvre de lui-même, sans bruit, quelques secondes après votre arrivée.",
+	TODO_SHOPPING = "Ajouter à la liste d'achats",
+	EXT_QUESTS_SHORT = "toutes les quêtes de votre classe, de vos donjons et de vos zones",
+	EXT_QUESTS = "Toutes les quêtes de votre classe, de vos donjons et de vos zones, en chaînes : où vous en êtes, ce que chacune demande, qui la donne et où. Un téléchargement à part : cherchez Wanderer Quests dans l'application CurseForge, ou copiez son adresse.",
 }) do L[key] = text end

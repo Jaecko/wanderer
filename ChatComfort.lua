@@ -499,10 +499,13 @@ function ns.InitChatComfort()
 				button.wanted = button.enabled and frame:IsVisible() and (U.IsMouseOver(frame) or U.IsMouseOver(button)) and 1 or 0
 			end
 			local wanted = button.wanted or 0
-			if wanted > 0 and not button:IsShown() then button:Show() end
-			local alpha = button.tween:Step(wanted, elapsed, FADE_IN, FADE_OUT)
-			button:SetAlpha(alpha)
-			if alpha <= 0 and wanted == 0 and button:IsShown() then button:Hide() end
+			-- (asleep and wanted asleep: nothing to do)
+			if wanted > 0 or button:IsShown() then
+				if wanted > 0 and not button:IsShown() then button:Show() end
+				local alpha = button.tween:Step(wanted, elapsed, FADE_IN, FADE_OUT)
+				if alpha ~= button:GetAlpha() then button:SetAlpha(alpha) end
+				if alpha <= 0 and wanted == 0 then button:Hide() end
+			end
 		end
 	end)
 end

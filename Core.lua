@@ -269,8 +269,9 @@ local function RegisterExtension(spec)
 end
 
 _G.Wanderer = setmetatable({
-	-- What the extensions may count on: 2 = the reagents, the junk rules and sales, the links, the bags' ids.
-	API = 2,
+	-- What the extensions may count on: 2 = the reagents, the junk rules and sales, the links, the bags' ids;
+	-- 3 = the reminders (a line added, known, the window opened).
+	API = 3,
 	RegisterExtension = RegisterExtension,
 	Settings = function(key) return ns.db and ns.db.enabled and ns.db[key] or nil end,
 	Util = ns.Util,
@@ -286,6 +287,10 @@ _G.Wanderer = setmetatable({
 	-- The junk of your bags as the rules say ({ bag, slot, id }).
 	FindJunk = function() return ns.FindJunk and ns.FindJunk() or {} end,
 	IsMerchantOpen = function() return ns.IsMerchantOpen and ns.IsMerchantOpen() or false end,
+	-- The reminders: a line added (see Todo.lua), one known by its key, the window opened.
+	AddTodo = function(text, opts) if ns.AddTodo then return ns.AddTodo(text, opts) end return false end,
+	HasTodo = function(key) return ns.HasTodo and ns.HasTodo(key) or false end,
+	OpenTodo = function() if ns.ToggleTodo and not (ns.TodoShown and ns.TodoShown()) then ns.ToggleTodo() end end,
 }, {
 	-- The engine is made after this file: given when asked.
 	__index = function(_, key) if key == "Skin" then return ns.Skin end end,

@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "Novidades",
 	NEWS_SHOW_BUTTON = "Mostrar",
 	NEWS_SHOW_DESC = "As mudanças desta versão do Wanderer.",
-	NEWS_LINES = "Sobre um material de criação, uma linha diz quais profissões o usam: as suas em dourado, com quantas das suas receitas precisam dele.\nO medidor de dano do jogo, mostrado ou oculto conforme o perfil (mostrado em masmorras), com um visual só de texto se quiser.\nEm grupo, os objetivos de missão dizem quem ainda precisa do quê, e ficam durante um combate.\nMissões de elite, de masmorra e de raide são indicadas antes de você aceitá-las.\nNova extensão: Wanderer Auction leva a casa de leilões para uma janela do Wanderer, sem nunca vender abaixo do preço de um mercador. O Wanderer Bags também cresce: itens a guardar, seções suas, criação por profissão.",
+	NEWS_LINES = "As janelas do Wanderer não se cobrem mais: elas se prendem como ímãs. Solte com Shift para posicionar uma livremente.\nOs lembretes mudam de tamanho, abrem sozinhos ao entrar se restar algo e recebem as linhas dos outros addons (os itens de uma missão, com quantos você carrega).\nMais leve: seu ramo, suas mensagens não lidas e seus bônus são lidos bem menos vezes.\nNova extensão: Wanderer Quests mostra todas as missões da sua classe, das suas masmorras e das suas zonas, em cadeias, com a ficha de cada missão. Wanderer Auction ganha uma lista de compras, Wanderer Bags uma seleção para agir sobre vários itens de uma vez.",
 	PREVIEW_TITLE = "Prévia",
 	GESTURES_GREET = "Cumprimentar os personagens com quem você fala",
 	GESTURES_GREET_DESC = "Seu personagem acena para um personagem ao começar a falar com ele, de vez em quando e sem dizer nada (o emote /acenar do jogo, visível para jogadores próximos).",
@@ -847,4 +847,9 @@ for key, text in pairs({
 
 	EXT_AUCTION_SHORT = "a casa de leilões numa janela do Wanderer",
 	EXT_AUCTION = "A casa de leilões numa janela do Wanderer: vender, comprar, seus leilões e lances, o menor preço encontrado para você, nunca abaixo do que um mercador paga. Um download à parte: procure Wanderer Auction no aplicativo da CurseForge, ou copie seu endereço.",
+	TODO_AT_LOGIN = "Abrir ao entrar se restar algo",
+	TODO_AT_LOGIN_DESC = "Ao entrar, se restar um lembrete a fazer, os lembretes se abrem sozinhos, em silêncio, alguns segundos após sua chegada.",
+	TODO_SHOPPING = "Adicionar à lista de compras",
+	EXT_QUESTS_SHORT = "todas as missões da sua classe, das suas masmorras e das suas zonas",
+	EXT_QUESTS = "Todas as missões da sua classe, das suas masmorras e das suas zonas, em cadeias: onde você está, o que cada uma pede, quem a dá e onde. Um download à parte: procure Wanderer Quests no aplicativo CurseForge ou copie o endereço.",
 }) do L[key] = text end

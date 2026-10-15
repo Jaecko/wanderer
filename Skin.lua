@@ -285,17 +285,158 @@ function Skin.CreateKicker(parent, text)
 	return kicker
 end
 
+-- The windows that keep their place (the bags, the reminders, the quests, the auction house...) never
+-- cover each other: they hold to each other like magnets. Let go near another one (or over it), a window
+-- comes against its nearest side, lined up with it when they almost are. Opened (or grown) over another,
+-- the smaller one steps beside the larger, for this time only. Let go with Shift: placed freely, where
+-- it is, over another if you wish (never moved then). The one clicked comes on top of the others.
+local placed = {}
+local STEP = 4 -- between two windows held together
+local PULL = 24 -- how near a side pulls
+
+-- A window on the screen (its scale applied): left, bottom, right, top; nil when not placed yet.
+local function Box(window)
+	local left, bottom, width, height = window:GetRect()
+	if not (left and width and width > 1 and height > 1) then return nil end
+	local scale = window:GetEffectiveScale()
+	return { left * scale, bottom * scale, (left + width) * scale, (bottom + height) * scale }
+end
+
+local function Covers(a, b, margin)
+	margin = margin or 0
+	return a[1] - margin < b[3] and b[1] < a[3] + margin and a[2] - margin < b[4] and b[2] < a[4] + margin
+end
+
+local function Screen()
+	local scale = UIParent:GetEffectiveScale()
+	return UIParent:GetWidth() * scale, UIParent:GetHeight() * scale
+end
+
+-- Placed freely by you (Shift): never moved.
+local function Free(window)
+	local saved = window.wandererSave and ns.root and ns.root[window.wandererSave]
+	return type(saved) == "table" and saved[4] == true
+end
+
+-- A spot (left, bottom, right, top) on the screen and over no other window shown.
+local function Fits(window, spot)
+	local width, height = Screen()
+	if spot[1] < 0 or spot[2] < 0 or spot[3] > width or spot[4] > height then return false end
+	for _, another in ipairs(placed) do
+		if another ~= window and another:IsShown() then
+			local seen = Box(another)
+			if seen and Covers(spot, seen) then return false end
+		end
+	end
+	return true
+end
+
+-- Its top left corner put there (on the screen's scale), as the game keeps it (from the screen's top left).
+local function MoveTo(window, left, top)
+	local scale = window:GetEffectiveScale()
+	local _, height = Screen()
+	window:ClearAllPoints()
+	window:SetPoint("TOPLEFT", UIParent, "TOPLEFT", left / scale, (top - height) / scale)
+end
+
+-- The places against another window (its box), the nearest first: { left, top, how far }. Lined up with
+-- it (top with top, left with left) when they almost are.
+local function Sides(box, other)
+	local width, height = box[3] - box[1], box[4] - box[2]
+	local top, left = box[4], box[1]
+	if math.abs(top - other[4]) <= PULL then top = other[4] end
+	if math.abs(box[2] - other[2]) <= PULL and math.abs(top - other[4]) > PULL then top = other[2] + height end
+	if math.abs(left - other[1]) <= PULL then left = other[1] end
+	if math.abs(box[3] - other[3]) <= PULL and math.abs(left - other[1]) > PULL then left = other[3] - width end
+	local sides = {
+		{ other[1] - STEP - width, top }, -- on its left
+		{ other[3] + STEP, top }, -- on its right
+		{ left, other[4] + STEP + height }, -- above
+		{ left, other[2] - STEP }, -- below
+	}
+	for _, side in ipairs(sides) do side[3] = math.abs(side[1] - box[1]) + math.abs(side[2] - box[4]) end
+	table.sort(sides, function(a, b) return a[3] < b[3] end)
+	return sides
+end
+
+-- Against the other, at the nearest place that fits; false when none does.
+local function Against(window, box, other)
+	local width, height = box[3] - box[1], box[4] - box[2]
+	for _, side in ipairs(Sides(box, other)) do
+		if Fits(window, { side[1], side[2] - height, side[1] + width, side[2] }) then
+			MoveTo(window, side[1], side[2])
+			return true
+		end
+	end
+	return false
+end
+
+-- Let go: held against the nearest window it is over or near.
+local function Hold(window)
+	local box = Box(window)
+	if not box then return end
+	local nearest, distance
+	for _, other in ipairs(placed) do
+		local theirs = other ~= window and other:IsShown() and Box(other)
+		if theirs and Covers(box, theirs, PULL) then
+			local far = math.abs((box[1] + box[3]) - (theirs[1] + theirs[3])) + math.abs((box[2] + box[4]) - (theirs[2] + theirs[4]))
+			if not distance or far < distance then nearest, distance = theirs, far end
+		end
+	end
+	if nearest then Against(window, box, nearest) end
+end
+
+-- Opened or grown over another: the smaller beside the larger (never one placed freely).
+local function StepAside(window)
+	if not window:IsShown() then return end
+	for _, other in ipairs(placed) do
+		local mine, theirs = Box(window), other ~= window and other:IsShown() and Box(other)
+		if mine and theirs and Covers(mine, theirs) and not (Free(window) or Free(other)) then
+			if (mine[3] - mine[1]) * (mine[4] - mine[2]) > (theirs[3] - theirs[1]) * (theirs[4] - theirs[2]) then
+				Against(other, theirs, mine)
+			else
+				Against(window, mine, theirs)
+			end
+		end
+	end
+end
+
+local function Keep(window, save)
+	placed[#placed + 1] = window
+	window.wandererSave = save
+	if window.SetToplevel then window:SetToplevel(true) end
+	-- Shown, or grown (a moment after: its content laid out first).
+	local soon = false
+	local function Soon()
+		if soon then return end
+		soon = true
+		C_Timer.After(0.1, function()
+			soon = false
+			if IsMouseButtonDown and IsMouseButtonDown("LeftButton") then return Soon() end -- (still dragged)
+			StepAside(window)
+		end)
+	end
+	window:HookScript("OnShow", Soon)
+	window:HookScript("OnSizeChanged", function(self) if self:IsShown() then Soon() end end)
+end
+Skin.StepAside, Skin.Hold = StepAside, Hold -- (tests)
+
 function Skin.Dress(window, point, save, onClose)
 	window:EnableMouse(true)
 	window:SetMovable(true)
 	window:SetClampedToScreen(true)
+	-- (only the windows that keep their place: not a passing dialog)
+	if save then Keep(window, save) end
 	window:RegisterForDrag("LeftButton")
 	window:SetScript("OnDragStart", window.StartMoving)
 	window:SetScript("OnDragStop", function(self)
 		self:StopMovingOrSizing()
+		-- Held against the nearest window, unless let go with Shift (placed freely, kept so).
+		local free = save and IsShiftKeyDown and IsShiftKeyDown() or false
+		if save and not free then Hold(self) end
 		if save and ns.root then
 			local anchor, _, _, x, y = self:GetPoint(1)
-			ns.root[save] = { anchor, x, y }
+			ns.root[save] = { anchor, x, y, free or nil }
 		end
 	end)
 	local saved = save and ns.root and ns.root[save]

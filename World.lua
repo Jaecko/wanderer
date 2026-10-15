@@ -174,17 +174,12 @@ function World.KillsToLevel(name, level)
 	return math.ceil((maximum - current) / xp)
 end
 
-local killListeners = {}
--- fn(name, xp): called for every kill that gave experience.
-function World.OnKill(fn) killListeners[#killListeners + 1] = fn end
-
 local function OnXPMessage(message)
 	local name, xp = World.ParseKillXP(message)
 	if not name then return end
 	xpByName[name] = xp
 	local level = levelByName[name]
 	if level then xpByLevel[level] = xp end
-	for _, fn in ipairs(killListeners) do fn(name, xp) end
 end
 
 -- Events -------------------------------------------------------------------------------

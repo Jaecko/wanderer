@@ -109,14 +109,27 @@ local function ClassFile()
 	return Clean(class)
 end
 
--- The branch you play: the one with the most points (else the first one played).
+-- The branch you play: the one with the most points (else the first one played). Read once, again
+-- when your talents or level change (each item, each bag slot asks it).
+local ownBranch
 local function Branch(class)
+	if ownBranch and ownBranch.class == class then return ownBranch.index end
 	local trees = ns.Inspect and ns.Inspect.Own and ns.Inspect.Own()
 	local best, most = nil, 0
 	for index, tree in ipairs(trees or {}) do
 		if (tree.points or 0) > most then best, most = index, tree.points end
 	end
-	return best or FIRST_BRANCH[class] or 1
+	ownBranch = { class = class, index = best or FIRST_BRANCH[class] or 1 }
+	return ownBranch.index
+end
+function ns.ForgetBranch() ownBranch = nil end
+do
+	local events = CreateFrame("Frame")
+	for _, event in ipairs({ "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "PLAYER_LEVEL_UP",
+		"PLAYER_ENTERING_WORLD" }) do
+		pcall(events.RegisterEvent, events, event)
+	end
+	events:SetScript("OnEvent", ns.ForgetBranch)
 end
 
 local function Wearable(class, itemClass, subclass, equip)

@@ -46,6 +46,13 @@ function ns.ShowMenu(owner)
 				function() ns.ToggleMessages() end)
 		end
 		if ns.db.tooltips.upgrade then root:CreateButton(L.WEIGHTS_TITLE, function() ns.ToggleWeights() end) end
+		-- The extensions' own windows (spec.launcher = { label, open }).
+		for _, extension in ipairs(ns.EXTENSIONS or {}) do
+			local launcher = extension.launcher
+			if type(launcher) == "table" and launcher.label and launcher.open then
+				root:CreateButton(launcher.label, function() launcher.open() end)
+			end
+		end
 		-- Tools of the moment.
 		root:CreateDivider()
 		root:CreateButton(L.MENU_PHOTO, function() ns.TogglePhotoMode() end)

@@ -85,9 +85,11 @@ local function Trim()
 	end
 end
 
+-- (asked often: counted without sorting)
 function ns.UnreadMessages()
 	local count = 0
-	for _, entry in ipairs(AllConversations()) do count = count + (entry.talk.unread or 0) end
+	for _, talk in pairs(Store()) do count = count + (talk.unread or 0) end
+	for _, talk in pairs(session) do count = count + (talk.unread or 0) end
 	return count
 end
 

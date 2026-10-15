@@ -436,7 +436,7 @@ local L = {
 	NEWS_SHOW = "What's new",
 	NEWS_SHOW_BUTTON = "Show",
 	NEWS_SHOW_DESC = "The changes in this version of Wanderer.",
-	NEWS_LINES = "Over a crafting reagent, a line says which professions use it: yours in gold, with how many of your recipes need it.\nThe game's damage meter, shown or hidden by profile (shown in dungeons), with a text-only look if you wish.\nIn a group, quest objectives say who still needs what, and they stay during a fight.\nElite, dungeon and raid quests are said before you accept them.\nNew extension: Wanderer Auction brings the auction house into a Wanderer window, never selling below a merchant's price. Wanderer Bags grows too: items to keep, sections of your own, crafting by profession.",
+	NEWS_LINES = "Wanderer's windows no longer cover each other: they hold together like magnets. Let go with Shift to place one freely.\nThe reminders can be resized, open by themselves at login when something is left, and take the lines the other addons give them (the items of a quest, with how many you carry).\nLighter: your branch, your unread messages and your buffs are read far less often.\nNew extension: Wanderer Quests shows every quest of your class, your dungeons and your zones, in chains, with each quest's sheet. Wanderer Auction gains a shopping list, Wanderer Bags a selection to act on many items at once.",
 	PREVIEW_TITLE = "Preview",
 	GESTURES_GREET = "Greet the characters you talk to",
 	GESTURES_GREET_DESC = "Your character waves at a character when starting to talk to them, once in a while, without a word (the game's /wave emote, seen by players nearby).",
@@ -861,6 +861,11 @@ local L = {
 
 	EXT_AUCTION_SHORT = "the auction house in a Wanderer window",
 	EXT_AUCTION = "The auction house in a Wanderer window: to sell, to buy, your auctions and bids, the lowest price found for you, never below what a merchant gives. A separate download: search Wanderer Auction in the CurseForge app, or copy its address.",
+	TODO_AT_LOGIN = "Open at login when something is left",
+	TODO_AT_LOGIN_DESC = "When you log in and a reminder is still to do, the reminders open by themselves, quietly, a few seconds after you arrive.",
+	TODO_SHOPPING = "Add to the shopping list",
+	EXT_QUESTS_SHORT = "every quest of your class, your dungeons and your zones",
+	EXT_QUESTS = "Every quest of your class, of your dungeons and of your zones, in chains: where you stand with each, what it asks, who gives it and where. A separate download: search Wanderer Quests in the CurseForge app, or copy its address.",
 }
 
 

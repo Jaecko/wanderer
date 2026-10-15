@@ -97,6 +97,11 @@ function ns.InitBuffs()
 		since = since + elapsed
 		if since < CHECK_EVERY then return end
 		since = 0
+		-- (the reminder off: nothing looked at)
+		if not On() then
+			if next(watched) then watched = {} end
+			return
+		end
 		Scan()
 	end)
 end

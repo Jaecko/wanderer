@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "Novità",
 	NEWS_SHOW_BUTTON = "Mostra",
 	NEWS_SHOW_DESC = "Le modifiche di questa versione di Wanderer.",
-	NEWS_LINES = "Su un materiale da artigianato, una riga dice quali professioni lo usano: le tue in oro, con quante delle tue ricette ne hanno bisogno.\nIl misuratore di danni del gioco, mostrato o nascosto secondo il profilo (mostrato nelle spedizioni), con un aspetto di solo testo se vuoi.\nIn gruppo, gli obiettivi delle missioni dicono a chi serve ancora cosa, e restano durante un combattimento.\nLe missioni élite, di spedizione e di incursione sono indicate prima di accettarle.\nNuova estensione: Wanderer Auction porta la casa d'aste in una finestra di Wanderer, senza mai vendere sotto il prezzo di un mercante. Anche Wanderer Bags cresce: oggetti da tenere, sezioni tue, artigianato per professione.",
+	NEWS_LINES = "Le finestre di Wanderer non si coprono più: stanno insieme come calamite. Rilascia con Maiusc per posizionarne una liberamente.\nI promemoria si ridimensionano, si aprono da soli all'accesso se resta qualcosa e ricevono le righe degli altri addon (gli oggetti di una missione, con quanti ne hai).\nPiù leggero: il tuo ramo, i tuoi messaggi non letti e i tuoi buff vengono letti molto meno spesso.\nNuova estensione: Wanderer Quests mostra tutte le missioni della tua classe, delle tue spedizioni e delle tue zone, in catene, con la scheda di ogni missione. Wanderer Auction guadagna una lista della spesa, Wanderer Bags una selezione per agire su più oggetti insieme.",
 	PREVIEW_TITLE = "Anteprima",
 	GESTURES_GREET = "Salutare i personaggi con cui parli",
 	GESTURES_GREET_DESC = "Il tuo personaggio fa un cenno con la mano a un personaggio quando inizi a parlargli, ogni tanto e senza una parola (l'emote /saluto del gioco, visibile ai giocatori vicini).",
@@ -847,4 +847,9 @@ for key, text in pairs({
 
 	EXT_AUCTION_SHORT = "la casa d'aste in una finestra di Wanderer",
 	EXT_AUCTION = "La casa d'aste in una finestra di Wanderer: vendere, comprare, le tue aste e offerte, il prezzo più basso trovato per te, mai sotto ciò che dà un mercante. Un download a parte: cerca Wanderer Auction nell'app di CurseForge, o copia il suo indirizzo.",
+	TODO_AT_LOGIN = "Apri all'accesso se resta qualcosa",
+	TODO_AT_LOGIN_DESC = "All'accesso, se resta una nota da fare, i promemoria si aprono da soli, in silenzio, qualche secondo dopo il tuo arrivo.",
+	TODO_SHOPPING = "Aggiungi alla lista della spesa",
+	EXT_QUESTS_SHORT = "tutte le missioni della tua classe, delle tue spedizioni e delle tue zone",
+	EXT_QUESTS = "Tutte le missioni della tua classe, delle tue spedizioni e delle tue zone, in catene: a che punto sei, cosa chiede ognuna, chi la dà e dove. Un download a parte: cerca Wanderer Quests nell'app di CurseForge o copia il suo indirizzo.",
 }) do L[key] = text end

@@ -12,6 +12,9 @@ local L = ns.L
 -- A right click on a line: important (a star, on top), up or down, tied to
 -- the place where you stand (back there, a notice says what is left to do;
 -- the game's own map pin shows the way), crossed out.
+--
+-- The other addons may add lines (Wanderer.AddTodo): an item to gather says
+-- how many you carry; such a line can go to Wanderer Auction's shopping list.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -19,13 +22,29 @@ local OpenMenu
 
 local WIDTH = 300
 local ROW_HEIGHT = 22
-local VISIBLE = 12 -- rows shown at once; the wheel scrolls the rest
+local VISIBLE = 12 -- rows shown at once (until the window is resized: as many as fit); the wheel scrolls the rest
+local MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT = 240, 170, 700, 900
 local MAX_ITEMS = 60
 local CHECK_SIZE = 18
 
 local window, kicker, title, input, clearButton, empty
 local rows = {}
 local offset = 0 -- first item shown (scrolling)
+local sizing = false -- its corner being dragged
+
+-- The size you gave it (nil: as tall as its lines).
+local function Size() return ns.root and ns.root.todoSize end
+
+-- What is around the lines: heading, the line to write, the button over it.
+local function Chrome(margin)
+	return margin * 2 + 14 + 18 + 8 + 10 + 24 + (clearButton:IsShown() and 22 or 0)
+end
+
+-- The rows shown at once: those that fit in the height you gave, else the usual number.
+local function Visible(margin)
+	if not (Size() or sizing) then return VISIBLE end
+	return math.max(1, math.floor((window:GetHeight() - Chrome(margin)) / ROW_HEIGHT))
+end
 
 -- The list of this character: { { text, done, t }, ... }.
 local function Items()
@@ -116,6 +135,13 @@ OpenMenu = function(row)
 		else
 			root:CreateButton(L.TODO_PLACE, function() item.place = Here() Refresh() end)
 		end
+		local auction = _G.WandererAuction
+		if item.item and type(auction) == "table" and auction.AddToShopping then
+			root:CreateDivider()
+			root:CreateButton(L.TODO_SHOPPING, function()
+				auction.AddToShopping(item.item, item.count or 1, item.text)
+			end)
+		end
 		root:CreateDivider()
 		root:CreateButton("|cffff6060" .. L.TODO_REMOVE .. "|r", function() Remove(item) Refresh() end)
 	end)
@@ -198,15 +224,25 @@ Refresh = function()
 	local list = Sorted()
 	local pending = 0
 	for _, item in ipairs(list) do if not item.done then pending = pending + 1 end end
-	offset = math.max(0, math.min(offset, #list - VISIBLE))
 	title:SetText(pending > 0 and L.TODO_TITLE_COUNT:format(pending) or L.TODO_TITLE)
 	local margin = ns.Skin.Margin() + 6
-	local shown = math.min(VISIBLE, #list)
+	clearButton:SetShown(#list > pending)
+	-- The size you gave it first (while you drag, the corner's): the lines that fit follow.
+	local size = Size()
+	if size and not sizing then window:SetSize(size[1], size[2]) end
+	local visible = Visible(margin)
+	offset = math.max(0, math.min(offset, #list - visible))
+	local shown = math.min(visible, #list)
 	for index = 1, shown do
 		local item = list[index + offset]
 		local row = Row(index)
 		row.item = item
 		local words = item.text
+		-- An item to gather: how many you carry (green once enough).
+		if item.item and item.count and not item.done then
+			local have = Clean(Safe(C_Item and C_Item.GetItemCount or GetItemCount, item.item)) or 0
+			words = words .. (have >= item.count and "  |cff66dd66" or "  |cffb0a080") .. math.min(have, item.count) .. "/" .. item.count .. "|r"
+		end
 		if item.place then words = words .. "  |cff808080· " .. PlaceName(item.place) .. "|r" end
 		row.text:SetText(words)
 		row.star:SetShown(item.star and not item.done or false)
@@ -222,10 +258,12 @@ Refresh = function()
 		rows[index].item = nil
 	end
 	empty:SetShown(#list == 0)
-	clearButton:SetShown(#list > pending)
-	local listHeight = math.max(1, shown) * ROW_HEIGHT
-	if #list == 0 then listHeight = math.max(listHeight, U.Measure(empty, "GetStringHeight", ROW_HEIGHT) + 6) end
-	window:SetHeight(margin * 2 + 14 + 18 + 8 + listHeight + 10 + 24 + (clearButton:IsShown() and 22 or 0))
+	-- Never resized: as tall as its lines.
+	if not (size or sizing) then
+		local listHeight = math.max(1, shown) * ROW_HEIGHT
+		if #list == 0 then listHeight = math.max(listHeight, U.Measure(empty, "GetStringHeight", ROW_HEIGHT) + 6) end
+		window:SetHeight(Chrome(margin) + listHeight)
+	end
 	ns.Skin.Get(window):Layout()
 end
 
@@ -237,7 +275,7 @@ local function Add()
 	input:SetText("")
 	items[#items + 1] = { text = text, t = time() }
 	-- The new line in view.
-	offset = math.max(0, #Sorted() - VISIBLE)
+	offset = math.max(0, #Sorted() - Visible(ns.Skin.Margin() + 6))
 	Refresh()
 end
 
@@ -252,7 +290,7 @@ end
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererTodo", "MEDIUM")
 	ns.Skin.Sounds(window, "IG_QUEST_LOG_OPEN", "IG_QUEST_LOG_CLOSE")
-	window:SetWidth(WIDTH)
+	window:SetWidth(Size() and Size()[1] or WIDTH)
 	ns.Skin.Dress(window, { "RIGHT", UIParent, "RIGHT", -260, 80 }, "todoPos")
 	local margin = ns.Skin.Margin() + 6
 	kicker = ns.Skin.CreateKicker(window, L.ADDON_TITLE)
@@ -269,7 +307,7 @@ local function CreateWindow()
 	-- The line to write a new one, at the bottom.
 	input = ns.Skin.CreateInput(window, "WandererTodoInput", 120)
 	input:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin)
-	input:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
+	input:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin - 10, margin) -- (the corner's grip beside it)
 	input.hint = ns.Skin.CreateText(input, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
 	input.hint:SetPoint("LEFT", input, "LEFT", 8, 0)
 	input.hint:SetText(L.TODO_ADD_HINT)
@@ -301,6 +339,38 @@ local function CreateWindow()
 		self:SetScale(ns.Skin.Scale())
 		Refresh()
 	end)
+	-- The corner: dragged, the window grows or shrinks, as many lines as fit; its size and place kept.
+	if window.SetResizable then
+		window:SetResizable(true)
+		if window.SetResizeBounds then
+			window:SetResizeBounds(MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT)
+		elseif window.SetMinResize then
+			window:SetMinResize(MIN_WIDTH, MIN_HEIGHT)
+			if window.SetMaxResize then window:SetMaxResize(MAX_WIDTH, MAX_HEIGHT) end
+		end
+		local grip = CreateFrame("Button", "WandererTodoGrip", window)
+		grip:SetSize(16, 16)
+		grip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -3, 3)
+		grip:SetFrameLevel(input:GetFrameLevel() + 2)
+		grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+		grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+		grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+		grip:SetScript("OnMouseDown", function(_, button)
+			if button ~= "LeftButton" then return end
+			sizing = true
+			window:StartSizing("BOTTOMRIGHT")
+		end)
+		grip:SetScript("OnMouseUp", function()
+			window:StopMovingOrSizing()
+			sizing = false
+			ns.root.todoSize = { math.floor(window:GetWidth() + 0.5), math.floor(window:GetHeight() + 0.5) }
+			-- Its place kept as it is now (sizing may anchor it again).
+			local anchor, _, _, x, y = window:GetPoint(1)
+			if anchor then ns.root.todoPos = { anchor, x, y } end
+			Refresh()
+		end)
+		window:HookScript("OnSizeChanged", function() if sizing then Refresh() end end)
+	end
 end
 
 -- Back where a line was tied: what is left to do there.
@@ -314,10 +384,64 @@ local function Arrived()
 	if here[1] and ns.Toast then ns.Toast(L.TODO_HERE, table.concat(here, "\n"), { duration = 6 }) end
 end
 
+-- At login, something left to do: the reminders open by themselves (silently, once the interface is
+-- there), unless you said not to (ns.root.todoAtLogin false).
+local function LoggedIn()
+	if not (ns.root and ns.root.todoAtLogin ~= false and ns.db and ns.db.enabled) then return end
+	C_Timer.After(3, function()
+		if (ns.TodoPending and ns.TodoPending() or 0) == 0 then return end
+		if not window then CreateWindow() end
+		if window:IsShown() then return end
+		window.quiet = true
+		window:Show()
+	end)
+end
+
 function ns.InitTodo()
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-	frame:SetScript("OnEvent", Arrived)
+	frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+	frame:RegisterEvent("BAG_UPDATE_DELAYED")
+	frame:SetScript("OnEvent", function(_, event, isLogin)
+		if event == "BAG_UPDATE_DELAYED" then
+			-- (what you carry changed: the counts of the lines shown)
+			if window and window:IsShown() then Refresh() end
+			return
+		end
+		if event == "PLAYER_ENTERING_WORLD" then
+			if isLogin then LoggedIn() end
+			return
+		end
+		Arrived()
+	end)
+end
+
+-- A line from another addon: text; opts.key (never twice the same), opts.item and opts.count (an item to
+-- gather), opts.place ({ map, x, y (0 to 1), zone }). True when added; false and why ("known", "full").
+function ns.AddTodo(text, opts)
+	if not ns.root or type(text) ~= "string" or strtrim(text) == "" then return false end
+	opts = type(opts) == "table" and opts or {}
+	local items = Items()
+	if opts.key then
+		for _, item in ipairs(items) do
+			if item.key == opts.key and not item.done then return false, "known" end
+		end
+	end
+	if #items >= MAX_ITEMS then return false, "full" end
+	local place = type(opts.place) == "table" and opts.place.map and opts.place or nil
+	items[#items + 1] = { text = strtrim(text), t = time(), key = opts.key, item = tonumber(opts.item),
+		count = tonumber(opts.count), place = place }
+	Refresh()
+	return true
+end
+
+-- A line from another addon still to do (by its key).
+function ns.HasTodo(key)
+	if not (ns.root and key) then return false end
+	for _, item in ipairs(Items()) do
+		if item.key == key and not item.done then return true end
+	end
+	return false
 end
 
 function ns.ToggleTodo()
@@ -327,6 +451,7 @@ function ns.ToggleTodo()
 end
 
 function Wanderer_ToggleTodo() ns.ToggleTodo() end
+function ns.TodoShown() return window and window:IsShown() or false end
 
 -- What is left to do (the minimap menu shows it).
 function ns.TodoPending()

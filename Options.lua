@@ -657,6 +657,9 @@ local function PracticalPage()
 		CloseSettings()
 		ns.ToggleTodo()
 	end)
+	Checkbox("TODO_AT_LOGIN", L.TODO_AT_LOGIN, L.TODO_AT_LOGIN_DESC, true,
+		function() return not (ns.root and ns.root.todoAtLogin == false) end,
+		function(value) ns.root.todoAtLogin = value and nil or false end)
 
 	Header(L.SECTION_MERCHANT)
 	TableCheckbox("merchant", "sellJunk", L.MERCHANT_SELL_JUNK, L.MERCHANT_SELL_JUNK_DESC)

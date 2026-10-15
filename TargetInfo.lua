@@ -88,12 +88,16 @@ function ns.InitTargetInfo()
 	driver = CreateFrame("Frame")
 	driver:Hide()
 	driver:SetScript("OnUpdate", OnUpdate)
-	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
-		"UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE" }) do
+	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
 		driver:RegisterEvent(event)
 	end
-	driver:SetScript("OnEvent", function()
-		Update()
+	-- The threat on your target only, and read at the next check (it changes many times a second).
+	local THREAT = { UNIT_THREAT_LIST_UPDATE = true, UNIT_THREAT_SITUATION_UPDATE = true }
+	for event in pairs(THREAT) do
+		if driver.RegisterUnitEvent then driver:RegisterUnitEvent(event, "target") else driver:RegisterEvent(event) end
+	end
+	driver:SetScript("OnEvent", function(_, event)
+		if THREAT[event] then since = CHECK_EVERY else Update() end
 		driver:Show()
 	end)
 end

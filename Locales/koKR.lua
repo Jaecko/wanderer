@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "새로운 기능",
 	NEWS_SHOW_BUTTON = "보기",
 	NEWS_SHOW_DESC = "이번 Wanderer 버전의 변경 사항.",
-	NEWS_LINES = "제작 재료 위에 어떤 전문 기술이 그것을 쓰는지 한 줄로 표시: 내 기술은 금색, 그것이 필요한 내 제조법 수와 함께.\n게임의 피해 측정기를 프로필별로 표시하거나 숨김(던전에서 표시), 원하면 텍스트만.\n파티에서 퀘스트 목표가 누가 아직 무엇이 필요한지 알려 주고, 전투 중에도 남습니다.\n정예, 던전, 공격대 퀘스트를 수락하기 전에 알려 줍니다.\n새 확장: Wanderer Auction이 경매장을 Wanderer 창으로 가져오며, 상인 가격 아래로는 절대 팔지 않습니다. Wanderer Bags도 커졌습니다: 보관할 물건, 나만의 구역, 전문 기술별 재료.",
+	NEWS_LINES = "Wanderer 창들이 더 이상 서로 겹치지 않습니다. 자석처럼 붙습니다. Shift를 누른 채 놓으면 자유롭게 놓을 수 있습니다.\n알림 창은 크기를 바꿀 수 있고, 남은 일이 있으면 접속 시 저절로 열리며, 다른 애드온이 주는 줄을 받습니다(퀘스트 아이템과 가진 개수).\n더 가볍게: 특성 갈래, 읽지 않은 메시지, 버프를 훨씬 덜 자주 읽습니다.\n새 확장: Wanderer Quests가 내 직업, 던전, 지역의 모든 퀘스트를 연계로 보여 주고 퀘스트마다 상세 정보를 제공합니다. Wanderer Auction에는 구매 목록이, Wanderer Bags에는 여러 아이템을 한 번에 다루는 선택이 생겼습니다.",
 	PREVIEW_TITLE = "미리 보기",
 	GESTURES_GREET = "대화하는 인물에게 인사",
 	GESTURES_GREET_DESC = "대화를 시작할 때 가끔 캐릭터가 말없이 손을 흔들어 인사합니다(게임의 /손흔들기 감정 표현, 주변 플레이어에게 보입니다).",
@@ -847,4 +847,9 @@ for key, text in pairs({
 
 	EXT_AUCTION_SHORT = "Wanderer 창 속의 경매장",
 	EXT_AUCTION = "Wanderer 창 속의 경매장: 판매, 구매, 내 경매와 입찰, 대신 찾아 주는 최저가, 상인 가격 아래로는 절대 팔지 않음. 별도 다운로드: CurseForge 앱에서 Wanderer Auction을 검색하거나 주소를 복사하세요.",
+	TODO_AT_LOGIN = "남은 일이 있으면 접속 시 열기",
+	TODO_AT_LOGIN_DESC = "접속했을 때 할 일이 남아 있으면 도착 몇 초 뒤 알림 창이 조용히 저절로 열립니다.",
+	TODO_SHOPPING = "구매 목록에 추가",
+	EXT_QUESTS_SHORT = "내 직업, 던전, 지역의 모든 퀘스트",
+	EXT_QUESTS = "내 직업, 던전, 지역의 모든 퀘스트를 연계로: 진행 상황, 각 퀘스트의 요구 사항, 주는 사람과 위치. 별도 다운로드: CurseForge 앱에서 Wanderer Quests를 검색하거나 주소를 복사하세요.",
 }) do L[key] = text end

@@ -422,7 +422,7 @@ for key, text in pairs({
 	NEWS_SHOW = "更新內容",
 	NEWS_SHOW_BUTTON = "顯示",
 	NEWS_SHOW_DESC = "此版本 Wanderer 的變化。",
-	NEWS_LINES = "在製作材料上，一行說明哪些專業會用到它：你的專業以金色顯示，並註明你有多少配方需要它。\n遊戲內建的傷害統計依設定檔顯示或隱藏（地城中顯示），也可選擇純文字外觀。\n組隊時，任務目標會顯示誰還需要什麼，戰鬥中也會保留。\n精英、地城和團隊任務會在你接受之前標明。\n新擴充：Wanderer Auction 把拍賣場放進 Wanderer 視窗，絕不以低於商人收購價出售。Wanderer Bags 也有更新：保留物品、自訂分區、依專業分類的材料。",
+	NEWS_LINES = "Wanderer 的視窗不再互相遮擋：它們像磁鐵一樣吸在一起。按住 Shift 放開可自由放置。\n備忘錄可以調整大小，登入時若有未完成事項會自動開啟，並能接收其他插件給出的項目（任務需要的物品，以及你攜帶的數量）。\n更輕量：你的天賦分支、未讀訊息和增益效果的讀取次數大大減少。\n新擴充：Wanderer Quests 依任務鏈顯示你的職業、地城和區域的所有任務，並為每個任務提供詳情。Wanderer Auction 新增購物清單，Wanderer Bags 新增可一次處理多件物品的選擇。",
 	PREVIEW_TITLE = "預覽",
 	GESTURES_GREET = "向交談的人物打招呼",
 	GESTURES_GREET_DESC = "開始與某角色交談時，你的角色偶爾會無聲地向其揮手（遊戲的 /揮手 表情，附近玩家可見）。",
@@ -847,4 +847,9 @@ for key, text in pairs({
 
 	EXT_AUCTION_SHORT = "Wanderer 視窗中的拍賣場",
 	EXT_AUCTION = "Wanderer 視窗中的拍賣場：出售、購買、你的拍賣和競標，為你找到最低價，絕不低於商人收購價。需另外下載：在 CurseForge 應用程式中搜尋 Wanderer Auction，或複製其網址。",
+	TODO_AT_LOGIN = "登入時若有未完成事項則開啟",
+	TODO_AT_LOGIN_DESC = "登入時如果還有待辦事項，備忘錄會在你抵達幾秒後自動靜默開啟。",
+	TODO_SHOPPING = "加入購物清單",
+	EXT_QUESTS_SHORT = "你的職業、地城和區域的所有任務",
+	EXT_QUESTS = "你的職業、地城和區域的所有任務，依任務鏈排列：你的進度、每個任務的需求、誰給出以及在哪裡。需單獨下載：在 CurseForge 應用程式中搜尋 Wanderer Quests，或複製它的位址。",
 }) do L[key] = text end
