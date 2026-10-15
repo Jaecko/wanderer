@@ -190,7 +190,7 @@ local function Compare(link, equip, slots, weights)
 	for _, slot in ipairs(slots) do
 		local wornLink = Clean(Safe(GetInventoryItemLink, "player", slot))
 		if slot == 17 and equip == "INVTYPE_WEAPON" then
-			local _, _, _, held = Safe(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant, wornLink or 0)
+			local _, _, _, held = U.ItemInstant(wornLink or 0)
 			held = Clean(held)
 			if held ~= "INVTYPE_WEAPON" and held ~= "INVTYPE_WEAPONOFFHAND" then wornLink, slot = nil, nil end
 		end
@@ -388,7 +388,7 @@ function ns.UpgradeLines(link)
 	if not (ns.db and ns.db.enabled and ns.db.tooltips.upgrade) or not link then return lines end
 	local class = ClassFile()
 	if not class then return lines end
-	local _, _, _, equip, _, itemClass, subclass = Safe(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant, link)
+	local _, _, _, equip, _, itemClass, subclass = U.ItemInstant(link)
 	equip, itemClass, subclass = Clean(equip), Clean(itemClass), Clean(subclass)
 	local slots = equip and SLOTS[equip]
 	if not slots or not Wearable(class, itemClass, subclass, equip) then return lines end
@@ -415,7 +415,7 @@ function ns.IsUpgrade(link)
 	if not (ns.db and ns.db.enabled and ns.db.tooltips.upgrade) or not link then return false end
 	local class = ClassFile()
 	if not class then return false end
-	local _, _, _, equip, _, itemClass, subclass = Safe(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant, link)
+	local _, _, _, equip, _, itemClass, subclass = U.ItemInstant(link)
 	equip, itemClass, subclass = Clean(equip), Clean(itemClass), Clean(subclass)
 	local slots = equip and SLOTS[equip]
 	if not slots or not Wearable(class, itemClass, subclass, equip) then return false end
@@ -424,6 +424,16 @@ function ns.IsUpgrade(link)
 		if change == "new" or change == "useful" or (type(change) == "number" and change >= 1) then return true end
 	end
 	return false
+end
+
+-- Gear your class can wear (its armor, its weapons): true or false; nil when it is not gear.
+function ns.CanWear(link)
+	if not link then return nil end
+	local class = ClassFile()
+	local _, _, _, equip, _, itemClass, subclass = U.ItemInstant(link)
+	equip, itemClass, subclass = Clean(equip), Clean(itemClass), Clean(subclass)
+	if not (class and equip and SLOTS[equip]) then return nil end
+	return Wearable(class, itemClass, subclass, equip) and true or false
 end
 
 -- (tests) The first line's text.

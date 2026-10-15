@@ -27,7 +27,7 @@ local MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT = 240, 170, 700, 900
 local MAX_ITEMS = 60
 local CHECK_SIZE = 18
 
-local window, kicker, title, input, clearButton, empty
+local window, title, input, clearButton, empty
 local rows = {}
 local offset = 0 -- first item shown (scrolling)
 local sizing = false -- its corner being dragged
@@ -91,11 +91,7 @@ end
 
 -- The game's own pin on the map, at the place of a line.
 local function ShowWay(place)
-	if not (place and place.map and place.x and UiMapPoint and C_Map and C_Map.SetUserWaypoint) then return end
-	local point = Safe(UiMapPoint.CreateFromCoordinates, place.map, place.x, place.y)
-	if not point then return end
-	Safe(C_Map.SetUserWaypoint, point)
-	if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then Safe(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
+	if place then U.Pin(place.map, place.x, place.y) end
 end
 
 local function PlaceName(place)
@@ -117,11 +113,7 @@ local Refresh
 -- The menu of a line (right click), the game's own menus.
 OpenMenu = function(row)
 	local item = row.item
-	if not (item and MenuUtil and MenuUtil.CreateContextMenu) then
-		Remove(item)
-		return Refresh()
-	end
-	MenuUtil.CreateContextMenu(row, function(_, root)
+	local shown = item and U.Menu(row, function(_, root)
 		root:CreateButton(item.star and L.TODO_UNSTAR or L.TODO_STAR, function()
 			item.star = not item.star or nil
 			Refresh()
@@ -145,6 +137,11 @@ OpenMenu = function(row)
 		root:CreateDivider()
 		root:CreateButton("|cffff6060" .. L.TODO_REMOVE .. "|r", function() Remove(item) Refresh() end)
 	end)
+	-- No menu in this game: a right click removes the line.
+	if not shown then
+		Remove(item)
+		return Refresh()
+	end
 end
 
 local function Row(index)
@@ -240,8 +237,7 @@ Refresh = function()
 		local words = item.text
 		-- An item to gather: how many you carry (green once enough).
 		if item.item and item.count and not item.done then
-			local have = Clean(Safe(C_Item and C_Item.GetItemCount or GetItemCount, item.item)) or 0
-			words = words .. (have >= item.count and "  |cff66dd66" or "  |cffb0a080") .. math.min(have, item.count) .. "/" .. item.count .. "|r"
+			words = words .. "  " .. U.HaveNeed(U.ItemCount(item.item), item.count)
 		end
 		if item.place then words = words .. "  |cff808080· " .. PlaceName(item.place) .. "|r" end
 		row.text:SetText(words)
@@ -292,11 +288,8 @@ local function CreateWindow()
 	ns.Skin.Sounds(window, "IG_QUEST_LOG_OPEN", "IG_QUEST_LOG_CLOSE")
 	window:SetWidth(Size() and Size()[1] or WIDTH)
 	ns.Skin.Dress(window, { "RIGHT", UIParent, "RIGHT", -260, 80 }, "todoPos")
-	local margin = ns.Skin.Margin() + 6
-	kicker = ns.Skin.CreateKicker(window, L.ADDON_TITLE)
-	kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
-	title = ns.Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
-	title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
+	local _, margin
+	_, title, margin = ns.Skin.Header(window, L.ADDON_TITLE, nil, 6)
 	empty = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
 	empty:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
 	-- Inside the window, over as many lines as it needs.
@@ -305,20 +298,16 @@ local function CreateWindow()
 	empty:SetJustifyH("LEFT")
 	empty:SetText(L.TODO_EMPTY)
 	-- The line to write a new one, at the bottom.
-	input = ns.Skin.CreateInput(window, "WandererTodoInput", 120)
+	input = ns.Skin.CreateInput(window, "WandererTodoInput", 120, {
+		hint = L.TODO_ADD_HINT,
+		onEnter = Add,
+		onEscape = function(self)
+			self:ClearFocus()
+			window:Hide()
+		end,
+	})
 	input:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin)
 	input:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin - 10, margin) -- (the corner's grip beside it)
-	input.hint = ns.Skin.CreateText(input, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
-	input.hint:SetPoint("LEFT", input, "LEFT", 8, 0)
-	input.hint:SetText(L.TODO_ADD_HINT)
-	input:SetScript("OnTextChanged", function(self) self.hint:SetShown((self:GetText() or "") == "" and not self:HasFocus()) end)
-	input:SetScript("OnEditFocusGained", function(self) self.hint:Hide() end)
-	input:SetScript("OnEditFocusLost", function(self) self.hint:SetShown((self:GetText() or "") == "") end)
-	input:SetScript("OnEnterPressed", Add)
-	input:SetScript("OnEscapePressed", function(self)
-		self:ClearFocus()
-		window:Hide()
-	end)
 	-- Clear the done ones, over the line.
 	clearButton = CreateFrame("Button", nil, window)
 	clearButton:SetHeight(18)
@@ -340,37 +329,16 @@ local function CreateWindow()
 		Refresh()
 	end)
 	-- The corner: dragged, the window grows or shrinks, as many lines as fit; its size and place kept.
-	if window.SetResizable then
-		window:SetResizable(true)
-		if window.SetResizeBounds then
-			window:SetResizeBounds(MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT)
-		elseif window.SetMinResize then
-			window:SetMinResize(MIN_WIDTH, MIN_HEIGHT)
-			if window.SetMaxResize then window:SetMaxResize(MAX_WIDTH, MAX_HEIGHT) end
-		end
-		local grip = CreateFrame("Button", "WandererTodoGrip", window)
-		grip:SetSize(16, 16)
-		grip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -3, 3)
-		grip:SetFrameLevel(input:GetFrameLevel() + 2)
-		grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-		grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-		grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-		grip:SetScript("OnMouseDown", function(_, button)
-			if button ~= "LeftButton" then return end
-			sizing = true
-			window:StartSizing("BOTTOMRIGHT")
-		end)
-		grip:SetScript("OnMouseUp", function()
-			window:StopMovingOrSizing()
+	ns.Skin.Resizable(window, {
+		minWidth = MIN_WIDTH, minHeight = MIN_HEIGHT, maxWidth = MAX_WIDTH, maxHeight = MAX_HEIGHT,
+		onStart = function() sizing = true end,
+		onSizing = function() Refresh() end,
+		onResized = function(width, height)
 			sizing = false
-			ns.root.todoSize = { math.floor(window:GetWidth() + 0.5), math.floor(window:GetHeight() + 0.5) }
-			-- Its place kept as it is now (sizing may anchor it again).
-			local anchor, _, _, x, y = window:GetPoint(1)
-			if anchor then ns.root.todoPos = { anchor, x, y } end
+			ns.root.todoSize = { width, height }
 			Refresh()
-		end)
-		window:HookScript("OnSizeChanged", function() if sizing then Refresh() end end)
-	end
+		end,
+	})
 end
 
 -- Back where a line was tied: what is left to do there.

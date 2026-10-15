@@ -220,7 +220,7 @@ local function RewardName(kind, index)
 	local name = Clean((Safe(GetQuestItemInfo, kind, index)))
 	if name then return name end
 	local link = Clean(Safe(GetQuestItemLink, kind, index))
-	return link and link:match("%[(.-)%]") or nil
+	return U.LinkName(link)
 end
 
 local function Rewards(required)
@@ -286,7 +286,7 @@ local function Prices(rewards)
 			local price = U.SellPrice(link)
 			if link and not price then
 				missing = true
-				if C_Item and C_Item.RequestLoadItemDataByID then Safe(C_Item.RequestLoadItemDataByID, link) end
+				U.LoadItem(link)
 			end
 			reward.price = price
 			if price and price > bestPrice then best, bestPrice = reward, price end
@@ -670,10 +670,7 @@ Render = function()
 			item.price:SetText(reward.price and reward.price > 0 and U.Coins(reward.price) or "")
 			if reward.best then item.price:SetTextColor(1, 0.82, 0) else item.price:SetTextColor(0.7, 0.7, 0.7) end
 			local r, g, b = 0.5, 0.5, 0.5
-			if reward.quality and C_Item and C_Item.GetItemQualityColor then
-				local qr, qg, qb = Safe(C_Item.GetItemQualityColor, reward.quality)
-				if qr then r, g, b = qr, qg, qb end
-			end
+			if reward.quality then r, g, b = U.QualityColor(reward.quality) end
 			item.border:SetColorTexture(r, g, b, 0.9)
 			local label = (reward.waiting and ("|cff8c8070" .. (RETRIEVING_ITEM_INFO or "...") .. "|r") or reward.name)
 				.. (reward.count > 1 and (" x" .. reward.count) or "")

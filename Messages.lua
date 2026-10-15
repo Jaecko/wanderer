@@ -510,10 +510,9 @@ end
 
 -- The menu of someone in the list (right click), the game's own menus.
 local function OpenMenu(row)
-	if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
 	local key = row.key
 	local talk = Conversation(key)
-	MenuUtil.CreateContextMenu(row, function(_, root)
+	U.Menu(row, function(_, root)
 		root:CreateTitle(NameOf(talk, key))
 		root:CreateButton(talk.pinned and L.MESSAGES_UNPIN or L.MESSAGES_PIN, function()
 			talk.pinned = not talk.pinned or nil
@@ -536,10 +535,10 @@ end
 
 -- The menu of the person shown (a click on their name or portrait).
 local function OpenPersonMenu(owner)
-	if not (current and MenuUtil and MenuUtil.CreateContextMenu) or IsBattleNet(current) then return end
+	if not current or IsBattleNet(current) then return end
 	local key = current
 	local talk = Conversation(key)
-	MenuUtil.CreateContextMenu(owner, function(_, root)
+	U.Menu(owner, function(_, root)
 		root:CreateTitle(NameOf(talk, key))
 		PersonActions(root, key, talk)
 	end)
@@ -669,8 +668,8 @@ local function CreateWindow()
 	ns.Skin.Sounds(window, "IG_CHARACTER_INFO_OPEN", "IG_CHARACTER_INFO_CLOSE")
 	-- The size chosen last time, within reason.
 	local size = type(ns.root.messagesSize) == "table" and ns.root.messagesSize or {}
-	window:SetSize(math.min(MAX_WIDTH, math.max(MIN_WIDTH, tonumber(size[1]) or WIDTH)),
-		math.min(MAX_HEIGHT, math.max(MIN_HEIGHT, tonumber(size[2]) or HEIGHT)))
+	window:SetSize(ns.Skin.Within(tonumber(size[1]) or WIDTH, MIN_WIDTH, MAX_WIDTH),
+		ns.Skin.Within(tonumber(size[2]) or HEIGHT, MIN_HEIGHT, MAX_HEIGHT))
 	ns.Skin.Dress(window, { "LEFT", UIParent, "LEFT", 40, 60 }, "messagesPos")
 	-- A window of its own: the game's windows (the spellbook...) and Escape never
 	-- close it, the interface fades around it, and it stays in a fight (to
@@ -693,19 +692,14 @@ local function CreateWindow()
 	line:SetPoint("BOTTOMLEFT", list, "BOTTOMRIGHT", 6, 0)
 	window.empty = ns.Skin.CreateText(list, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
 	-- Search: a name or a word.
-	window.search = ns.Skin.CreateInput(list, "WandererMessagesSearch", 40)
+	window.search = ns.Skin.CreateInput(list, "WandererMessagesSearch", 40, {
+		hint = L.MESSAGES_SEARCH,
+		onChange = function() ns.RefreshMessages() end,
+		onEscape = function(self) self:SetText("") self:ClearFocus() end,
+	})
 	window.search:SetHeight(20)
 	window.search:SetPoint("TOPLEFT", list, "TOPLEFT", 0, 0)
 	window.search:SetPoint("RIGHT", list, "RIGHT", 0, 0)
-	window.search.hint = ns.Skin.CreateText(window.search, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
-	window.search.hint:SetPoint("LEFT", window.search, "LEFT", 8, 0)
-	window.search.hint:SetText(L.MESSAGES_SEARCH)
-	window.search:SetScript("OnTextChanged", function(self)
-		self.hint:SetShown((self:GetText() or "") == "")
-		ns.RefreshMessages()
-	end)
-	window.search:SetScript("OnEscapePressed", function(self) self:SetText("") self:ClearFocus() end)
-	window.search:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
 	window.empty:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -SEARCH_HEIGHT - 4)
 	window.empty:SetPoint("RIGHT", list, "RIGHT", -4, 0)
 	window.empty:SetText(L.MESSAGES_EMPTY)
@@ -770,36 +764,16 @@ local function CreateWindow()
 	end)
 
 	-- The corner: dragged, the window grows or shrinks; the bubbles follow once let go.
-	if window.SetResizable then
-		window:SetResizable(true)
-		if window.SetResizeBounds then
-			window:SetResizeBounds(MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT)
-		elseif window.SetMinResize then
-			window:SetMinResize(MIN_WIDTH, MIN_HEIGHT)
-			if window.SetMaxResize then window:SetMaxResize(MAX_WIDTH, MAX_HEIGHT) end
-		end
-		local grip = CreateFrame("Button", "WandererMessagesGrip", window)
-		grip:SetSize(16, 16)
-		grip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -3, 3)
-		grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-		grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-		grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
-		grip:SetScript("OnMouseDown", function(_, button)
-			if button == "LeftButton" then window:StartSizing("BOTTOMRIGHT") end
-		end)
-		grip:SetScript("OnMouseUp", function()
-			window:StopMovingOrSizing()
-			local width, height = math.floor(window:GetWidth() + 0.5), math.floor(window:GetHeight() + 0.5)
+	ns.Skin.Resizable(window, {
+		minWidth = MIN_WIDTH, minHeight = MIN_HEIGHT, maxWidth = MAX_WIDTH, maxHeight = MAX_HEIGHT,
+		onResized = function(width, height)
 			ns.root.messagesSize = { width, height }
-			-- Its place kept as it is now (sizing may anchor it again).
-			local anchor, _, _, x, y = window:GetPoint(1)
-			if anchor then ns.root.messagesPos = { anchor, x, y } end
 			thread.width = width - margin * 2 - LIST_WIDTH - 16
 			thread.content:SetWidth(thread.width)
 			if current then ShowConversation(current) else ns.RefreshMessages() end
-		end)
-		window:HookScript("OnSizeChanged", function() ns.Skin.Get(window):Layout() end)
-	end
+		end,
+	})
+	window:HookScript("OnSizeChanged", function() ns.Skin.Get(window):Layout() end)
 
 	window:HookScript("OnShow", function(self)
 		self:SetScale(ns.Skin.Scale())

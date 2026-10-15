@@ -354,3 +354,138 @@ for byte = 0x80, 0x8F do UPPER["\209" .. string.char(byte)] = "\208" .. string.c
 function Util.Upper(text)
 	return (tostring(text):upper():gsub("[\195\197\208\209][\128-\191]", UPPER))
 end
+
+-- Items ------------------------------------------------------------------------------------------------
+-- What the game knows of an item (by its id): nil until it has it (Util.LoadItem asks for it; the game
+-- then sends GET_ITEM_INFO_RECEIVED).
+
+local function ItemAPI(name) return C_Item and C_Item[name] or _G[name] end
+
+function Util.ItemName(id) return Util.Clean(Util.Safe(ItemAPI("GetItemNameByID") or ItemAPI("GetItemInfo"), id)) end
+function Util.ItemIcon(id) return Util.Clean(Util.Safe(ItemAPI("GetItemIconByID"), id)) end
+function Util.ItemQuality(id) return Util.Clean(Util.Safe(ItemAPI("GetItemQualityByID"), id)) end
+function Util.ItemCount(id) return Util.Clean(Util.Safe(ItemAPI("GetItemCount"), id)) or 0 end
+-- What the game knows at once of an item (id, link or name), without asking the server: the values of
+-- GetItemInfoInstant (id, type, subtype, equip slot, icon, class id, subclass id).
+function Util.ItemInstant(item)
+	if item == nil then return nil end
+	return Util.Safe(ItemAPI("GetItemInfoInstant"), item)
+end
+
+-- How many make a stack of it (1: it does not stack).
+function Util.ItemMaxStack(id) return Util.Clean(Util.Safe(ItemAPI("GetItemMaxStackSizeByID"), id)) or 1 end
+
+-- Its name, link and quality at once.
+function Util.ItemInfo(id)
+	local name, link, quality = Util.Safe(ItemAPI("GetItemInfo"), id)
+	return Util.Clean(name), Util.Clean(link), Util.Clean(quality)
+end
+
+function Util.LoadItem(id)
+	if C_Item and C_Item.RequestLoadItemDataByID then Util.Safe(C_Item.RequestLoadItemDataByID, id) end
+end
+
+-- From a link: the item's id, its name.
+function Util.ItemID(link) return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil end
+function Util.LinkName(link) return type(link) == "string" and link:match("%[(.-)%]") or nil end
+
+-- A quality's color (r, g, b).
+function Util.QualityColor(quality)
+	if C_Item and C_Item.GetItemQualityColor then
+		local r, g, b = Util.Safe(C_Item.GetItemQualityColor, quality)
+		if r then return r, g, b end
+	end
+	local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality or 1]
+	if color then return color.r, color.g, color.b end
+	return 1, 1, 1
+end
+
+-- Words in a color.
+function Util.Colorize(text, r, g, b) return Util.ColorCode(r, g, b) .. tostring(text) .. "|r" end
+
+-- How many you carry of how many are needed: "3/8", green once enough.
+function Util.HaveNeed(have, need)
+	local color = have >= need and "|cff66dd66" or "|cffb0a080"
+	return color .. math.min(have, need) .. "/" .. need .. "|r"
+end
+
+-- Each item of your bags: fn(bag, slot, info) (info: the game's, its values cleaned when read).
+function Util.EachBagItem(fn)
+	local container = C_Container or {}
+	for _, bag in ipairs(Util.BagIDs()) do
+		for slot = 1, Util.Clean(Util.Safe(container.GetContainerNumSlots, bag)) or 0 do
+			local info = Util.Safe(container.GetContainerItemInfo, bag, slot)
+			if type(info) == "table" and Util.Clean(info.itemID) then fn(bag, slot, info) end
+		end
+	end
+end
+
+-- Time -------------------------------------------------------------------------------------------------
+
+-- A function that runs fn once, a moment after the last time it was called (many calls at once: one run).
+-- "3 hours": how long ago (seconds), in the game's words (a minute at least).
+function Util.Ago(seconds)
+	seconds = math.max(60, tonumber(seconds) or 0)
+	if SecondsToTime then return SecondsToTime(seconds, true, true, 1) end
+	return ("%d min"):format(math.floor(seconds / 60))
+end
+
+function Util.Debounce(delay, fn)
+	local waiting = false
+	return function()
+		if waiting then return end
+		waiting = true
+		C_Timer.After(delay, function()
+			waiting = false
+			fn()
+		end)
+	end
+end
+
+-- The map ---------------------------------------------------------------------------------------------
+
+-- The game's own pin on a map (x, y: 0 to 1), followed; false when it cannot.
+function Util.Pin(map, x, y)
+	if not (map and x and y and UiMapPoint and C_Map and C_Map.SetUserWaypoint) then return false end
+	local point = Util.Safe(UiMapPoint.CreateFromCoordinates, map, x, y)
+	if not point then return false end
+	Util.Safe(C_Map.SetUserWaypoint, point)
+	if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then Util.Safe(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
+	return true
+end
+
+-- The game's windows -----------------------------------------------------------------------------------
+
+-- One of the game's windows out of sight (still open: the game's own window under Wanderer's), then back
+-- where the game had placed it (none of the game's placing called from here).
+local OFF_SCREEN = -10000
+local offPoints = setmetatable({}, { __mode = "k" })
+function Util.HideOffScreen(frame, hidden)
+	if not frame then return end
+	if hidden then
+		local _, _, _, x = frame:GetPoint(1)
+		if x ~= OFF_SCREEN then
+			local points = {}
+			for index = 1, frame:GetNumPoints() do points[index] = { frame:GetPoint(index) } end
+			offPoints[frame] = points
+		end
+		frame:SetAlpha(0)
+		frame:ClearAllPoints()
+		frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", OFF_SCREEN, 0)
+	elseif (frame:GetAlpha() or 1) < 1 then
+		frame:SetAlpha(1)
+		local points = offPoints[frame]
+		if points and points[1] then
+			frame:ClearAllPoints()
+			for _, point in ipairs(points) do frame:SetPoint(point[1], point[2], point[3], point[4], point[5]) end
+		end
+		offPoints[frame] = nil
+	end
+end
+
+-- A menu of the game's (MenuUtil) at a frame; false when the game has none.
+function Util.Menu(owner, build)
+	if not (MenuUtil and MenuUtil.CreateContextMenu) then return false end
+	MenuUtil.CreateContextMenu(owner, build)
+	return true
+end

@@ -11,7 +11,8 @@ local TOOLTIPS = {
 	"ItemRefShoppingTooltip1", "ItemRefShoppingTooltip2",
 }
 
-local Safe, Clean = ns.Util.Safe, ns.Util.Clean
+local U = ns.Util
+local Safe, Clean = U.Safe, U.Clean
 
 local skins = {} -- tooltip -> its skin
 
@@ -57,9 +58,7 @@ local function Describe(data)
 	local kind, id = data.type, Clean(data.id)
 	if not id then return end
 	if (kind == types.Item or kind == types.Toy) and C_Item then
-		local link = Clean(data.hyperlink)
-		local quality = Clean(Safe(C_Item.GetItemQualityByID, link or id))
-		return Clean(Safe(C_Item.GetItemIconByID, id)), quality
+		return U.ItemIcon(id), U.ItemQuality(Clean(data.hyperlink) or id)
 	elseif kind == types.Spell or kind == types.UnitAura or kind == types.Macro then
 		return Clean(Safe(C_Spell and C_Spell.GetSpellTexture, id))
 	elseif kind == types.Currency then
@@ -71,14 +70,7 @@ local function Describe(data)
 	end
 end
 
-local function QualityColor(quality)
-	if C_Item and C_Item.GetItemQualityColor then
-		local r, g, b = Safe(C_Item.GetItemQualityColor, quality)
-		if r then return r, g, b end
-	end
-	local color = ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-	if color then return color.r, color.g, color.b end
-end
+local QualityColor = ns.Util.QualityColor
 
 local OnCleared
 
@@ -86,6 +78,8 @@ local OnCleared
 local function Track(tooltip)
 	if skins[tooltip] or not IsUsable(tooltip) then return skins[tooltip] end
 	skins[tooltip] = ns.Skin.Attach(tooltip)
+	-- (a tooltip shows over windows and their words: never so see-through that both mix)
+	skins[tooltip].minOpacity = ns.Skin.TOOLTIP_MIN_OPACITY
 	if ns.WatchTooltip then ns.WatchTooltip(tooltip) end
 	tooltip:HookScript("OnShow", StyleTooltip)
 	tooltip:HookScript("OnHide", OnCleared)

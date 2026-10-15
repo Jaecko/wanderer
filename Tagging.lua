@@ -99,6 +99,7 @@ end
 
 local function CreateMark()
 	local mark, skin = ns.Skin.CreateWindow(nil, "LOW")
+	skin.minOpacity = nil -- (the opacity chosen, as it is: the label's look)
 	mark:EnableMouse(false)
 	mark.text = ns.Skin.CreateText(mark, "GameTooltipTextSmall", 1, 0.6, 0.2)
 	mark.text:SetPoint("CENTER")

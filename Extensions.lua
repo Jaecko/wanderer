@@ -34,5 +34,5 @@ end
 
 -- Its address, selected, for Ctrl+C.
 function ns.OfferExtension(offer)
-	if StaticPopup_Show then StaticPopup_Show("WANDERER_LINK", nil, nil, offer.url) end
+	ns.Skin.ShowCopy(ns.L.CHAT_LINK_COPY, offer.url)
 end

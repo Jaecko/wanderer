@@ -270,8 +270,9 @@ end
 
 _G.Wanderer = setmetatable({
 	-- What the extensions may count on: 2 = the reagents, the junk rules and sales, the links, the bags' ids;
-	-- 3 = the reminders (a line added, known, the window opened).
-	API = 3,
+	-- 3 = the reminders (a line added, known, the window opened); 4 = the shared pieces (Skin: Kit.lua;
+	-- Util: items, the map, time) and the extensions' own setup (Locale, WhenLoaded).
+	API = 4,
 	RegisterExtension = RegisterExtension,
 	Settings = function(key) return ns.db and ns.db.enabled and ns.db[key] or nil end,
 	Util = ns.Util,
@@ -279,6 +280,8 @@ _G.Wanderer = setmetatable({
 	-- What an item is worth to you: { text, r, g, b } lines, the first one the best.
 	UpgradeLines = function(link) return ns.UpgradeLines and ns.UpgradeLines(link) or {} end,
 	IsUpgrade = function(link) return ns.IsUpgrade and ns.IsUpgrade(link) or false end,
+	-- Gear your class can wear: true or false (nil: not gear).
+	CanWear = function(link) if ns.CanWear then return ns.CanWear(link) end end,
 	-- Who uses a crafting reagent: { { name, mine, alt, count } }, see Reagents.lua.
 	ReagentUses = function(item) return ns.ReagentUses and ns.ReagentUses(item) or {} end,
 	-- At a merchant: what is junk (rule(item id, quality) -> true, false or nil), selling a list of { bag, slot, id }.
@@ -287,10 +290,33 @@ _G.Wanderer = setmetatable({
 	-- The junk of your bags as the rules say ({ bag, slot, id }).
 	FindJunk = function() return ns.FindJunk and ns.FindJunk() or {} end,
 	IsMerchantOpen = function() return ns.IsMerchantOpen and ns.IsMerchantOpen() or false end,
+	IsSellingJunk = function() return ns.IsSellingJunk and ns.IsSellingJunk() or false end,
+	-- An item one of your quests asks you to carry: { quest, have, need }, else nil (Quests.lua).
+	QuestNeed = function(item) if ns.QuestNeed then return ns.QuestNeed(item) end end,
 	-- The reminders: a line added (see Todo.lua), one known by its key, the window opened.
 	AddTodo = function(text, opts) if ns.AddTodo then return ns.AddTodo(text, opts) end return false end,
 	HasTodo = function(key) return ns.HasTodo and ns.HasTodo(key) or false end,
+	-- A short notice at the top of the screen (Toast.lua): a title, a few words.
+	Toast = function(title, text, options) if ns.Toast then ns.Toast(title, text, options) end end,
 	OpenTodo = function() if ns.ToggleTodo and not (ns.TodoShown and ns.TodoShown()) then ns.ToggleTodo() end end,
+	-- An extension's words: its languages' tables ({ enUS = {...}, frFR = {...} }); the client's, a word it
+	-- lacks in English, else the key itself. esMX reads esES when it has none.
+	Locale = function(tables)
+		tables.esMX = tables.esMX or tables.esES
+		local base = tables.enUS or {}
+		local here = tables[GetLocale and GetLocale() or "enUS"] or base
+		return setmetatable({}, { __index = function(_, key) return here[key] or base[key] or key end })
+	end,
+	-- An addon's start, once its own files are loaded (its saved variables with them).
+	WhenLoaded = function(addon, fn)
+		local frame = CreateFrame("Frame")
+		frame:RegisterEvent("ADDON_LOADED")
+		frame:SetScript("OnEvent", function(self, _, name)
+			if name ~= addon then return end
+			self:UnregisterEvent("ADDON_LOADED")
+			fn()
+		end)
+	end,
 }, {
 	-- The engine is made after this file: given when asked.
 	__index = function(_, key) if key == "Skin" then return ns.Skin end end,
@@ -1013,6 +1039,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		WandererDB = WandererDB or {}
 		ns.root = WandererDB
 		Migrate(WandererDB)
+		-- What removed features left behind (the journal, its sessions, the parchment): let go.
+		for _, key in ipairs({ "journal", "questTitles", "sessions", "sessionPos", "paper" }) do WandererDB[key] = nil end
 		-- The interaction prompt is gone: the game's own setting is the
 		-- player's again, as it was before Wanderer.
 		local original = WandererDB.original

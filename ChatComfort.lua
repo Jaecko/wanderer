@@ -187,30 +187,9 @@ local function OpenLink(link)
 	-- Heard twice (the registry and SetItemRef): opened once.
 	if link == lastLink and GetTime() - lastLinkTime < 0.3 then return end
 	lastLink, lastLinkTime = link, GetTime()
-	if StaticPopup_Show then StaticPopup_Show("WANDERER_LINK", nil, nil, link:sub(#LINK + 1)) end
+	ns.Skin.ShowCopy(L.CHAT_LINK_COPY, link:sub(#LINK + 1))
 end
 
-if StaticPopupDialogs then
-	StaticPopupDialogs.WANDERER_LINK = {
-		text = L.CHAT_LINK_COPY,
-		button1 = CLOSE or OKAY,
-		hasEditBox = true,
-		editBoxWidth = 340,
-		OnShow = function(self, address)
-			local box = self.editBox or self.EditBox
-			if box then
-				box:SetText(address or "")
-				box:HighlightText()
-				box:SetFocus()
-			end
-		end,
-		EditBoxOnEnterPressed = function(self) self:GetParent():Hide() end,
-		EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-		timeout = 0,
-		whileDead = true,
-		hideOnEscape = true,
-	}
-end
 
 local function WatchLinks()
 	local addFilter = ChatFrame_AddMessageEventFilter or (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter)

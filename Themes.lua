@@ -106,6 +106,7 @@ end
 -- A small label as it would appear in the world, in the theme's look.
 local function CreatePreview(card, theme, height)
 	local preview, skin = ns.Skin.CreateWindow(nil, nil, card)
+	skin.minOpacity = nil -- (the opacity chosen, as it is: the label's look)
 	preview:SetPoint("TOPLEFT", card, "TOPLEFT", PREVIEW_INSET, -PREVIEW_INSET)
 	preview:SetPoint("TOPRIGHT", card, "TOPRIGHT", -PREVIEW_INSET, -PREVIEW_INSET)
 	preview:SetHeight(height)

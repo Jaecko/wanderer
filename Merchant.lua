@@ -48,15 +48,11 @@ end
 -- Junk with a value, in bag order.
 local function FindJunk()
 	local found = {}
-	for _, bag in ipairs(U.BagIDs()) do
-		for slot = 1, (Clean(Safe(Container.GetContainerNumSlots, bag)) or 0) do
-			local info = Safe(Container.GetContainerItemInfo, bag, slot)
-			if type(info) == "table" and IsJunk(info) and not info.hasNoValue and not info.isLocked then
-				found[#found + 1] = { bag = bag, slot = slot, id = info.itemID }
-				if #found >= MAX_ITEMS then return found end
-			end
+	U.EachBagItem(function(bag, slot, info)
+		if #found < MAX_ITEMS and IsJunk(info) and not info.hasNoValue and not info.isLocked then
+			found[#found + 1] = { bag = bag, slot = slot, id = info.itemID }
 		end
-	end
+	end)
 	return found
 end
 
@@ -131,6 +127,9 @@ function ns.SellItems(items)
 end
 
 function ns.IsMerchantOpen() return open end
+
+-- The junk being sold (its gain counted from your money): others wait before spending.
+function ns.IsSellingJunk() return queue[1] ~= nil or startMoney ~= nil end
 
 local function Start()
 	if not (open and ns.db and ns.db.enabled and ns.db.merchant.sellJunk) then return end

@@ -1,5 +1,6 @@
 local _, ns = ...
 local L = ns.L
+local U = ns.Util
 
 -- Round button on the minimap edge: left click opens Wanderer's menu, right
 -- click the reminders, drag moves it around the minimap.
@@ -33,9 +34,8 @@ end
 -- The menu of the button (and of the game's addon list on the minimap): the
 -- windows and modes of Wanderer one click away.
 function ns.ShowMenu(owner)
-	if not (MenuUtil and MenuUtil.CreateContextMenu) then return ns.OpenOptions() end
 	GameTooltip:Hide()
-	MenuUtil.CreateContextMenu(owner or UIParent, function(_, root)
+	local shown = U.Menu(owner or UIParent, function(_, root)
 		root:CreateTitle(L.ADDON_TITLE)
 		-- Every day: what is left to do, who wrote, what an item is worth to you.
 		local pending = ns.TodoPending and ns.TodoPending() or 0
@@ -71,6 +71,8 @@ function ns.ShowMenu(owner)
 		root:CreateButton(L.NEWS_SHOW, function() ns.ShowNews() end)
 		root:CreateButton(L.MENU_RELOAD, function() ReloadUI() end)
 	end)
+	-- No menu in this game: the options instead.
+	if not shown then return ns.OpenOptions() end
 end
 
 local function ShowTooltip(self)

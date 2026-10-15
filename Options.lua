@@ -178,75 +178,30 @@ local function UniqueName(base)
 	return name
 end
 
-local EditBoxOf = ns.Util.EditBoxOf
-
-local function RegisterDialogs()
-	if not StaticPopupDialogs then return end
-	local function nameDialog(text, onName)
-		return {
-			text = text, button1 = ACCEPT, button2 = CANCEL, hasEditBox = true,
-			timeout = 0, whileDead = true, hideOnEscape = true,
-			OnAccept = function(self)
-				local name = strtrim(EditBoxOf(self):GetText() or "")
-				if name ~= "" then onName(name) end
-			end,
-			EditBoxOnEnterPressed = function(box)
-				local dialog = box:GetParent()
-				dialog.button1:Click()
-			end,
-		}
-	end
-	StaticPopupDialogs.WANDERER_NEW_PROFILE = nameDialog(L.PROFILE_NEW_PROMPT, function(name)
-		ns.root.profiles[name] = ns.root.profiles[name] or {}
-		ns.SetProfile(name)
-	end)
-	StaticPopupDialogs.WANDERER_COPY_PROFILE = nameDialog(L.PROFILE_COPY_PROMPT, function(name)
-		ns.CopyProfile(name)
-	end)
-	StaticPopupDialogs.WANDERER_EXPORT_PROFILE = {
-		text = L.PROFILE_EXPORT_PROMPT, button1 = OKAY, hasEditBox = true, editBoxWidth = 350,
-		timeout = 0, whileDead = true, hideOnEscape = true,
-		OnShow = function(self)
-			local box = EditBoxOf(self)
-			box:SetText(ns.ExportProfile())
-			box:HighlightText()
-			box:SetFocus()
-		end,
-	}
-	StaticPopupDialogs.WANDERER_IMPORT_SCALE = {
-		text = L.UPGRADE_IMPORT_PROMPT, button1 = ACCEPT, button2 = CANCEL, hasEditBox = true, editBoxWidth = 350,
-		timeout = 0, whileDead = true, hideOnEscape = true,
-		OnAccept = function(self)
-			local ok, result = ns.ImportPawnScale(EditBoxOf(self):GetText())
-			ns.Print(ok and L.UPGRADE_IMPORT_DONE:format(result.name) or result)
-			if ns.RefreshWeights then ns.RefreshWeights() end
-		end,
-	}
-	StaticPopupDialogs.WANDERER_IMPORT_PROFILE = {
-		text = L.PROFILE_IMPORT_PROMPT, button1 = ACCEPT, button2 = CANCEL, hasEditBox = true, editBoxWidth = 350,
-		timeout = 0, whileDead = true, hideOnEscape = true,
-		OnAccept = function(self)
-			local ok, err = ns.ImportProfile(EditBoxOf(self):GetText(), UniqueName(L.PROFILE_IMPORTED))
-			ns.Print(ok and L.IMPORT_DONE:format(ns.profileName) or err)
-		end,
-	}
-	StaticPopupDialogs.WANDERER_RESET_PROFILE = {
-		text = L.RESET_PROFILE_PROMPT, button1 = YES, button2 = NO,
-		timeout = 0, whileDead = true, hideOnEscape = true, showAlert = true,
-		OnAccept = function() ns.ResetProfile() end,
-	}
-	StaticPopupDialogs.WANDERER_DELETE_PROFILE = {
-		text = L.PROFILE_DELETE_PROMPT, button1 = YES, button2 = NO,
-		timeout = 0, whileDead = true, hideOnEscape = true,
-		OnAccept = function()
-			local name = ns.profileName
-			if not ns.DeleteProfile(name) then ns.Print(L.PROFILE_DELETE_DEFAULT) end
-		end,
-	}
+-- A Pawn scale pasted; a profile pasted; the profile reset; the profile deleted: each asked first.
+local function ImportScale()
+	ns.Skin.AskText(L.UPGRADE_IMPORT_PROMPT, "", function(text)
+		local ok, result = ns.ImportPawnScale(text)
+		ns.Print(ok and L.UPGRADE_IMPORT_DONE:format(result.name) or result)
+		if ns.RefreshWeights then ns.RefreshWeights() end
+	end, 0)
 end
 
-local function Popup(name, ...)
-	if StaticPopup_Show then StaticPopup_Show(name, ...) end
+local function ImportProfileAsk()
+	ns.Skin.AskText(L.PROFILE_IMPORT_PROMPT, "", function(text)
+		local ok, err = ns.ImportProfile(text, UniqueName(L.PROFILE_IMPORTED))
+		ns.Print(ok and L.IMPORT_DONE:format(ns.profileName) or err)
+	end, 0)
+end
+
+local function ResetAsk()
+	ns.Skin.Ask(L.RESET_PROFILE_PROMPT:format(ns.profileName), function() ns.ResetProfile() end)
+end
+
+local function DeleteAsk()
+	ns.Skin.Ask(L.PROFILE_DELETE_PROMPT, function()
+		if not ns.DeleteProfile(ns.profileName) then ns.Print(L.PROFILE_DELETE_DEFAULT) end
+	end)
 end
 
 -- Panel ----------------------------------------------------------------------------
@@ -337,9 +292,7 @@ local function HomePage()
 		ns.SetEnabled(false)
 		ns.Print(L.MSG_RESTORED)
 	end)
-	Button(L.RESET_PROFILE, L.RESET_PROFILE_BUTTON, L.RESET_PROFILE_DESC, function()
-		Popup("WANDERER_RESET_PROFILE", ns.profileName)
-	end)
+	Button(L.RESET_PROFILE, L.RESET_PROFILE_BUTTON, L.RESET_PROFILE_DESC, ResetAsk)
 
 	Header(L.SECTION_DEV)
 	Button(L.TEST_WHISPER, L.TEST_WHISPER_BUTTON, L.TEST_WHISPER_DESC, function() ns.WhisperMyself() end)
@@ -531,7 +484,7 @@ local function TooltipsPage()
 		CloseSettings()
 		ns.ToggleWeights()
 	end), upgrade, IsOn("tooltips", "upgrade"))
-	Under(Button(L.UPGRADE_IMPORT, L.UPGRADE_IMPORT_BUTTON, L.UPGRADE_IMPORT_DESC, function() Popup("WANDERER_IMPORT_SCALE") end),
+	Under(Button(L.UPGRADE_IMPORT, L.UPGRADE_IMPORT_BUTTON, L.UPGRADE_IMPORT_DESC, ImportScale),
 		upgrade, IsOn("tooltips", "upgrade"))
 	TableCheckbox("tooltips", "reagents", L.TOOLTIPS_REAGENTS, L.TOOLTIPS_REAGENTS_DESC)
 	Checkbox("HIDE_TOOLTIP", L.HIDE_TOOLTIP, L.HIDE_TOOLTIP_DESC, ns.DEFAULTS.hideUnitTooltip,
@@ -756,9 +709,14 @@ local function ProfilesPage()
 		end,
 		function() return ns.profileName end,
 		function(value) ns.SetProfile(value) end)
-	Button(L.PROFILE_NEW, L.PROFILE_NEW, nil, function() Popup("WANDERER_NEW_PROFILE") end)
-	Button(L.PROFILE_COPY, L.PROFILE_COPY, nil, function() Popup("WANDERER_COPY_PROFILE") end)
-	Button(L.PROFILE_DELETE, L.PROFILE_DELETE, nil, function() Popup("WANDERER_DELETE_PROFILE") end)
+	Button(L.PROFILE_NEW, L.PROFILE_NEW, nil, function()
+		ns.Skin.AskText(L.PROFILE_NEW_PROMPT, "", function(name)
+			ns.root.profiles[name] = ns.root.profiles[name] or {}
+			ns.SetProfile(name)
+		end)
+	end)
+	Button(L.PROFILE_COPY, L.PROFILE_COPY, nil, function() ns.Skin.AskText(L.PROFILE_COPY_PROMPT, "", ns.CopyProfile) end)
+	Button(L.PROFILE_DELETE, L.PROFILE_DELETE, nil, DeleteAsk)
 
 	-- A profile for each kind of place, switched by itself on arrival.
 	Header(L.SECTION_PLACES)
@@ -777,13 +735,12 @@ local function ProfilesPage()
 			end)
 	end
 	Header(L.SECTION_SHARE)
-	Button(L.PROFILE_EXPORT, L.PROFILE_EXPORT, L.PROFILE_EXPORT_DESC, function() Popup("WANDERER_EXPORT_PROFILE") end)
-	Button(L.PROFILE_IMPORT, L.PROFILE_IMPORT, L.PROFILE_IMPORT_DESC, function() Popup("WANDERER_IMPORT_PROFILE") end)
+	Button(L.PROFILE_EXPORT, L.PROFILE_EXPORT, L.PROFILE_EXPORT_DESC, function() ns.Skin.ShowCopy(L.PROFILE_EXPORT_PROMPT, ns.ExportProfile()) end)
+	Button(L.PROFILE_IMPORT, L.PROFILE_IMPORT, L.PROFILE_IMPORT_DESC, ImportProfileAsk)
 end
 
 function ns.InitOptions()
 	if not (Settings and Settings.RegisterVerticalLayoutCategory) then return end
-	RegisterDialogs()
 	HomePage()
 	-- First folded page: the predefined styles (cards with previews).
 	if ns.RegisterThemesPage and Settings.RegisterVerticalLayoutSubcategory then ns.RegisterThemesPage(mainCategory) end

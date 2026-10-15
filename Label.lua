@@ -1476,6 +1476,7 @@ end
 function ns.InitLabel()
 	-- Background, border, badges and highlights: the shared engine.
 	frame, skin = ns.Skin.CreateWindow("WandererLabel", "TOOLTIP")
+	skin.minOpacity = nil -- (the opacity chosen, as it is: the label's look)
 	frame:SetAlpha(0)
 	frame:EnableMouse(false)
 

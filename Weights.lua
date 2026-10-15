@@ -213,7 +213,7 @@ local function CreateWindow()
 	links[1] = TextButton(window, L.WEIGHTS_EXPORT, function()
 		local scale = Selected()
 		local text = scale and ns.ExportScale(scale.id)
-		if text and StaticPopup_Show then StaticPopup_Show("WANDERER_EXPORT_SCALE", nil, nil, text) end
+		if text then ns.Skin.ShowCopy(L.WEIGHTS_EXPORT_PROMPT, text) end
 	end)
 	links[2] = TextButton(window, L.WEIGHTS_IMPORT, function()
 		if StaticPopup_Show then StaticPopup_Show("WANDERER_IMPORT_SCALE") end
@@ -227,26 +227,12 @@ local function CreateWindow()
 		self:SetScale(ns.Skin.Scale())
 		Refresh()
 	end)
-	if StaticPopupDialogs then
-		StaticPopupDialogs.WANDERER_EXPORT_SCALE = {
-			text = L.WEIGHTS_EXPORT_PROMPT, button1 = CLOSE or OKAY, hasEditBox = true, editBoxWidth = 350,
-			OnShow = function(self, text)
-				local box = U.EditBoxOf(self)
-				if box then
-					box:SetText(text or "")
-					box:HighlightText()
-					box:SetFocus()
-				end
-			end,
-			EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
-			timeout = 0, whileDead = true, hideOnEscape = true,
-		}
-	end
 end
 
--- A button of the game's own kind on the character sheet, just outside its
--- top right corner (never over its title bar, which takes the clicks): the
--- weights a click away from your equipment, while the comparison is on.
+-- A button of the game's own kind on the character sheet, just under its
+-- bottom right corner (its right side holds the game's tabs, its title bar
+-- takes the clicks): the weights a click away from your equipment, while the
+-- comparison is on.
 local function CharacterButton()
 	local sheet = _G.CharacterFrame
 	if not sheet or sheet.wandererWeights then return end
@@ -254,14 +240,14 @@ local function CharacterButton()
 	sheet.wandererWeights = button
 	button:SetText(L.WEIGHTS_BUTTON)
 	button:SetSize(U.Measure(button:GetFontString() or button, "GetStringWidth", 60) + 24, 22)
-	button:SetPoint("TOPLEFT", sheet, "TOPRIGHT", 4, -28)
+	button:SetPoint("TOPRIGHT", sheet, "BOTTOMRIGHT", 0, -4)
 	button:SetScript("OnClick", function()
 		-- A problem said in the chat, never a click that does nothing.
 		local ok, problem = pcall(ns.ToggleWeights)
 		if not ok then ns.Print(tostring(problem)) end
 	end)
 	button:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
 		GameTooltip:AddLine(L.WEIGHTS_TITLE)
 		GameTooltip:AddLine(L.WEIGHTS_OPEN_DESC, 1, 1, 1, true)
 		GameTooltip:Show()

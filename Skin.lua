@@ -97,6 +97,13 @@ function Skin.GetColors(style, opacity)
 	return style.bg, opacity, style.border
 end
 
+-- The least opacity of a tooltip, whatever the one chosen: it shows over windows, their words under its own.
+Skin.TOOLTIP_MIN_OPACITY = 0.92
+-- The least opacity of every window of Wanderer and its extensions (bags, reminders, quests, the auction
+-- house, the scenes, the cards...): their lines stay clear over the world, whatever the opacity chosen,
+-- which the label alone follows (and its previews, and the marks over the world).
+Skin.WINDOW_MIN_OPACITY = 0.9
+
 -- Shared metrics: every window uses the same margins, scale and fonts.
 local GAME_MARGIN = 10 -- inner margin of the game's tooltips
 
@@ -446,16 +453,16 @@ function Skin.Dress(window, point, save, onClose)
 	else
 		window:SetPoint(unpack(point or { "CENTER" }))
 	end
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -2, -2)
-	close:SetScript("OnClick", onClose or function() window:Hide() end)
+	local close = Skin.CloseButton(window, onClose) -- (Kit.lua)
 	local name = window:GetName()
 	if name and UISpecialFrames then table.insert(UISpecialFrames, name) end
 	return close
 end
 
--- A line to write in, on a dark band, as in the chat.
-function Skin.CreateInput(parent, name, maxLetters)
+-- A line to write in, on a dark band, as in the chat. opts (optional): { hint (grey words while it is
+-- empty and not written in), onChange(input, typed), onEnter(input), onEscape(input) } (Enter and Escape
+-- let go of it by default).
+function Skin.CreateInput(parent, name, maxLetters, opts)
 	local input = CreateFrame("EditBox", name, parent)
 	input:SetHeight(24)
 	input:SetFontObject("ChatFontNormal")
@@ -465,6 +472,20 @@ function Skin.CreateInput(parent, name, maxLetters)
 	input.background = input:CreateTexture(nil, "BACKGROUND")
 	input.background:SetAllPoints()
 	input.background:SetColorTexture(0, 0, 0, 0.35)
+	if not opts then return input end
+	if opts.hint then
+		input.hint = Skin.CreateText(input, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
+		input.hint:SetPoint("LEFT", input, "LEFT", 8, 0)
+		input.hint:SetText(opts.hint)
+		input:SetScript("OnEditFocusGained", function(self) self.hint:Hide() end)
+		input:SetScript("OnEditFocusLost", function(self) self.hint:SetShown((self:GetText() or "") == "") end)
+	end
+	input:SetScript("OnTextChanged", function(self, typed)
+		if self.hint then self.hint:SetShown((self:GetText() or "") == "" and not self:HasFocus()) end
+		if opts.onChange then opts.onChange(self, typed) end
+	end)
+	input:SetScript("OnEnterPressed", opts.onEnter or function(self) self:ClearFocus() end)
+	input:SetScript("OnEscapePressed", opts.onEscape or function(self) self:ClearFocus() end)
 	return input
 end
 
@@ -477,7 +498,9 @@ function Skin.CreateWindow(name, strata, parent)
 	window:Hide()
 	-- Stays readable when the cinematic mode fades the interface.
 	if window.SetIgnoreParentAlpha then window:SetIgnoreParentAlpha(true) end
-	return window, Skin.Attach(window)
+	local skin = Skin.Attach(window)
+	skin.minOpacity = Skin.WINDOW_MIN_OPACITY
+	return window, skin
 end
 
 -- Cuts a texture round; returns false when the game cannot (then a ring
@@ -725,6 +748,7 @@ end
 -- Resting look of the style, with the current highlight on top.
 function SkinMixin:ApplyStyle()
 	local bg, opacity, border = Skin.GetColors(self:Style(), self.fixedOpacity)
+	if self.minOpacity then opacity = math.max(opacity, self.minOpacity) end
 	self:ShowDecoration()
 	self:SetBackground(bg[1], bg[2], bg[3], opacity)
 	local c = self.color or border

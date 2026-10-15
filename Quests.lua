@@ -80,7 +80,7 @@ events:RegisterEvent("QUEST_DETAIL")
 events:RegisterEvent("QUEST_PROGRESS")
 events:RegisterEvent("QUEST_COMPLETE")
 events:SetScript("OnEvent", function(_, event)
-	if not ns.root then return end
+	if not ns.root or event == "QUEST_LOG_UPDATE" then return end
 	if event == "GOSSIP_SHOW" then
 		ScanGossip()
 	elseif event == "QUEST_GREETING" then
@@ -91,3 +91,59 @@ events:SetScript("OnEvent", function(_, event)
 		Remember("receives", Safe(GetQuestID))
 	end
 end)
+
+-- Once a session, a moment after login: the quests you have done leave the book (never offered nor taken back
+-- again), and the characters with nothing left in it too. A repeatable one comes back the next time you talk.
+local function Prune()
+	if not (ns.root and ns.root.questBook) then return end
+	for npc, entry in pairs(ns.root.questBook) do
+		local left = false
+		for _, kind in ipairs({ "offers", "receives" }) do
+			for questID in pairs(type(entry[kind]) == "table" and entry[kind] or {}) do
+				if IsDone(questID) then entry[kind][questID] = nil else left = true end
+			end
+		end
+		if not left then ns.root.questBook[npc] = nil end
+	end
+end
+do
+	local login = CreateFrame("Frame")
+	login:RegisterEvent("PLAYER_LOGIN")
+	login:SetScript("OnEvent", function() C_Timer.After(15, Prune) end)
+end
+
+-- What your quests ask you to carry --------------------------------------------------------------------
+
+-- Their item objectives, by the item's name (the game gives no item there): { quest, have, need }. Read when
+-- first asked after the log changed; nothing runs otherwise.
+local needs
+local function ReadNeeds()
+	needs = {}
+	if not (QuestLog.GetNumQuestLogEntries and QuestLog.GetInfo and QuestLog.GetQuestObjectives) then return end
+	for index = 1, Clean(Safe(QuestLog.GetNumQuestLogEntries)) or 0 do
+		local info = Safe(QuestLog.GetInfo, index)
+		local id = type(info) == "table" and not Clean(info.isHeader) and Clean(info.questID)
+		local objectives = id and Safe(QuestLog.GetQuestObjectives, id)
+		for _, objective in ipairs(type(objectives) == "table" and objectives or {}) do
+			local text = Clean(objective.text)
+			if Clean(objective.type) == "item" and type(text) == "string" then
+				-- "Linen Cloth: 3/10", "3/10 Linen Cloth": the name alone
+				local name = text:gsub("\194\160", " "):gsub("%d+%s*/%s*%d+", ""):gsub("^[%s:]+", ""):gsub("[%s:]+$", ""):lower()
+				if name ~= "" then
+					needs[name] = { quest = Clean(info.title) or "", have = Clean(objective.numFulfilled) or 0,
+						need = Clean(objective.numRequired) or 0 }
+				end
+			end
+		end
+	end
+end
+
+function ns.QuestNeed(item)
+	local name = item and ns.Util.ItemName(item)
+	if not name then return nil end
+	if not needs then ReadNeeds() end
+	return needs[name:lower()]
+end
+
+pcall(events.RegisterEvent, events, "QUEST_LOG_UPDATE")
+events:HookScript("OnEvent", function(_, event) if event == "QUEST_LOG_UPDATE" then needs = nil end end)

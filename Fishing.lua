@@ -57,7 +57,7 @@ end
 local function HasFishingPole()
 	local item = Clean(Safe(GetInventoryItemID, "player", MAIN_HAND))
 	if not item then return false end
-	local subclass = select(7, Safe(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant, item))
+	local subclass = select(7, U.ItemInstant(item))
 	return subclass == FISHING_POLE
 end
 
@@ -155,9 +155,9 @@ end
 
 -- The catch as the notice says it: a fine one in its color.
 local function CatchName(link, name)
-	local quality = link and Clean(select(3, Safe(GetItemInfo, link)))
-	local color = quality and quality >= 2 and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-	return color and color.hex and (color.hex .. name .. "|r") or name
+	local quality = link and select(3, U.ItemInfo(link))
+	if not (quality and quality >= 2) then return name end
+	return U.Colorize(name, U.QualityColor(quality))
 end
 
 local function Told()

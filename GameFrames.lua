@@ -4,8 +4,10 @@ local _, ns = ...
 -- be moved (option): the title bar drags a window anywhere, and it opens
 -- there every time. Nothing else changes: they look as the game draws them,
 -- nothing is added. The full screen map stays where the game puts it, and
--- windows without the game's title bar are left alone. Switched off, every
--- window goes back where the game puts it.
+-- windows without the game's title bar are left alone. A window already
+-- open stays where it is when another opens or closes (the game would push
+-- it aside, under the one you moved). Switched off, every window goes back
+-- where the game puts it.
 
 local U = ns.Util
 local Safe = U.Safe
@@ -20,6 +22,7 @@ local WINDOWS = { "WorldMapFrame", "CharacterFrame", "PlayerSpellsFrame", "Spell
 	"GossipFrame", "QuestFrame" }
 
 local taken = {} -- window -> true
+local held = {} -- window -> its points, while it stays open
 local moving
 
 local function On()
@@ -46,10 +49,35 @@ local function Place(window)
 	window:SetPoint(saved[1], UIParent, saved[1], saved[2], saved[3])
 end
 
--- After the game has placed its windows, each goes back to its own place.
-local function PlaceAll()
+-- Where a window stands now (to keep it there).
+local function Hold(window)
+	local points = {}
+	for index = 1, window:GetNumPoints() do points[index] = { window:GetPoint(index) } end
+	held[window] = points[1] and points or nil
+end
+
+local function PutBack(window)
+	local points = held[window]
+	if not points then return end
+	window:ClearAllPoints()
+	for _, point in ipairs(points) do window:SetPoint(point[1], point[2], point[3], point[4], point[5]) end
+end
+
+-- After the game has placed its windows (one opened or closed: current): each moved one goes back to its
+-- own place, each one already open stays where it was (the one just opened takes the place the game gave
+-- it); where they stand is kept for the next time.
+local function PlaceAll(current)
 	if not On() then return end
-	for window in pairs(taken) do Place(window) end
+	for window in pairs(taken) do
+		if window:IsShown() and Movable(window) then
+			if Points()[window:GetName() or ""] then
+				Place(window)
+			elseif window ~= current then
+				PutBack(window)
+			end
+			Hold(window)
+		end
+	end
 end
 
 local function Remember(window)
@@ -79,8 +107,11 @@ local function Take(window)
 		window:StopMovingOrSizing()
 		if window.SetUserPlaced then window:SetUserPlaced(false) end -- the place is Wanderer's to keep
 		Remember(window)
+		Hold(window)
 	end)
 	window:HookScript("OnShow", function() Place(window) end)
+	-- Closed: it opens next time where the game (or you) put it.
+	window:HookScript("OnHide", function() held[window] = nil end)
 end
 
 local function TakeAll()
@@ -116,8 +147,11 @@ function ns.InitGameFrames()
 			TakeAll()
 		end
 	end)
-	-- The game places its windows (and the bags) when they open.
-	if UpdateUIPanelPositions then hooksecurefunc("UpdateUIPanelPositions", PlaceAll) end
+	-- The game places its windows (and the bags) when one opens or closes (its placing is its own: what
+	-- opens and closes them is what can be heard).
+	for _, name in ipairs({ "ShowUIPanel", "HideUIPanel", "UpdateUIPanelPositions" }) do
+		if _G[name] then hooksecurefunc(name, PlaceAll) end
+	end
 	if UpdateContainerFrameAnchors then hooksecurefunc("UpdateContainerFrameAnchors", PlaceAll) end
 	ns.RefreshGameFrames()
 end

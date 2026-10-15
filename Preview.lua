@@ -103,6 +103,7 @@ function ns.InitPreview()
 	kicker = ns.Skin.CreateKicker(holder, L.PREVIEW_TITLE)
 	kicker:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 	preview, skin = ns.Skin.CreateWindow(nil, nil, holder)
+	skin.minOpacity = nil -- (the opacity chosen, as it is: the label's look)
 	preview:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -6)
 	preview:EnableMouse(false)
 	local previous

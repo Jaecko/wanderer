@@ -1,10 +1,13 @@
-# Wanderer 0.41.0
+# Wanderer 0.42.0
 
 ### New
-- Wanderer Quests, a new extension, is offered where it is missing, like Wanderer Bags and Wanderer Auction.
-- Wanderer's windows no longer cover each other: let go near another (or over it), a window holds against its nearest side, lined up with it; opened over another, the smaller one steps beside the larger. Let go with Shift to place one freely, even over another. The one clicked comes on top.
-- The reminders can be resized by their corner (their size kept), and open by themselves at login when something is left to do (an option, on).
-- The reminders take the lines the other addons give them: a quest's items to gather (Wanderer Quests) say how many you carry; such a line can go to Wanderer Auction's shopping list.
+- One engine for every window of Wanderer and its extensions: the same transparency (never so faint that text is hard to read), the same headings, tables, buttons, questions and tooltips everywhere.
+- The extensions learn from Wanderer which of your items your quests ask you to carry (Wanderer Bags marks them, Wanderer Auction never offers them for sale).
 
 ### Changed
-- Lighter: the branch you play is read once (not for every item of your bags or every tooltip), the unread messages counted without sorting, the buffs left alone when their reminder is off, the threat heard for your target only, the fishing for your own casts only, the chat button idle when nothing moves.
+- Lighter at login: what features removed long ago had left in your saved settings is let go (about 40 % of the file), and the record of who gives which quest forgets the quests you have done.
+- The stat weights button sits under the character sheet, never hidden.
+
+### Fixed
+- Opening the map no longer pushes the windows already open under it.
+- The reminders and private messages windows keep their place and size again.
