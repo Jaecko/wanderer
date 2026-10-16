@@ -42,15 +42,15 @@ local function IsJunk(info)
 		local ok, verdict = pcall(rule, Clean(info.itemID), Clean(info.quality))
 		if ok and verdict ~= nil then return verdict end
 	end
-	return info.quality == POOR
+	return Clean(info.quality) == POOR
 end
 
 -- Junk with a value, in bag order.
 local function FindJunk()
 	local found = {}
 	U.EachBagItem(function(bag, slot, info)
-		if #found < MAX_ITEMS and IsJunk(info) and not info.hasNoValue and not info.isLocked then
-			found[#found + 1] = { bag = bag, slot = slot, id = info.itemID }
+		if #found < MAX_ITEMS and IsJunk(info) and not Clean(info.hasNoValue) and not Clean(info.isLocked) then
+			found[#found + 1] = { bag = bag, slot = slot, id = Clean(info.itemID) }
 		end
 	end)
 	return found
@@ -77,7 +77,7 @@ local function OnUpdate(_, elapsed)
 	if not item then return Stop() end
 	-- The slot is checked again: the bags may have changed in between.
 	local info = Safe(Container.GetContainerItemInfo, item.bag, item.slot)
-	if type(info) == "table" and info.itemID == item.id and not info.isLocked then
+	if type(info) == "table" and Clean(info.itemID) == item.id and not Clean(info.isLocked) then
 		if open then Safe(Container.UseContainerItem, item.bag, item.slot) end
 	end
 	if not queue[1] then

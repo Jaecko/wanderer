@@ -8,9 +8,13 @@ local _, ns = ...
 --
 -- The motion is slow and never hurried: a window must stay open a moment
 -- before the camera moves (opened and closed at once, nothing happens), and
--- it waits a little after the last one closes. Every move is counted from
--- where Wanderer last sent the camera, never from where it happens to be in
--- the middle of a move, so quick back and forth can't make it drift.
+-- it waits a little after the last one closes. The camera is always sent to
+-- a distance (yours, or the close one), counted from where it really is, and
+-- put right once it stands still (the game stops it on its way when a
+-- conversation opens): a window opened again in the middle of a move never
+-- sends it too far (first person) nor back and forth. Your camera settings
+-- are given back only once it is at your distance: the game stops the
+-- camera where it is when one is written.
 --
 -- The player's values are kept in the saved variables while the camera is
 -- borrowed: they come back even after a crash.
@@ -18,7 +22,7 @@ local _, ns = ...
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
 
-local DISTANCE = 6 -- closer than this, the camera is left where it is
+local DISTANCE = 3.5 -- yards, over the shoulder; closer than this, the camera is left where it is
 local SPEED = "6" -- slower zoom than the game's, for a soft movement
 local SETTINGS = { -- set while the camera is borrowed only
 	test_cameraTargetFocusInteractEnable = "1",
@@ -43,17 +47,76 @@ local holdToken, releaseToken = 0, 0
 
 local function Saved() return ns.root and ns.root.sceneCamera end
 
+-- A move: from where the camera really is (the game stops it where it is
+-- when a conversation opens, or when a camera setting is written), then
+-- looked at four times a second; once it stands still, put right if it is
+-- not where it was sent (twice at most), then what comes next is done.
+local LOOK_EVERY = 0.25 -- seconds
+local LOOK_LONGEST = 10 -- seconds: it never waits longer than this
+local CORRECTIONS = 2
+local move -- the move under way
+local ours -- (a zoom asked by Wanderer, not by you)
+
+-- You zoom yourself: your distance is yours, nothing is put right.
+if hooksecurefunc and CameraZoomIn and CameraZoomOut then
+	local function Yours()
+		if not ours and move then move.yours = true end
+	end
+	hooksecurefunc("CameraZoomIn", Yours)
+	hooksecurefunc("CameraZoomOut", Yours)
+end
+
+local function Send(distance)
+	local seen = Clean(Safe(GetCameraZoom))
+	if not (seen and distance) then return end
+	ours = true
+	if seen > distance + 0.1 and CameraZoomIn then
+		Safe(CameraZoomIn, seen - distance)
+	elseif seen < distance - 0.1 and CameraZoomOut then
+		Safe(CameraZoomOut, distance - seen)
+	end
+	ours = nil
+end
+
+local function Look(this)
+	if move ~= this then return end
+	-- (one reading per moment: the camera is seen still only after time went by)
+	local now = GetTime()
+	if this.at and now - this.at < LOOK_EVERY / 2 then return C_Timer.After(LOOK_EVERY, function() Look(this) end) end
+	this.at = now
+	local seen = Clean(Safe(GetCameraZoom))
+	local still = seen and this.last and math.abs(seen - this.last) < 0.02
+	this.last = seen
+	if not still and GetTime() < this.giveUp then return C_Timer.After(LOOK_EVERY, function() Look(this) end) end
+	-- Standing still: not where it was sent (the game stopped it on its way), put right.
+	if still and not this.yours and this.tries < CORRECTIONS and math.abs(seen - this.distance) > 0.3
+		and GetTime() < this.giveUp then
+		this.tries, this.last = this.tries + 1, nil
+		Send(this.distance)
+		return C_Timer.After(LOOK_EVERY, function() Look(this) end)
+	end
+	move = nil
+	if this.done then this.done() end
+end
+
+-- The camera sent to a distance; done (optional) once it is there and still.
+local function ZoomTo(distance, done)
+	local this = { distance = distance, done = done, tries = 0, giveUp = GetTime() + LOOK_LONGEST }
+	move = this
+	Send(distance)
+	C_Timer.After(LOOK_EVERY, function() Look(this) end)
+end
+
 -- saved.zoom: the player's distance; saved.aim: where Wanderer sent the camera.
 local function ZoomIn()
 	if not (GetCameraZoom and CameraZoomIn) then return end
 	local saved = Saved()
 	if saved then
-		-- Still going back: it comes closer again, from where it was sent.
+		-- Still going back: it comes close again, from where it is now.
 		if saved.leaving then
 			saved.leaving = false
-			local aim = saved.aim or saved.zoom
-			if aim and aim > DISTANCE then
-				Safe(CameraZoomIn, aim - DISTANCE)
+			if saved.zoom and saved.zoom > DISTANCE then
+				ZoomTo(DISTANCE)
 				saved.aim = DISTANCE
 			end
 		end
@@ -70,7 +133,7 @@ local function ZoomIn()
 	end
 	ns.root.sceneCamera = saved
 	if saved.zoom and saved.zoom > DISTANCE then
-		Safe(CameraZoomIn, saved.zoom - DISTANCE)
+		ZoomTo(DISTANCE)
 		saved.aim = DISTANCE
 	end
 end
@@ -80,14 +143,10 @@ local function ZoomOut()
 	local saved = Saved()
 	if not saved or saved.leaving then return end
 	saved.leaving = true
-	local aim = saved.aim or saved.zoom
-	local travel = 0
-	if saved.zoom and aim and saved.zoom > aim then
-		travel = saved.zoom - aim
-		Safe(CameraZoomOut, travel)
-	end
 	saved.aim = saved.zoom
-	C_Timer.After(travel / (tonumber(SPEED) or 8) + 0.2, function()
+	-- Your settings given back only once the camera is there: a camera setting
+	-- written stops it where it is (it would stay half way).
+	ZoomTo(saved.zoom, function()
 		-- Borrowed again meanwhile: it will be given back later.
 		if Saved() ~= saved or not saved.leaving then return end
 		for cvar, value in pairs(saved.cvars) do ns.WriteCVar(cvar, value) end

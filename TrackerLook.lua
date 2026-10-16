@@ -25,6 +25,7 @@ local rules = {} -- header -> its golden rule
 local headerText = {} -- header text -> the game's words (given back)
 local dressed = setmetatable({}, { __mode = "k" }) -- texts given a shadow (given back)
 local folds = setmetatable({}, { __mode = "k" }) -- fold buttons made quiet
+local dashes = setmetatable({}, { __mode = "k" }) -- objectives' dashes -> the game's color (given back)
 local ready = false
 
 local function On()
@@ -116,6 +117,7 @@ local function Objective(text, dash)
 	end
 	-- (the dash before it: a quiet golden mark)
 	if dash and dash.SetTextColor then
+		if not dashes[dash] then dashes[dash] = { dash:GetTextColor() } end
 		local C = ns.Skin.COLORS
 		dash:SetTextColor(C.gold[1], C.gold[2], C.gold[3], done and 0.3 or 0.6)
 	end
@@ -159,6 +161,8 @@ function ns.RefreshTrackerLook()
 		if font then text:SetFontObject(font) end
 	end
 	for button in pairs(folds) do button:SetAlpha(1) end
+	for dash, color in pairs(dashes) do dash:SetTextColor(unpack(color)) end
+	wipe(dashes)
 	-- (the game draws its tracker again, its own colors; the discreet tracker hides its bands again)
 	if ObjectiveTrackerFrame and ObjectiveTrackerFrame.Update then Safe(ObjectiveTrackerFrame.Update, ObjectiveTrackerFrame) end
 	if ns.RefreshClean then ns.RefreshClean() end

@@ -227,8 +227,9 @@ local function Top()
 	-- (from where it stands now: the rest of the way, nothing when it is there already)
 	local screen, map = UIParent:GetEffectiveScale(), Minimap:GetEffectiveScale()
 	local right = math.max(0, UIParent:GetRight() * screen - Minimap:GetRight() * map)
+	if right > UIParent:GetRight() * screen * 0.25 then return end
 	local rise = (UIParent:GetTop() * screen - right - Minimap:GetTop() * map) / holder:GetEffectiveScale()
-	if math.abs(rise) < 0.5 then return end
+	if rise < 0.5 then return end
 	local now = {}
 	for index = 1, holder:GetNumPoints() do now[index] = { holder:GetPoint(index) } end
 	holder:ClearAllPoints()

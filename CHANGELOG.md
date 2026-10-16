@@ -1,10 +1,11 @@
-# Wanderer 0.43.1
+# Wanderer 0.44.0
 
 ### Changed
-- Wanderer's stacked layout takes a new look, shaped in game: the stance bar over the highest bar with the vehicle's exit beside it and the swing timers above its right end, the pet and totem bars against the main bar, the cast bar under your portrait with the durability beside it, the tooltip left of the game's menu. The clean layout follows the same look around its own bars.
-- The damage meter sits over the bags in both layouts.
+- The camera of conversations comes closer: over your shoulder, the character you talk to framed near.
 
 ### Fixed
-- The target's line no longer comes in front of your windows; the game's bank and auction house windows, kept out of sight behind Wanderer's, are never placed back on the screen.
-- With the minimap in Wanderer's style, the game's ring no longer flashes back after a change of settings.
-- Lighter: the quest tracker dressed once per drawing, what you play read once.
+- The camera of conversations: talking again to a character while the camera goes back no longer sends it to the first person, nor back and forth; it always comes back to your own distance, and never stops half way.
+- The label of a character leaves as soon as you clear your target, and no longer jumps to someone else while you turn the camera.
+- The minimap is moved up only where Wanderer's look puts it: placed elsewhere by you or another addon, it stays there.
+- The quest tracker's dashes get their color back when its look is turned off.
+- The junk sale reads your bags more surely.

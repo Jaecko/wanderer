@@ -15,6 +15,7 @@ local REST, NEAR = 0.6, 1
 
 local bar
 local items, dots = {}, {}
+local pulsing = {} -- words whose extension says something waits there
 local C -- Wanderer's colors (Kit.lua, loaded after)
 
 -- What the bar offers, as things stand: { key, label, hint, run, right }.
@@ -28,7 +29,9 @@ local function Entries()
 	for _, extension in ipairs(ns.EXTENSIONS or {}) do
 		local launcher = extension.launcher
 		if type(launcher) == "table" and launcher.label and launcher.open and extension.key ~= "auction" then
-			list[#list + 1] = { key = "ext:" .. extension.key, label = launcher.label, run = function() launcher.open() end }
+			-- (launcher.attention(): true when something waits there, the word then pulses)
+			list[#list + 1] = { key = "ext:" .. extension.key, label = launcher.label, run = function() launcher.open() end,
+				attention = type(launcher.attention) == "function" and launcher.attention or nil }
 		end
 	end
 	-- The other addons' icons, in their drawer under the word; none: no word.
@@ -60,7 +63,7 @@ end
 local function Leave(self)
 	GameTooltip:Hide()
 	Color(self, false)
-	Near(false)
+	if not next(pulsing) then Near(false) end
 end
 
 -- A word of the bar: its text, its count in gold, the fine line under it on hover.
@@ -138,8 +141,42 @@ local function Layout()
 	bar:SetWidth(x + PAD * 3)
 end
 
--- The counts beside the words.
+-- Something waits behind a word (an extension says so): it pulses, gold, the bar in full while it does.
+local pulse = 0
+local step = 0
+local function Pulse(_, elapsed)
+	pulse, step = pulse + elapsed, step + elapsed
+	if step < 0.05 then return end
+	step = 0
+	local glow = 0.55 + 0.45 * math.sin(pulse * 4)
+	for item in pairs(pulsing) do
+		item.text:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
+		item.text:SetAlpha(glow)
+		item.line:Show()
+		item.line:SetAlpha(glow)
+	end
+end
+
+local function Attention()
+	local any = false
+	for _, item in ipairs(items) do
+		local wants = item:IsShown() and item.entry and item.entry.attention and select(2, pcall(item.entry.attention)) == true
+		if wants then
+			pulsing[item], any = true, true
+		elseif pulsing[item] then
+			pulsing[item] = nil
+			item.text:SetAlpha(1)
+			item.line:SetAlpha(0.8)
+			Color(item, false)
+		end
+	end
+	bar:SetScript("OnUpdate", any and Pulse or nil)
+	if any then bar:SetAlpha(NEAR) elseif not (bar.IsMouseOver and bar:IsMouseOver()) then Near(false) end
+end
+
+-- The counts beside the words, and what waits behind them.
 local function Marks()
+	Attention()
 	local changed = false
 	for _, item in ipairs(items) do
 		if item:IsShown() then

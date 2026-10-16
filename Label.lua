@@ -17,7 +17,7 @@ local L = ns.L
 -- nothing is hovered. TARGET: what that character looks at.
 local UNIT = "mouseover"
 local TARGET = "mouseovertarget"
-local FADE_IN, FADE_OUT = 0.2, 0.45
+local FADE_IN, FADE_OUT = 0.2, 0.25
 local HEALTH_HEIGHT = 4
 local POWER_HEIGHT = 3
 -- What the unit targets: a block under a thin line.
@@ -1070,12 +1070,24 @@ end
 -- Display ------------------------------------------------------------------
 
 -- Clicking or turning the camera makes the game forget what is hovered.
+-- A click on a character (the game loses who is hovered for its length): a button held with the mouse still.
+-- A button held while the camera turns (the mouse moving, or the game turning the view) is no click: the
+-- game then hands its nameplates over to others, the label must not stay.
+local CLICK_SLACK = 6 -- pixels the mouse may move during a click
+local pressX, pressY
 local function IsClicking()
-	if IsMouselooking and IsMouselooking() then return true end
-	return IsMouseButtonDown and (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) or false
+	local down = IsMouseButtonDown and (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton")) or false
+	if not down then
+		pressX = nil
+		return false
+	end
+	if IsMouselooking and IsMouselooking() then return false end
+	local x, y = GetCursorPosition()
+	if not pressX then pressX, pressY = x, y end
+	return math.abs(x - pressX) + math.abs(y - pressY) <= CLICK_SLACK * (UIParent:GetEffectiveScale() or 1)
 end
 
-local lastClick -- time of the last click or camera turn
+local lastClick -- time of the last click (never a camera turn)
 
 -- Name of the object under the world cursor. Returns nil when there is none,
 -- true when the name is protected, and supported = false when the game does
@@ -1199,7 +1211,7 @@ local function Position()
 	if not plate and anchoredPlate then
 		-- The game lost the plate an instant (a fight): the label stays where it is,
 		-- never a jump to the cursor and back.
-		if targetAlpha > 0 and anchoredPlate:IsShown() and GetTime() - plateSeen < PLATE_GRACE then return "head" end
+		if targetAlpha > 0 and GetTime() - plateSeen < PLATE_GRACE and StillTheirs(anchoredPlate) then return "head" end
 		-- Fading away (the mouse left): above the head it came from, while it is theirs.
 		if targetAlpha == 0 and StillTheirs(anchoredPlate) then return "head" end
 		-- Your target gone from the screen, or the plate given to another: gone.
@@ -1218,8 +1230,8 @@ local function Position()
 			frame:ClearAllPoints()
 			frame:SetPoint("BOTTOM", plate, low and "BOTTOM" or "TOP", 0, HEAD_OFFSET)
 			anchoredPlate, anchoredLow = plate, low
-			anchoredGUID = Clean(Safe(UnitGUID, UNIT))
 		end
+		anchoredGUID = Clean(Safe(UnitGUID, UNIT)) or anchoredGUID
 		return "head"
 	end
 	anchoredPlate = nil
@@ -1353,6 +1365,8 @@ local function OnUpdate(self, elapsed)
 		-- Keep content and place while the click lasts; your target is followed
 		-- still: the game hands its nameplates over to others as the camera turns.
 		if UNIT == "target" then Position() end
+		-- (the plate given to someone else meanwhile: gone at once)
+		if UNIT ~= "target" and anchoredPlate and not StillTheirs(anchoredPlate) then Vanish() end
 		return
 	end
 	-- Shift pressed or released over a character: the closer look at once.
@@ -1431,6 +1445,15 @@ local function OnEvent(_, event, guid)
 		return
 	end
 	if event == "PLAYER_TARGET_CHANGED" then
+		-- Your target let go (a click in the void, Escape), nobody hovered: the label leaves at once (that
+		-- click is no click on a character, nothing to wait for).
+		if not Clean(Safe(UnitExists, "target")) and not Clean(Safe(UnitExists, "mouseover")) and not objectMode
+			and IsLabelActive() then
+			lastClick = nil
+			SetUnit("mouseover")
+			Vanish()
+			return
+		end
 		if StickyTarget() then
 			-- Another target: described at once (and the label moves to it).
 			SetUnit("mouseover")
