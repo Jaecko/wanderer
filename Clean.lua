@@ -352,6 +352,59 @@ local function OverTheBars(layout, top, mainY)
 	if system.TotemActionBar then At(SystemEntry(layout, system.TotemActionBar, nil), "BOTTOMRIGHT", "BOTTOM", -120, top + 44) end
 end
 
+-- The look of Wanderer's layouts, as the player shaped it in Edit Mode (2026-10, the stacked one), kept for
+-- every one of them, each around its own stack (top: the frame of the stack's highest bar). Over that bar:
+-- the stance bar on its left end, the vehicle's exit on its right, the swing timers above its right end; the
+-- pet and totem bars against the main bar's right; the cast bar under your portrait, the durability beside
+-- it; the tooltip left of the game's menu; the focus, the bosses and the raid where they read best.
+local function Anchor(entry, point, relativeTo, relativePoint, x, y)
+	if not entry then return end
+	entry.anchorInfo = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, offsetX = x, offsetY = y }
+	entry.isInDefaultPosition = false
+end
+local function Settings(entry, list)
+	if not entry then return end
+	for _, pair in ipairs(list) do SetSetting(entry, pair[1], pair[2]) end
+end
+local SWING_LOOK = { { 0, 2 }, { 1, 50 }, { 2, 1 }, { 3, 60 }, { 5, 0 }, { 6, 1 } } -- (as the player set them)
+
+local function Finish(layout, top)
+	local system = Enum.EditModeSystem
+	local bar = system.ActionBar
+	Anchor(SystemEntry(layout, bar, BarIndex("StanceBar")), "BOTTOMLEFT", top, "TOPLEFT", 0, 4)
+	Anchor(SystemEntry(layout, bar, BarIndex("PetActionBar")), "BOTTOMLEFT", "MainActionBar", "BOTTOMRIGHT", 4, 0)
+	Anchor(SystemEntry(layout, bar, BarIndex("PossessActionBar")), "BOTTOM", "UIParent", "BOTTOM", -436.7, 2)
+	if system.VehicleLeaveButton then Anchor(SystemEntry(layout, system.VehicleLeaveButton, nil), "TOPLEFT", top, "TOPRIGHT", 4, 0) end
+	if system.TotemActionBar then Anchor(SystemEntry(layout, system.TotemActionBar, nil), "BOTTOMLEFT", "MainActionBar", "BOTTOMRIGHT", 4, 0) end
+	if system.CastBar then Anchor(SystemEntry(layout, system.CastBar, nil), "TOP", "PlayerFrame", "BOTTOM", 8.8, 14) end
+	if system.DurabilityFrame then
+		local durability = SystemEntry(layout, system.DurabilityFrame, nil)
+		Anchor(durability, "TOPLEFT", "PlayerFrame", "TOPRIGHT", -16, -16)
+		Settings(durability, { { 0, 3 } })
+	end
+	if system.HudTooltip then Anchor(SystemEntry(layout, system.HudTooltip, nil), "BOTTOMRIGHT", "MicroMenuContainer", "BOTTOMLEFT", -8, -2) end
+	if system.MicroMenu then Settings(SystemEntry(layout, system.MicroMenu, nil), { { 2, 4 } }) end
+	if system.Bags then Settings(SystemEntry(layout, system.Bags, nil), { { 2, 1 } }) end
+	local unit, index = system.UnitFrame, Enum.EditModeUnitFrameSystemIndices
+	if unit and index then
+		if index.Focus then Anchor(SystemEntry(layout, unit, index.Focus), "CENTER", "UIParent", "CENTER", -485.5, -260) end
+		if index.Boss then Anchor(SystemEntry(layout, unit, index.Boss), "TOPRIGHT", "UIParent", "TOPRIGHT", -387.5, -293) end
+		if index.Raid then Anchor(SystemEntry(layout, unit, index.Raid), "TOPLEFT", "UIParent", "TOPLEFT", 27.3, 0) end
+	end
+	local swing = Enum.EditModeSwingTimerSystemIndices
+	if system.SwingTimer and swing then
+		local main, off, ranged = SystemEntry(layout, system.SwingTimer, swing.MainHand), SystemEntry(layout, system.SwingTimer, swing.OffHand),
+			SystemEntry(layout, system.SwingTimer, swing.Ranged)
+		Anchor(main, "BOTTOMRIGHT", top, "TOPRIGHT", 0.6, 3.4)
+		Anchor(off, "TOPRIGHT", "SwingTimerMainHandFrame", "TOPLEFT", -2.8, 0)
+		Anchor(ranged, "BOTTOM", "SwingTimerOffHandFrame", "TOP", 92.8, 2.8)
+		for _, entry in ipairs({ main, off, ranged }) do Settings(entry, SWING_LOOK) end
+		Settings(main, { { 4, 4 } })
+		Settings(off, { { 4, 2 } })
+		Settings(ranged, { { 4, 2 } })
+	end
+end
+
 local STRIKERS = { WARRIOR = true, ROGUE = true, PALADIN = true, HUNTER = true, SHAMAN = true, DRUID = true }
 
 local LAYOUTS = {
@@ -373,6 +426,7 @@ local LAYOUTS = {
 		OverTheBars(layout, above - 4, 10)
 		Portraits(layout, 180, above + 46)
 		Group(layout)
+		Finish(layout, "MultiBarRight") -- (bar 4, the highest of the stack)
 	end,
 	-- For immersion: the main bar alone at the bottom; every other bar shown
 	-- only in fights, in its place (bars 2 and 3 over the main bar, the others
@@ -391,6 +445,7 @@ local LAYOUTS = {
 		OverTheBars(layout, above - 4, 40)
 		Portraits(layout, 160, above + 46)
 		Group(layout)
+		Finish(layout, "MultiBarBottomRight") -- (bar 3, the highest over the main bar)
 	end,
 	-- The game's own default layout, as it is: to come back to it, or to start
 	-- from it in Edit Mode.
