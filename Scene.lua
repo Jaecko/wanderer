@@ -639,7 +639,7 @@ Render = function()
 	rewardsLabel:SetShown(last and scene.rewards[1] ~= nil)
 	if last and scene.rewards[1] then
 		y = y + GAP
-		rewardsLabel:SetText(scene.kind == "QUEST_PROGRESS" and L.SCENE_REQUIRED or L.SCENE_REWARDS)
+		rewardsLabel:SetText(scene.kind == "QUEST_PROGRESS" and L.SCENE_REQUIRED or L.REWARDS)
 		Place(rewardsLabel, y, margin)
 		y = y + U.Measure(rewardsLabel, "GetStringHeight", 12) + SMALL_GAP
 		local column = math.floor((inner - GAP) / 2)

@@ -25,41 +25,99 @@ local function Release()
 	return Version():match("^(%d+%.%d+)") or Version()
 end
 
-local function Lines()
-	local lines = {}
-	for line in (L.NEWS_LINES or ""):gmatch("[^\n]+") do lines[#lines + 1] = line end
-	return lines
+-- An installed addon's version and release (its news show once per release).
+local function VersionOf(addon)
+	local get = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+	return get and U.Safe(get, addon, "Version") or "?"
 end
+local function ReleaseOf(addon) return VersionOf(addon):match("^(%d+%.%d+)") or VersionOf(addon) end
+
+-- What to tell: Wanderer's news, then each installed extension's under its name (spec.addon, spec.news): the
+-- ones not seen yet, or all of them (asked from the menu).
+local function Sections(all)
+	local sections = {}
+	local function Add(title, text)
+		local lines = {}
+		for line in (text or ""):gmatch("[^\n]+") do lines[#lines + 1] = line end
+		if lines[1] then sections[#sections + 1] = { title = title, lines = lines } end
+	end
+	if all or ns.root.seenVersion ~= Release() then Add(nil, L.NEWS_LINES) end
+	local seen = ns.root.seenNews or {}
+	for _, extension in ipairs(ns.EXTENSIONS or {}) do
+		if extension.addon and extension.news and (all or seen[extension.addon] ~= ReleaseOf(extension.addon)) then
+			local get = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+			local name = get and U.Safe(get, extension.addon, "Title") or extension.title
+			Add(name .. " " .. VersionOf(extension.addon), extension.news)
+		end
+	end
+	return sections
+end
+
+local showAll = false
+local heads = {}
 
 local function Layout()
 	local margin = ns.Skin.Margin() + 8
 	local inner = WIDTH - margin * 2
 	window.title:SetText(L.NEWS_TITLE:format(Version()))
 	local y = margin + 40 + 12
-	for index, line in ipairs(Lines()) do
-		local row = rows[index]
-		if not row then
-			row = {}
-			row.mark = window:CreateTexture(nil, "ARTWORK")
-			row.mark:SetSize(5, 5)
-			row.mark:SetColorTexture(1, 0.82, 0, 0.8)
-			row.text = ns.Skin.CreateText(window, "GameTooltipText", 0.92, 0.9, 0.85)
-			rows[index] = row
+	local index = 0
+	for _, head in ipairs(heads) do head:Hide() end
+	for count, section in ipairs(Sections(showAll)) do
+		-- (an extension's news: its name over them)
+		if section.title then
+			local head = heads[count]
+			if not head then
+				head = ns.Skin.CreateText(window, "GameTooltipText", 1, 0.82, 0)
+				heads[count] = head
+			end
+			head:SetText(section.title)
+			head:ClearAllPoints()
+			head:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(y + 6))
+			head:Show()
+			y = y + 6 + U.Measure(head, "GetStringHeight", 14) + 8
 		end
-		row.text:SetWidth(inner - 14)
-		row.text:SetText(line)
-		row.text:ClearAllPoints()
-		row.text:SetPoint("TOPLEFT", window, "TOPLEFT", margin + 14, -y)
-		row.mark:ClearAllPoints()
-		row.mark:SetPoint("TOPLEFT", window, "TOPLEFT", margin + 2, -(y + 6))
-		y = y + U.Measure(row.text, "GetStringHeight", 14) + 8
+		for _, line in ipairs(section.lines) do
+			index = index + 1
+			local row = rows[index]
+			if not row then
+				row = {}
+				row.mark = window:CreateTexture(nil, "ARTWORK")
+				row.mark:SetSize(5, 5)
+				row.mark:SetColorTexture(1, 0.82, 0, 0.8)
+				row.text = ns.Skin.CreateText(window, "GameTooltipText", 0.92, 0.9, 0.85)
+				rows[index] = row
+			end
+			row.text:SetWidth(inner - 14)
+			row.text:SetText(line)
+			row.text:ClearAllPoints()
+			row.text:SetPoint("TOPLEFT", window, "TOPLEFT", margin + 14, -y)
+			row.mark:ClearAllPoints()
+			row.mark:SetPoint("TOPLEFT", window, "TOPLEFT", margin + 2, -(y + 6))
+			row.text:Show()
+			row.mark:Show()
+			y = y + U.Measure(row.text, "GetStringHeight", 14) + 8
+		end
+	end
+	for extra = index + 1, #rows do
+		rows[extra].text:Hide()
+		rows[extra].mark:Hide()
 	end
 	window:SetSize(WIDTH, y + 16 + 26 + margin)
 	ns.Skin.Get(window):Layout()
 end
 
-local function Close()
+-- Seen: Wanderer's release and every installed extension's.
+local function Seen()
 	ns.root.seenVersion = Release()
+	ns.root.seenNews = ns.root.seenNews or {}
+	for _, extension in ipairs(ns.EXTENSIONS or {}) do
+		if extension.addon then ns.root.seenNews[extension.addon] = ReleaseOf(extension.addon) end
+	end
+end
+
+local function Close()
+	Seen()
 	window:Hide()
 end
 
@@ -81,36 +139,35 @@ local function CreateWindow()
 	ok:SetSize(math.max(120, U.Measure(ok:GetFontString() or ok, "GetStringWidth", 90) + 30), 26)
 	ok:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
 	ok:SetScript("OnClick", Close)
-	window:SetScript("OnHide", function() ns.root.seenVersion = Release() end)
+	window:SetScript("OnHide", Seen)
 	window:SetScript("OnShow", function(self)
 		self:SetScale(ns.Skin.Scale())
 		Layout()
 	end)
 end
 
-function ns.ShowNews()
+-- all: every news (asked from the menu), else only what was not seen yet.
+function ns.ShowNews(onlyNew)
 	if not ns.root or InCombatLockdown() then return end
+	showAll = not onlyNew
 	if not window then CreateWindow() end
-	window:Show()
+	if window:IsShown() then Layout() else window:Show() end
 end
 
 function ns.InitNews()
 	-- First launch: the welcome screen tells everything, this version is seen.
-	if not ns.root.welcomed then
-		ns.root.seenVersion = Release()
-		return
-	end
-	if ns.root.seenVersion == Release() then return end
+	-- (the extensions are known once loaded: what is new is read a moment after entering the world)
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 	frame:SetScript("OnEvent", function(self)
 		self:UnregisterAllEvents()
 		C_Timer.After(SHOW_DELAY, function()
-			if ns.root.seenVersion == Release() then return end
+			if not ns.root.welcomed then return Seen() end
+			if not Sections(false)[1] then return end
 			if InCombatLockdown() then
 				self:RegisterEvent("PLAYER_REGEN_ENABLED")
 			else
-				ns.ShowNews()
+				ns.ShowNews(true)
 			end
 		end)
 	end)

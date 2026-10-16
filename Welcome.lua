@@ -18,7 +18,13 @@ local DOT_SIZE, DOT_GAP = 8, 8
 local ICON = "Interface\\Icons\\INV_Misc_Map_01"
 local CHECK = "Interface\\Buttons\\UI-CheckBox-Check"
 local SHOW_DELAY = 2 -- seconds after arriving, once the screen has settled
-local STEPS = { "intro", "look", "play", "interface", "chat", "ready" }
+local STEPS = { "intro", "look", "play", "interface", "appearance", "chat", "ready" }
+-- (a step for the extensions, before the last one, when some are missing)
+local function WithExtensions()
+	if ns.MissingExtensions and ns.MissingExtensions()[1] and STEPS[#STEPS - 1] ~= "extensions" then
+		table.insert(STEPS, #STEPS, "extensions")
+	end
+end
 local PLAYSTYLE_ORDER = { "immersion", "adventurer", "roleplay", "dungeons" }
 local HIGHLIGHTS = {
 	{ "Interface\\CURSOR\\Point", "WELCOME_HIGHLIGHT_NAMES" },
@@ -34,6 +40,12 @@ local INTERFACE = {
 	{ "travel.enabled", "TRAVEL_ENABLE" },
 	{ "scene.enabled", "SCENE_ENABLE" },
 }
+-- The look of your interface: Wanderer's own hand on the minimap, the quest tracker, a quiet bar.
+local APPEARANCE = {
+	{ "world.styledMinimap", "STYLED_MINIMAP" },
+	{ "world.styledTracker", "STYLED_TRACKER" },
+	{ "world.bar", "BAR_SHOW" },
+}
 local TIPS = {
 	{ "Interface\\CURSOR\\Point", "WELCOME_TIP_HOVER" },
 	{ "Interface\\Icons\\INV_Misc_Spyglass_02", "WELCOME_TIP_REVEAL" },
@@ -45,21 +57,24 @@ local TIPS = {
 -- the interface fading, the ambiance while away, quest automations, gestures),
 -- so going from one to another never leaves something of the first behind.
 -- Merchants, loot, the label's content and the journal are everyone's: left
--- as they are. Everything stays free to change afterwards.
-local function Way(preset, values)
+-- as they are. Everything stays free to change afterwards. places: the profiles by place made with it, for
+-- the ways whose interface fades (in dungeons everything in view and the damage meter, in cities the
+-- interface out of the way); the dungeons' way keeps everything in view and its meter everywhere.
+local function Way(preset, values, places)
 	local all = {
 		["combatEnemies"] = false, ["label.stickyTarget"] = true, ["enemyNames"] = "names", ["nearNames.show"] = "bar", ["zones.dungeon"] = "group", ["zones.raid"] = "group",
 		["scene.enabled"] = true, ["scene.camera"] = true,
 		["cinema.enabled"] = false, ["cinema.combatOnly"] = true, ["cinema.alpha"] = 20,
 		["travel.enabled"] = true, ["away.enabled"] = false,
 		["world.cleanMinimap"] = false, ["world.cleanTracker"] = false, ["world.gatherIcons"] = false,
+		["world.styledMinimap"] = true, ["world.styledTracker"] = false, ["world.bar"] = false,
 		["quest.autoAccept"] = false, ["quest.autoTurnIn"] = false, ["quest.skipGossip"] = false,
 		["gestures.read"] = false, ["gestures.levelUp"] = false, ["gestures.greet"] = false,
 		["groupMarks"] = true, ["guildMarks"] = true, ["label.showPower"] = true,
-		["messages.enabled"] = false, ["fishing.splash"] = false,
+		["messages.enabled"] = false, ["fishing.splash"] = false, ["meter.show"] = "own",
 	}
 	for path, value in pairs(values) do all[path] = value end
-	return { preset = preset, values = all }
+	return { preset = preset, values = all, places = places }
 end
 
 ns.PLAYSTYLES = {
@@ -68,39 +83,82 @@ ns.PLAYSTYLES = {
 		["enemyNames"] = "near",
 		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "contemplation",
 		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
-		["label.showPower"] = false, ["fishing.splash"] = true }),
+		["world.styledTracker"] = true, ["world.bar"] = true,
+		["label.showPower"] = false, ["fishing.splash"] = true }, true),
 	-- Enemies named, quests without delay, the whole interface at hand.
 	adventurer = Way("balanced", {
 		["scene.enabled"] = false, ["scene.camera"] = false, ["cinema.combatOnly"] = false,
 		["quest.autoAccept"] = true, ["quest.autoTurnIn"] = true, ["quest.skipGossip"] = true,
-		["merchant.sellJunk"] = true, ["merchant.repair"] = true, ["loot.fast"] = true }),
+		["loot.fast"] = true }),
 	-- No names, quiet scenes, whispers as conversations, a character who lives,
 	-- resting by the fire while away.
 	roleplay = Way("immersion", {
 		["enemyNames"] = "near", ["nearNames.show"] = "name",
 		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "hearth",
 		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
+		["world.styledTracker"] = true, ["world.bar"] = true,
 		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true,
-		["messages.enabled"] = true, ["label.showPower"] = false, ["fishing.splash"] = true }),
+		["messages.enabled"] = true, ["label.showPower"] = false, ["fishing.splash"] = true }, true),
 	-- Companions named and their health bars in dungeons and raids, the whole
 	-- interface, threat at a glance.
 	dungeons = Way("balanced", {
 		["cinema.combatOnly"] = false,
-		["scene.camera"] = false, ["threat.show"] = true, ["threat.alert"] = true }),
+		["scene.camera"] = false, ["threat.show"] = true, ["threat.alert"] = true, ["meter.show"] = "on" }),
 }
 
 local function Path(path)
 	return U.SplitPath(path)
 end
 
+-- A way's values written into a profile.
+local function Assign(profile, values)
+	for path, value in pairs(values) do
+		local section, field = Path(path)
+		if section then
+			profile[section] = type(profile[section]) == "table" and profile[section] or {}
+			profile[section][field] = value
+		else
+			profile[path] = value
+		end
+	end
+end
+
+-- A way written into a profile: its values and its names (the preset), Wanderer on.
+local function ApplyTo(profile, style)
+	Assign(profile, style.values)
+	local names = ns.PRESETS[style.preset] or {}
+	profile.preset = style.preset
+	profile.show = type(profile.show) == "table" and profile.show or {}
+	for _, category in ipairs(ns.CATEGORIES) do profile.show[category.key] = names[category.key] and true or false end
+	profile.label = type(profile.label) == "table" and profile.label or {}
+	profile.label.enabled = style.preset ~= "all"
+	profile.enabled = true
+end
+
+-- A way chosen: written into this profile, the character's own and its profiles by place (made first by the
+-- ways whose interface fades: dungeons in view with their meter, cities quiet; their places' own settings
+-- set again after). A way that does not make them leaves each place its damage meter.
 function ns.ApplyPlaystyle(key)
 	local style = ns.PLAYSTYLES[key]
 	if not style then return end
-	for path, value in pairs(style.values) do
-		local section, field = Path(path)
-		if section then ns.db[section][field] = value else ns.db[path] = value end
+	if style.places and ns.MakePlaceProfiles then ns.MakePlaceProfiles(true) end
+	local done = {}
+	local function To(profile)
+		if type(profile) ~= "table" or done[profile] then return end
+		done[profile] = true
+		ApplyTo(profile, style)
 	end
-	ns.db.enabled = true
+	To(ns.db)
+	To(ns.root.profiles[ns.root.profileKeys[ns.CharacterKey()] or ""])
+	for _, name in pairs(ns.PlaceProfiles and ns.PlaceProfiles() or {}) do To(ns.root.profiles[name]) end
+	if style.places and ns.MakePlaceProfiles then
+		ns.MakePlaceProfiles()
+	else
+		for zone, name in pairs(ns.PlaceProfiles and ns.PlaceProfiles() or {}) do
+			local profile, meter = ns.root.profiles[name], ns.PLACE_METER and ns.PLACE_METER[zone]
+			if type(profile) == "table" and meter and type(profile.meter) == "table" then profile.meter.show = meter end
+		end
+	end
 	ns.SetPreset(style.preset) -- refreshes every module
 	if ns.RefreshOptions then ns.RefreshOptions() end
 end
@@ -313,6 +371,18 @@ local function InterfacePage()
 	end
 end
 
+local function AppearancePage()
+	local page = Page("appearance", "WELCOME_STEP_APPEARANCE", "WELCOME_APPEARANCE_DESC")
+	local rows, previous = {}, page.rule
+	for _, entry in ipairs(APPEARANCE) do
+		previous = SwitchRow(page, entry[1], entry[2], previous)
+		rows[#rows + 1] = previous
+	end
+	refreshers.appearance = function()
+		for _, row in ipairs(rows) do row:Refresh() end
+	end
+end
+
 local function ChatPage()
 	local page = Page("chat", "WELCOME_STEP_CHAT", "WELCOME_CHAT_DESC")
 	local chips, previous = {}, nil
@@ -382,27 +452,37 @@ local function ChatPage()
 	end
 end
 
+-- The extensions not installed yet: each with its icon, what it does, its address a click away.
+local function ExtensionsPage()
+	local page = Page("extensions", "WELCOME_STEP_EXTENSIONS", "WELCOME_EXTENSIONS_DESC")
+	local previous = page.rule
+	for index, offer in ipairs(ns.MissingExtensions()) do
+		local card = ns.Skin.Panel(page)
+		card:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, index == 1 and -14 or -10)
+		card:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+		local icon = ns.Skin.Icon(card, 36)
+		icon:SetPoint("TOPLEFT", card, "TOPLEFT", 10, -10)
+		icon:Set(offer.icon, 1)
+		local name = ns.Skin.Text(card, "GameTooltipText", "gold")
+		name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, 0)
+		name:SetText(offer.name)
+		local get = ns.Skin.Button(card, L.EXT_GET_BUTTON, function() ns.OfferExtension(offer) end)
+		get:SetPoint("TOPRIGHT", card, "TOPRIGHT", -10, -10)
+		local text = ns.Skin.Text(card, "GameTooltipTextSmall", "soft")
+		text:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -4)
+		text:SetPoint("RIGHT", get, "LEFT", -10, 0)
+		text:SetJustifyH("LEFT")
+		text:SetText(L[offer.text])
+		card:SetHeight(math.max(56, 24 + U.Measure(text, "GetStringHeight", 30) + 16))
+		previous = card
+	end
+end
+
 local function ReadyPage()
 	local page = Page("ready", "WELCOME_STEP_READY", "WELCOME_READY_DESC")
 	local previous = page.rule
 	for index, tip in ipairs(TIPS) do
 		previous = IconLine(page, tip[1], L[tip[2]], previous, index == 1 and 16 or 12)
-	end
-	-- The extensions not installed yet: a line each, its address a click away.
-	for _, offer in ipairs(ns.MissingExtensions and ns.MissingExtensions() or {}) do
-		previous = IconLine(page, offer.icon, L.EXT_WELCOME_LINE:format(offer.name, L[offer.text .. "_SHORT"]), previous, 12)
-		local link = CreateFrame("Button", nil, page)
-		link:SetPoint("TOPLEFT", previous, "TOPLEFT", 0, 0)
-		link:SetPoint("RIGHT", page, "RIGHT", 0, 0)
-		link:SetHeight(18)
-		link:SetScript("OnClick", function() ns.OfferExtension(offer) end)
-		link:SetScript("OnEnter", function(self)
-			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-			GameTooltip:AddLine(offer.name, 1, 0.82, 0)
-			GameTooltip:AddLine(L[offer.text], 1, 1, 1, true)
-			GameTooltip:Show()
-		end)
-		link:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	end
 	local options = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
 	options:SetText(L.WELCOME_OPTIONS)
@@ -479,11 +559,14 @@ local function CreateWindow()
 	window.top:SetSize(1, 1)
 	window.top:SetPoint("TOPLEFT", crest, "BOTTOMLEFT", 0, -16)
 
+	WithExtensions()
 	IntroPage()
 	LookPage()
 	PlayPage()
 	InterfacePage()
+	AppearancePage()
 	ChatPage()
+	if pages.extensions == nil and ns.MissingExtensions()[1] then ExtensionsPage() end
 	ReadyPage()
 
 	-- Progress dots and the way forward.

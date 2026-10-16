@@ -238,6 +238,10 @@ local DEFAULTS = {
 		filterErrors = true,
 		hideTalkingHead = false,
 		cleanMinimap = false, -- the game's frames as they are, until asked
+		-- Wanderer's looks: the quest tracker, the minimap, the bar (offered at the welcome; off until asked).
+		styledTracker = false,
+		styledMinimap = false,
+		bar = false,
 		cleanTracker = false,
 		gatherIcons = false, -- other addons' buttons: left alone until asked
 		editLayout = "", -- "": the game's Edit Mode layout is left alone
@@ -271,8 +275,10 @@ end
 _G.Wanderer = setmetatable({
 	-- What the extensions may count on: 2 = the reagents, the junk rules and sales, the links, the bags' ids;
 	-- 3 = the reminders (a line added, known, the window opened); 4 = the shared pieces (Skin: Kit.lua;
-	-- Util: items, the map, time) and the extensions' own setup (Locale, WhenLoaded).
-	API = 4,
+	-- Util: items, the map, time) and the extensions' own setup (Locale, WhenLoaded); 5 = the reagents' table,
+	-- an area's name, an item's levels and its count with the bank, the check box; 6 = what you play (chosen,
+	-- kept per character), the dropdown, a comparison changed.
+	API = 6,
 	RegisterExtension = RegisterExtension,
 	Settings = function(key) return ns.db and ns.db.enabled and ns.db[key] or nil end,
 	Util = ns.Util,
@@ -280,10 +286,22 @@ _G.Wanderer = setmetatable({
 	-- What an item is worth to you: { text, r, g, b } lines, the first one the best.
 	UpgradeLines = function(link) return ns.UpgradeLines and ns.UpgradeLines(link) or {} end,
 	IsUpgrade = function(link) return ns.IsUpgrade and ns.IsUpgrade(link) or false end,
+	-- How much better for your branch (a percentage), nil when it is not.
+	UpgradeGain = function(link) if ns.UpgradeGain then return ns.UpgradeGain(link) end end,
+	-- What you play (chosen by you, kept for each character): the choices of your class { id, label }, the one
+	-- chosen (nil: none yet), or a new one chosen (id).
+	PlayChoices = function() return ns.PlayChoices and ns.PlayChoices() or {} end,
+	PlayChoice = function(id) if ns.PlayChoice then return ns.PlayChoice(id) end end,
+	-- fn() called when a comparison changed (a weight, a scale, what you play, your talents).
+	-- A quest level's color, as the quest log colors it: r, g, b.
+	QuestLevelColor = function(level) return ns.World.LevelColor(level, true) end,
+	OnComparisonChanged = function(fn) if ns.OnComparisonChanged then ns.OnComparisonChanged(fn) end end,
 	-- Gear your class can wear: true or false (nil: not gear).
 	CanWear = function(link) if ns.CanWear then return ns.CanWear(link) end end,
 	-- Who uses a crafting reagent: { { name, mine, alt, count } }, see Reagents.lua.
 	ReagentUses = function(item) return ns.ReagentUses and ns.ReagentUses(item) or {} end,
+	-- Every crafting reagent known (item id -> the professions using it, as bits) and those bits by name.
+	Reagents = function() return ns.REAGENT_PROFESSIONS or {}, ns.REAGENT_BITS or {} end,
 	-- At a merchant: what is junk (rule(item id, quality) -> true, false or nil), selling a list of { bag, slot, id }.
 	AddJunkRule = function(rule) if ns.AddJunkRule then ns.AddJunkRule(rule) end end,
 	SellItems = function(items) return ns.SellItems and ns.SellItems(items) or false end,
@@ -299,13 +317,15 @@ _G.Wanderer = setmetatable({
 	-- A short notice at the top of the screen (Toast.lua): a title, a few words.
 	Toast = function(title, text, options) if ns.Toast then ns.Toast(title, text, options) end end,
 	OpenTodo = function() if ns.ToggleTodo and not (ns.TodoShown and ns.TodoShown()) then ns.ToggleTodo() end end,
-	-- An extension's words: its languages' tables ({ enUS = {...}, frFR = {...} }); the client's, a word it
-	-- lacks in English, else the key itself. esMX reads esES when it has none.
+	-- An extension's words: its languages' tables ({ enUS = {...}, frFR = {...} }, the client's added by its own
+	-- file, loaded after); a word it lacks in English, then Wanderer's words shared by every addon (OPEN, SELL...),
+	-- else the key itself. esMX reads esES when it has none.
 	Locale = function(tables)
-		tables.esMX = tables.esMX or tables.esES
-		local base = tables.enUS or {}
-		local here = tables[GetLocale and GetLocale() or "enUS"] or base
-		return setmetatable({}, { __index = function(_, key) return here[key] or base[key] or key end })
+		local client = GetLocale and GetLocale() or "enUS"
+		return setmetatable({}, { __index = function(_, key)
+			local here = tables[client] or (client == "esMX" and tables.esES) or nil
+			return here and here[key] or (tables.enUS or {})[key] or rawget(ns.L, key) or key
+		end })
 	end,
 	-- An addon's start, once its own files are loaded (its saved variables with them).
 	WhenLoaded = function(addon, fn)
@@ -703,8 +723,10 @@ local PLACE_SETTINGS = {
 }
 -- The game's damage meter: in dungeons (and raids, battlegrounds) only.
 local PLACE_METER = { dungeon = "on", city = "off", world = "off" }
+ns.PLACE_METER = PLACE_METER
 
-function ns.MakePlaceProfiles()
+-- quiet: only made (or set again), nothing said or switched (the welcome's ways do it after).
+function ns.MakePlaceProfiles(quiet)
 	local map = ns.PlaceProfiles()
 	local source = ns.root.profileKeys[ns.CharacterKey()] or DEFAULT_PROFILE
 	for _, zone in ipairs({ "world", "city", "dungeon" }) do
@@ -722,6 +744,7 @@ function ns.MakePlaceProfiles()
 	end
 	map.raid = map.raid or map.dungeon
 	map.pvp = map.pvp or map.dungeon
+	if quiet then return end
 	ns.UpdatePlaceProfile()
 	if ns.initialized then ns.RefreshAll() end
 	if ns.RefreshOptions then ns.RefreshOptions() end
@@ -761,6 +784,9 @@ function ns.RefreshAll()
 	if ns.RefreshTargetInfo then ns.RefreshTargetInfo() end
 	if ns.RefreshPlates then ns.RefreshPlates() end
 	if ns.RefreshAway then ns.RefreshAway() end
+	-- (Wanderer's looks last: over what the discreet minimap and tracker give back)
+	if ns.RefreshMinimapLook then ns.RefreshMinimapLook() end
+	if ns.RefreshTrackerLook then ns.RefreshTrackerLook() end
 end
 
 function ns.SetPreset(preset)
@@ -855,6 +881,11 @@ function ns.SetProfile(name, byPlace)
 			end
 		end
 		profile.styleVersion = 10
+	end
+	-- 0.43: Wanderer's bar, a setting of the profile (it was the account's while tried): kept as it was.
+	if (profile.styleVersion or 0) < 11 then
+		if type(profile.world) == "table" and type(root.bar) == "table" and root.bar.hide == false then profile.world.bar = true end
+		profile.styleVersion = 11
 	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
@@ -1052,9 +1083,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		ns.SetProfile(WandererDB.profileKeys[ns.CharacterKey()] or DEFAULT_PROFILE)
 		-- Modules are built once: frames, hooks and events must never be doubled.
 		if not ns.initialized then
-			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitCinema", "InitTooltips",
+			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitBar", "InitCinema", "InitTooltips",
 				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
-				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitIcons", "InitMail", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
+				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitMinimapLook", "InitTrackerLook", "InitIcons", "InitMail", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
 				if ns[init] then ns[init]() end
 			end
 			ns.initialized = true

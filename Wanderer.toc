@@ -13,7 +13,7 @@
 ## Notes-zhTW: 為你的旅程帶來沉浸與便利：隱藏名稱、豐富的滑鼠懸停標籤、安靜的對話場景、按天賦系評估物品以及許多貼心的小功能。
 ## Category: Immersion
 ## Category-frFR: Immersion
-## Version: 0.42.0
+## Version: 0.43.0
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 ## SavedVariables: WandererDB
 ## AddonCompartmentFunc: Wanderer_OnAddonCompartmentClick
@@ -22,15 +22,8 @@
 ## X-Website: https://wanderer-addon.com
 
 Locales.lua
-Locales\frFR.lua
-Locales\deDE.lua
-Locales\esES.lua
-Locales\itIT.lua
-Locales\ptBR.lua
-Locales\ruRU.lua
-Locales\koKR.lua
-Locales\zhCN.lua
-Locales\zhTW.lua
+# Only your client's language is loaded ([TextLocale]); English is Locales.lua, the base.
+Locales\[TextLocale].lua
 Util.lua
 Core.lua
 Quests.lua
@@ -49,6 +42,9 @@ Meter.lua
 Buffs.lua
 TargetInfo.lua
 Minimap.lua
+Bar.lua
+MinimapLook.lua
+TrackerLook.lua
 Cinema.lua
 Tooltips.lua
 Upgrade.lua

@@ -171,8 +171,6 @@ function Skin.Button(parent, text, onClick, kind, minimum)
 	return button
 end
 
--- A row of choices, one of them chosen (in gold): { { key, label }, ... }; onPick(key). bar:Select(key),
--- bar:SetLabels({ label, ... }).
 -- A choice on or off: a small box with its label beside it (a click on either). get() is read each time it is
 -- drawn (check:Refresh()), set(value) called on a click; tip: its tooltip.
 function Skin.Check(parent, label, get, set, tip)
@@ -207,6 +205,52 @@ function Skin.Check(parent, label, get, set, tip)
 	return check
 end
 
+-- A small button, for a window's bar or a row: framed, its words saying what it does, its tooltip; a link's
+-- methods (SetLabel), so it takes a link's place. Every action is one of these (or Skin.Button), never a bare
+-- word to guess. height: 22 unless said.
+function Skin.SmallButton(parent, text, onClick, tooltip, height)
+	local button = Skin.Button(parent, text or "", function(self, ...) if onClick then onClick(self, ...) end end)
+	button:SetHeight(height or 22)
+	function button:SetLabel(label)
+		self:SetText(label or "")
+		self:Fit()
+	end
+	if tooltip then Skin.Tooltip(button, tooltip) end
+	return button
+end
+
+-- A list to choose from: a button showing the choice (placeholder before one), a menu of all of them.
+-- choices() gives { { id, label } }, get() the id chosen, set(id) chooses. box:Refresh() after a change.
+function Skin.Dropdown(parent, choices, get, set, placeholder, minimum)
+	local box
+	box = Skin.Button(parent, "", function(self)
+		U.Menu(self, function(_, root)
+			for _, choice in ipairs(choices()) do
+				root:CreateRadio(choice.label, function() return get() == choice.id end, function()
+					set(choice.id)
+					box:Refresh()
+				end)
+			end
+		end)
+	end, nil, minimum)
+	box.arrow = box:CreateTexture(nil, "OVERLAY")
+	box.arrow:SetSize(14, 14)
+	box.arrow:SetPoint("RIGHT", box, "RIGHT", -6, 0)
+	box.arrow:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
+	function box:Refresh()
+		local label = placeholder or ""
+		for _, choice in ipairs(choices()) do
+			if choice.id == get() then label = choice.label end
+		end
+		self:SetText(label .. "      ")
+		self:Fit()
+	end
+	box:Refresh()
+	return box
+end
+
+-- A row of choices, one of them chosen (in gold): { { key, label }, ... }; onPick(key). bar:Select(key),
+-- bar:SetLabels({ label, ... }).
 function Skin.Choices(parent, list, onPick, height)
 	local bar = CreateFrame("Frame", nil, parent)
 	bar:SetHeight(height or 32)

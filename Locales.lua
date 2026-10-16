@@ -31,7 +31,11 @@ local L = {
 	SCENE_ENABLE_DESC = "When you talk to a character, the interface softly fades away and their words appear page by page in a panel at the bottom of the screen, in your predefined style, with buttons to continue, accept or close. Keys work too: Space to continue or accept, 1 to 9 to choose, Escape to close. Hold Shift while talking to use the game's own window.",
 	SCENE_CAMERA = "Bring the camera closer to the characters you talk to",
 	SCENE_CAMERA_DESC = "Conversations, quests, merchants, trainers, bankers, flight masters...: the camera slowly moves in and frames the character, then returns to your own distance once everything is closed.",
-	SCENE_REWARDS = "Rewards",
+	REWARDS = "Rewards",
+	GEAR = "Gear",
+	SELL = "Sell",
+	CLASS = "Class",
+	FOR_AUCTION = "For the auction house",
 	SCENE_REQUIRED = "Required",
 	SCENE_NEXT = "Next",
 	SCENE_ACCEPT = "Accept",
@@ -62,7 +66,7 @@ local L = {
 	LABEL_UNTAGGED_DESC = "A monster attacking you that nobody has hit yet is marked: on its own line in the label, over its head, and under your target's name. In a fight, your target keeps only this warning over its head. Hit it first, or another player may take it.",
 	UNTAGGED_MARK = "Not yours yet",
 	UNTAGGED_STATUS = "Not yours yet: hit it first",
-	SECTION_QUESTS = "Quests",
+	QUESTS = "Quests",
 	SECTION_SCREEN = "Screen",
 	MERCHANT_REPAIR = "Repair automatically",
 	MERCHANT_REPAIR_DESC = "At a merchant who can repair, all your equipment is repaired and the cost is shown in the chat.",
@@ -187,7 +191,7 @@ local L = {
 	ZONE_WORLD = "Open world",
 	ZONE_CITY = "Cities & inns",
 	ZONE_DUNGEON = "Dungeons & scenarios",
-	ZONE_RAID = "Raids",
+	RAIDS = "Raids",
 	ZONE_PVP = "Battlegrounds & arenas",
 	ZONE_DEFAULT = "My settings",
 	ZONE_DESC = "Names to show in this kind of place. \"My settings\" uses the choices above. \"In a group\": your companions named, never you, enemies by their health bars.",
@@ -436,7 +440,7 @@ local L = {
 	NEWS_SHOW = "What's new",
 	NEWS_SHOW_BUTTON = "Show",
 	NEWS_SHOW_DESC = "The changes in this version of Wanderer.",
-	NEWS_LINES = "Wanderer's windows no longer cover each other: they hold together like magnets. Let go with Shift to place one freely.\nThe reminders can be resized, open by themselves at login when something is left, and take the lines the other addons give them (the items of a quest, with how many you carry).\nLighter: your branch, your unread messages and your buffs are read far less often.\nNew extension: Wanderer Quests shows every quest of your class, your dungeons and your zones, in chains, with each quest's sheet. Wanderer Auction gains a shopping list, Wanderer Bags a selection to act on many items at once.",
+	NEWS_LINES = "What you play: choose in a list how you play this character (a bear or a cat for a feral druid); your gear is judged for it everywhere, kept for each character, nothing guessed.\nGear is \"better\" only in your class's best armor type: cloth is never better for one who wears leather.\nWindows behave as on a desktop: none is pushed under another or hidden behind the map, the last opened or clicked comes in front.\nThree looks of Wanderer's own, at the welcome or in the options: the minimap with soft edges, the quest tracker in small golden capitals, a quiet bar at the top of the screen.\nQuest levels in the colors of your quest log; every action a real button.\nLighter: only your language is loaded, and your extensions' news show here.",
 	PREVIEW_TITLE = "Preview",
 	GESTURES_GREET = "Greet the characters you talk to",
 	GESTURES_GREET_DESC = "Your character waves at a character when starting to talk to them, once in a while, without a word (the game's /wave emote, seen by players nearby).",
@@ -445,13 +449,13 @@ local L = {
 	SCENE_DOWNGRADE = "Item level %d lower than what you wear",
 	WELCOME_STEP_PLAY = "What kind of traveller are you?",
 	PLAYSTYLE_IMMERSION = "The wanderer",
-	PLAYSTYLE_IMMERSION_DESC = "No names above heads (enemies appear as you come near), conversations face to face, an interface that steps aside, an ambiance while away.",
+	PLAYSTYLE_IMMERSION_DESC = "No names over heads (enemies appear as you come near), conversations face to face, an interface that steps aside (all of it in view in dungeons, with the damage meter), an ambiance while you are away.",
 	PLAYSTYLE_ADVENTURER = "The seasoned adventurer",
 	PLAYSTYLE_ADVENTURER_DESC = "Enemies named, quests taken and returned without delay, junk sold, the whole interface at hand.",
 	PLAYSTYLE_ROLEPLAY = "The storyteller",
-	PLAYSTYLE_ROLEPLAY_DESC = "No names (enemies' names appear as you come near), quiet scenes, whispers as conversations, a character who reads, greets and cheers, resting by the fire while away.",
+	PLAYSTYLE_ROLEPLAY_DESC = "No names (the enemies' appear as you come near), quiet scenes, whispers as conversations, a character who reads, greets and cheers, by the fire while you are away; all the interface in view in dungeons.",
 	PLAYSTYLE_DUNGEONS = "The delver",
-	PLAYSTYLE_DUNGEONS_DESC = "In dungeons and raids your companions named, enemies named elsewhere, the whole interface, threat at a glance.",
+	PLAYSTYLE_DUNGEONS_DESC = "In dungeons and raids your companions named, enemies named elsewhere, all the interface, the threat at a glance and the damage meter.",
 	SECTION_PLACES = "Profiles by place",
 	PLACE_PROFILES_MAKE = "One profile per place",
 	PLACE_PROFILES_MAKE_BUTTON = "Create",
@@ -460,7 +464,7 @@ local L = {
 	PLACE_PROFILE_OWN = "My profile",
 	PLACE_PROFILE_WORLD = "Open world",
 	PLACE_PROFILE_CITY = "Cities",
-	PLACE_PROFILE_DUNGEON = "Dungeons",
+	DUNGEONS = "Dungeons",
 	MSG_PLACE_PROFILES_MADE = "one profile per place created: adjust each one while you are there.",
 	MENU_OPTIONS = "Options",
 	MENU_PHOTO = "Photo mode",
@@ -495,7 +499,7 @@ local L = {
 	PAGE_IMMERSION = "Immersion",
 	SECTION_LAYOUT = "Edit Mode",
 	KEYBINDS = "Key bindings",
-	KEYBINDS_BUTTON = "Open",
+	OPEN = "Open",
 	KEYBINDS_DESC = "Wanderer's keys (reveal the names, raid markers, reminders, messages, photo mode, by the fire): set them in the game's key bindings, under Wanderer.",
 	MAIL_TAKE_ALL = "Take all",
 	MAIL_STOP = "Stop",
@@ -519,7 +523,6 @@ local L = {
 	MESSAGES_HIDE_CHAT = "Remove them from the chat",
 	MESSAGES_HIDE_CHAT_DESC = "The chat no longer shows the whispers the window holds.",
 	MESSAGES_OPEN = "Messages",
-	MESSAGES_OPEN_BUTTON = "Open",
 	MESSAGES_TITLE = "Messages",
 	MESSAGES_EMPTY = "No conversation yet.",
 	MESSAGES_ROW_HINT = "Right click for more options",
@@ -831,7 +834,6 @@ local L = {
 
 	SECTION_EXTENSIONS = "Extensions",
 	EXT_GET_BUTTON = "Get it",
-	EXT_WELCOME_LINE = "|cffffd100%s|r: %s (click for its address).",
 	EXT_BAGS_SHORT = "your bags and your bank in one window",
 	EXT_BAGS = "Your bags and your bank in one Wanderer window: sorted by kind, searchable, the item level and the green arrow, your bank viewable anywhere. A separate download: search Wanderer Bags in the CurseForge app, or copy its address.",
 	REAGENT_USED_IN = "Used in: %s",
@@ -866,7 +868,39 @@ local L = {
 	TODO_SHOPPING = "Add to the shopping list",
 	EXT_QUESTS_SHORT = "every quest of your class, your dungeons and your zones",
 	EXT_QUESTS = "Every quest of your class, of your dungeons and of your zones, in chains: where you stand with each, what it asks, who gives it and where. A separate download: search Wanderer Quests in the CurseForge app, or copy its address.",
+	EXT_CAMPFIRE_SHORT = "a little idle game by the fire, fed by your journey",
+	EXT_CAMPFIRE = "A little idle game in a Wanderer window: a campfire grows, companions set out on expeditions across Azeroth in real time, and your real journey (zones explored, professions, dungeons) makes the camp stronger. A separate download: search Wanderer Campfire Game in the CurseForge app, or copy its address.",
+	WELCOME_STEP_EXTENSIONS = "To go further",
+	WELCOME_EXTENSIONS_DESC = "Free extensions, each a separate download, that follow your profiles and Wanderer's style. Take only the ones you want; the CurseForge app installs them with Wanderer.",
+	MENU_MORE = "Other Wanderer addons (%d)",
+	MENU_MORE_NEW = "new",
+	MENU_MORE_HIDE = "Stop suggesting them",
+
+
+	PLAY_CHOICE = "What you play",
+	PLAY_CHOICE_PICK = "Choose...",
+	PLAY_CHOICE_DESC = "How you play this character: your gear is judged for it (the green arrow, the tooltips, the best pieces of Wanderer Quests). Kept for each character.",
+	BAR_SHOW = "Wanderer's bar",
+	BAR_SHOW_DESC = "A quiet line against the top left of the screen, in Wanderer's own hand: the menu, the reminders, your extensions' windows and, under \"Other addons\", the icons of the other addons around the minimap. Faint until the mouse comes near. While it is shown, it takes the place of the minimap button.",
+	BAR_MENU_HINT = "Left click: the menu. Right click: the options.",
+
+	BAR_OTHERS = "Other addons",
+
+	STYLED_MINIMAP = "Minimap in Wanderer's style",
+	STYLED_MINIMAP_DESC = "Its edge melts into the world; the group finder's eye, the day and night and the mail stand apart, smaller; under it, the zone in small golden capitals, the time and where you stand on one line. A click on the time opens the game's clock. Switched off, everything is back as the game draws it.",
+	MINIMAP_INFO_HINT = "Click: the game's clock.",
+	STYLED_TRACKER = "Quest tracker in Wanderer's style",
+	STYLED_TRACKER_DESC = "The game's own tracker, in its place, with its clicks, quest items and icons, dressed in Wanderer's hand on a transparent ground: headers in small golden capitals over a fine rule, quests in soft beige with their level in the quest log's color, objectives paler with their count brighter, a done one faded, every word softly shadowed. Switched off, the game draws it as before.",
+
+	WELCOME_STEP_APPEARANCE = "The look of your interface",
+	WELCOME_APPEARANCE_DESC = "Wanderer can dress the minimap, the quest tracker and a quiet bar in its own hand: soft edges, small golden capitals, nothing more than needed. Each one comes back as the game draws it whenever you wish.",
+
+
 }
 
+
+-- Names built from a kind ("ZONE_" .. kind, "PLACE_PROFILE_" .. kind) whose word is one every addon shares.
+local SHARED = { ZONE_RAID = "RAIDS", PLACE_PROFILE_DUNGEON = "DUNGEONS" }
+setmetatable(L, { __index = function(words, key) return SHARED[key] and rawget(words, SHARED[key]) or nil end })
 
 ns.L = L

@@ -11,6 +11,8 @@ ns.EXTENSION_OFFERS = {
 		url = "https://wanderer-addon.com/#auction" },
 	{ addon = "WandererQuests", name = "Wanderer Quests", icon = "Interface\\Icons\\INV_Misc_Book_09", text = "EXT_QUESTS",
 		url = "https://wanderer-addon.com/#quests" },
+	{ addon = "WandererCampfireGame", name = "Wanderer Campfire Game", icon = "Interface\\Icons\\Spell_Fire_Fire", text = "EXT_CAMPFIRE",
+		url = "https://wanderer-addon.com/#campfire" },
 }
 
 local function Installed(addon)
@@ -30,6 +32,25 @@ function ns.MissingExtensions()
 		if not Installed(offer.addon) then list[#list + 1] = offer end
 	end
 	return list
+end
+
+-- The menu's offer: shown while some are missing (not after "stop suggesting them"), "new" while one of
+-- them was never seen there.
+function ns.OfferInMenu()
+	if ns.root.hideOffers then return nil end
+	local missing = ns.MissingExtensions()
+	if not missing[1] then return nil end
+	ns.root.offersSeen = ns.root.offersSeen or {}
+	local new = false
+	for _, offer in ipairs(missing) do
+		if not ns.root.offersSeen[offer.addon] then new = true end
+	end
+	return missing, new
+end
+
+function ns.OffersSeen()
+	ns.root.offersSeen = ns.root.offersSeen or {}
+	for _, offer in ipairs(ns.MissingExtensions()) do ns.root.offersSeen[offer.addon] = true end
 end
 
 -- Its address, selected, for Ctrl+C.

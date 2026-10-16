@@ -79,7 +79,7 @@ function ns.RefreshTargetInfo()
 end
 
 function ns.InitTargetInfo()
-	frame, skin = ns.Skin.CreateWindow("WandererTargetInfo", "MEDIUM")
+	frame, skin = ns.Skin.CreateWindow("WandererTargetInfo", "MEDIUM", nil, true)
 	frame:EnableMouse(false)
 	text = ns.Skin.CreateText(frame, "GameTooltipTextSmall", 0.95, 0.92, 0.85)
 	text:SetPoint("CENTER")

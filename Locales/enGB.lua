@@ -1,0 +1,1 @@
+-- English is Locales.lua, the base: nothing more here (this file is loaded for an English client).

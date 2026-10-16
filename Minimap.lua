@@ -31,6 +31,22 @@ local function OnDragUpdate()
 	UpdatePosition()
 end
 
+-- The Wanderer addons not installed yet, in a menu: one entry, in gold, "new" while one was never seen here
+-- (each: its address to copy). Nothing when none is missing or they are not offered any more.
+function ns.MenuOffers(root)
+	local missing, new = ns.OfferInMenu()
+	if not missing then return end
+	local label = "|cffffd100" .. L.MENU_MORE:format(#missing) .. "|r"
+	if new then label = label .. "  |cff8fe0a2" .. L.MENU_MORE_NEW .. "|r" end
+	local more = root:CreateButton(label)
+	for _, offer in ipairs(missing) do
+		more:CreateButton(offer.name .. ": " .. L[offer.text .. "_SHORT"], function() ns.OfferExtension(offer) end)
+	end
+	more:CreateDivider()
+	more:CreateButton(L.MENU_MORE_HIDE, function() ns.root.hideOffers = true end)
+	ns.OffersSeen()
+end
+
 -- The menu of the button (and of the game's addon list on the minimap): the
 -- windows and modes of Wanderer one click away.
 function ns.ShowMenu(owner)
@@ -56,15 +72,22 @@ function ns.ShowMenu(owner)
 		-- Tools of the moment.
 		root:CreateDivider()
 		root:CreateButton(L.MENU_PHOTO, function() ns.TogglePhotoMode() end)
-		if ns.db.world.gatherIcons then
+		if ns.IconsGathered() then
 			ns.GatherIcons()
-			root:CreateButton(L.MENU_ICONS:format(ns.CountIcons()), function() ns.ToggleIconDrawer(button) end)
+			-- (opened from the bar: under it; else beside the minimap)
+			local fromBar = owner and owner ~= button and owner ~= UIParent
+			root:CreateButton(L.MENU_ICONS:format(ns.CountIcons()), function() ns.ToggleIconDrawer(fromBar and owner or button, fromBar) end)
 		end
 		-- Settings.
 		root:CreateDivider()
 		root:CreateCheckbox(L.MENU_ENABLED, function() return ns.db.enabled end,
 			function() ns.SetEnabled(not ns.db.enabled) end)
 		root:CreateButton(L.MENU_OPTIONS, function() ns.OpenOptions() end)
+		-- The Wanderer addons not installed yet: one entry, in gold, "new" while one was never seen here.
+		if ns.OfferInMenu() then
+			root:CreateDivider()
+			ns.MenuOffers(root)
+		end
 		-- Help.
 		root:CreateDivider()
 		root:CreateButton(L.WELCOME_SHOW, function() ns.ShowWelcome() end)
@@ -84,9 +107,11 @@ local function ShowTooltip(self)
 end
 
 function ns.RefreshMinimapButton()
+	if ns.RefreshBar then ns.RefreshBar() end
 	if ns.RefreshChatWhisperButton then ns.RefreshChatWhisperButton() end
 	if not button then return end
-	button:SetShown(not ButtonSettings().hide)
+	-- (Wanderer's bar shown: it takes the button's place)
+	button:SetShown(not ButtonSettings().hide and not (ns.BarActive and ns.BarActive()))
 	UpdatePosition()
 	button.unread:SetShown(ns.db.messages.enabled and ns.UnreadMessages and ns.UnreadMessages() > 0 or false)
 end

@@ -122,7 +122,10 @@ local function Branch(class)
 	ownBranch = { class = class, index = best or FIRST_BRANCH[class] or 1 }
 	return ownBranch.index
 end
-function ns.ForgetBranch() ownBranch = nil end
+function ns.ForgetBranch()
+	ownBranch = nil
+	if ns.ComparisonChanged then ns.ComparisonChanged() end
+end
 do
 	local events = CreateFrame("Frame")
 	for _, event in ipairs({ "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "PLAYER_LEVEL_UP",
@@ -132,13 +135,24 @@ do
 	events:SetScript("OnEvent", ns.ForgetBranch)
 end
 
-local function Wearable(class, itemClass, subclass, equip)
+-- Gear your class can wear. best: only its best kind of armor (what it is compared on: cloth is never "better"
+-- for one who wears leather, whatever its stats).
+-- A comparison changed (a weight, a scale, what you play, your talents): those who listen judge again.
+local listeners = {}
+function ns.OnComparisonChanged(fn) listeners[#listeners + 1] = fn end
+local function Changed()
+	for _, fn in ipairs(listeners) do pcall(fn) end
+end
+ns.ComparisonChanged = U.Debounce(0.2, Changed)
+
+local function Wearable(class, itemClass, subclass, equip, best)
 	if itemClass == ARMOR_CLASS then
 		if subclass == SHIELD_KIND then return SHIELD[class] or false end
 		if subclass and subclass >= 1 and subclass <= 4 and equip ~= "INVTYPE_CLOAK" then
 			local most = ARMOR[class] or 1
 			local level = Clean(Safe(UnitLevel, "player")) or 60
 			if level < 40 and most >= 3 then most = most - 1 end
+			if best then return subclass == most end
 			return subclass <= most
 		end
 		return true
@@ -150,7 +164,7 @@ end
 -- An item's worth for these weights.
 local function Score(link, weights)
 	if not link then return 0 end
-	local stats = Safe(C_Item and C_Item.GetItemStats or GetItemStats, link)
+	local stats = U.ItemStats(link)
 	if type(stats) ~= "table" then return 0 end
 	local score = 0
 	for stat, names in pairs(STATS) do
@@ -185,6 +199,13 @@ end
 local function Compare(link, equip, slots, weights)
 	local mine = Score(link, weights)
 	if mine <= 0 then return end
+	-- A two-hander worn: nothing goes in the other hand without leaving it. An off-hand item is never better
+	-- then; a one-hander is weighed against the two-hander alone.
+	local main = Clean(Safe(GetInventoryItemLink, "player", 16))
+	if main and Clean(select(4, U.ItemInstant(main))) == "INVTYPE_2HWEAPON" and equip ~= "INVTYPE_2HWEAPON" then
+		if equip == "INVTYPE_WEAPONOFFHAND" or equip == "INVTYPE_SHIELD" or equip == "INVTYPE_HOLDABLE" then return end
+		if equip == "INVTYPE_WEAPON" then slots = { 16 } end
+	end
 	-- Against the worst of what you wear where it goes (two rings: the weaker).
 	local worn
 	for _, slot in ipairs(slots) do
@@ -247,6 +268,8 @@ local function Imported(class)
 	return type(scales) == "table" and scales[1] and scales or nil
 end
 
+local choicesOf = {} -- class -> its choices, made once (again when a scale is imported or let go)
+
 function ns.ImportPawnScale(text)
 	local scale, problem = ns.ParsePawnScale(text)
 	if not scale then return false, problem end
@@ -256,6 +279,8 @@ function ns.ImportPawnScale(text)
 	for index = #list, 1, -1 do if list[index].name == scale.name then table.remove(list, index) end end
 	list[#list + 1] = { name = scale.name, weights = scale.weights }
 	ns.root.scales[scale.class] = list
+	wipe(choicesOf)
+	ns.ComparisonChanged()
 	return true, scale
 end
 
@@ -269,9 +294,82 @@ local function Overrides(class)
 	return list
 end
 
+-- What you play: each way your class is played that has its own weights, { id, label }, in the talent
+-- window's order (branches with the same weights together, the feral druid's bear and cat apart; an imported
+-- Pawn scale each). Chosen by you, never guessed: the last choice kept for each character.
+local function Choices(class)
+	if choicesOf[class] then return choicesOf[class] end
+	local list = {}
+	choicesOf[class] = list
+	local imported = Imported(class)
+	if imported then
+		for _, scale in ipairs(imported) do list[#list + 1] = { id = "pawn:" .. scale.name, label = scale.name } end
+		return list
+	end
+	local together = {}
+	for branch, entry in ipairs(WEIGHTS[class] or {}) do
+		if entry[1] and entry[1].weights then
+			for _, scale in ipairs(entry) do
+				list[#list + 1] = { id = branch .. ":" .. scale.key,
+					label = L.UPGRADE_SCALE_IN:format(BranchName(branch), L["UPGRADE_SCALE_" .. scale.key]) }
+			end
+		elseif together[entry] then
+			together[entry].label = together[entry].label .. " / " .. BranchName(branch)
+		else
+			together[entry] = { id = tostring(branch), label = BranchName(branch) }
+			list[#list + 1] = together[entry]
+		end
+	end
+	return list
+end
+function ns.PlayChoices()
+	local class = ClassFile()
+	return class and Choices(class) or {}
+end
+
+-- The choice of this character (nil: not chosen yet, or no longer offered); id: chosen now.
+function ns.PlayChoice(id)
+	if not ns.root then return nil end
+	ns.root.playChoice = type(ns.root.playChoice) == "table" and ns.root.playChoice or {}
+	local key = ns.CharacterKey()
+	if id then
+		ns.root.playChoice[key] = id
+		ns.ComparisonChanged()
+		if ns.RefreshWeights then ns.RefreshWeights() end
+	end
+	local chosen = ns.root.playChoice[key]
+	for _, choice in ipairs(ns.PlayChoices()) do
+		if choice.id == chosen then return chosen end
+	end
+	return nil
+end
+
 -- Each scale: an id, its label, its weights (yours when changed), Wanderer's
--- own (nil for an imported one).
+-- own (nil for an imported one). What you play, once chosen: its scale alone.
 local function Scales(class)
+	local chosen = ns.root and ns.PlayChoice()
+	if chosen then
+		local overrides = Overrides(class)
+		local label
+		for _, choice in ipairs(Choices(class)) do if choice.id == chosen then label = choice.label end end
+		local pawn = chosen:match("^pawn:(.+)$")
+		if pawn then
+			for _, scale in ipairs(Imported(class) or {}) do
+				if scale.name == pawn then return { { id = chosen, label = label, weights = scale.weights, imported = scale } } end
+			end
+		end
+		local branch, key = chosen:match("^(%d+):?(%a*)$")
+		local entry = WEIGHTS[class] and WEIGHTS[class][tonumber(branch) or 0]
+		if entry and key ~= "" then
+			for _, scale in ipairs(entry) do
+				if scale.key == key then
+					return { { id = chosen, label = label, weights = overrides[chosen] or scale.weights, defaults = scale.weights } }
+				end
+			end
+		elseif entry then
+			return { { id = chosen, label = label, weights = overrides[chosen] or entry, defaults = entry } }
+		end
+	end
 	local imported = Imported(class)
 	if imported then
 		local list = {}
@@ -318,6 +416,7 @@ function ns.UpgradeScales()
 	return class and ns.root and Scales(class) or {}, class
 end
 
+
 local function Find(id)
 	for _, scale in ipairs((ns.UpgradeScales())) do
 		if scale.id == id then return scale end
@@ -329,6 +428,7 @@ function ns.SetScaleWeight(id, stat, value)
 	local scale = Find(id)
 	if not scale then return end
 	value = (value and value > 0) and math.floor(value * 100 + 0.5) / 100 or nil
+	ns.ComparisonChanged()
 	if scale.imported then
 		scale.imported.weights[stat] = value
 		return
@@ -347,10 +447,12 @@ end
 function ns.ResetScale(id)
 	local scale = Find(id)
 	if not scale then return end
+	ns.ComparisonChanged()
 	local class = ClassFile()
 	if scale.imported then
 		local list = ns.root.scales[class]
 		for index = #list, 1, -1 do if list[index] == scale.imported then table.remove(list, index) end end
+		wipe(choicesOf)
 		if not list[1] then ns.root.scales[class] = nil end
 	else
 		Overrides(class)[id] = nil
@@ -391,7 +493,7 @@ function ns.UpgradeLines(link)
 	local _, _, _, equip, _, itemClass, subclass = U.ItemInstant(link)
 	equip, itemClass, subclass = Clean(equip), Clean(itemClass), Clean(subclass)
 	local slots = equip and SLOTS[equip]
-	if not slots or not Wearable(class, itemClass, subclass, equip) then return lines end
+	if not slots or not Wearable(class, itemClass, subclass, equip, true) then return lines end
 	for _, scale in ipairs(Scales(class)) do
 		local change = Compare(link, equip, slots, scale.weights)
 		local name = scale.label
@@ -411,20 +513,26 @@ function ns.UpgradeLines(link)
 end
 
 -- Better for one of your scales (or a place left empty): the bags' green arrow.
-function ns.IsUpgrade(link)
-	if not (ns.db and ns.db.enabled and ns.db.tooltips.upgrade) or not link then return false end
+-- How much better an item is for you, for the best of your branch's scales: a percentage (a place you leave
+-- empty counts 100, one where what you wear brings nothing 50); nil when it is not better.
+function ns.UpgradeGain(link)
+	if not (ns.db and ns.db.enabled and ns.db.tooltips.upgrade) or not link then return nil end
 	local class = ClassFile()
-	if not class then return false end
+	if not class then return nil end
 	local _, _, _, equip, _, itemClass, subclass = U.ItemInstant(link)
 	equip, itemClass, subclass = Clean(equip), Clean(itemClass), Clean(subclass)
 	local slots = equip and SLOTS[equip]
-	if not slots or not Wearable(class, itemClass, subclass, equip) then return false end
+	if not slots or not Wearable(class, itemClass, subclass, equip, true) then return nil end
+	local best
 	for _, scale in ipairs(Scales(class)) do
 		local change = Compare(link, equip, slots, scale.weights)
-		if change == "new" or change == "useful" or (type(change) == "number" and change >= 1) then return true end
+		local gain = change == "new" and 100 or change == "useful" and 50 or type(change) == "number" and change or nil
+		if gain and gain >= 1 and (not best or gain > best) then best = gain end
 	end
-	return false
+	return best
 end
+
+function ns.IsUpgrade(link) return ns.UpgradeGain(link) ~= nil end
 
 -- Gear your class can wear (its armor, its weapons): true or false; nil when it is not gear.
 function ns.CanWear(link)
@@ -450,7 +558,7 @@ function ns.DebugUpgrade()
 	local class = ClassFile()
 	local branch = Branch(class)
 	ns.Print(("Item %s, branch %s, line: %s"):format(link, tostring(branch), tostring(ns.UpgradeLine(link))))
-	for name, value in pairs(Safe(C_Item and C_Item.GetItemStats or GetItemStats, link) or {}) do
+	for name, value in pairs(U.ItemStats(link)) do
 		ns.Print(("  %s = %s"):format(tostring(name), tostring(Clean(value))))
 	end
 end

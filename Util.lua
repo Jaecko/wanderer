@@ -364,12 +364,24 @@ local function ItemAPI(name) return C_Item and C_Item[name] or _G[name] end
 function Util.ItemName(id) return Util.Clean(Util.Safe(ItemAPI("GetItemNameByID") or ItemAPI("GetItemInfo"), id)) end
 function Util.ItemIcon(id) return Util.Clean(Util.Safe(ItemAPI("GetItemIconByID"), id)) end
 function Util.ItemQuality(id) return Util.Clean(Util.Safe(ItemAPI("GetItemQualityByID"), id)) end
-function Util.ItemCount(id) return Util.Clean(Util.Safe(ItemAPI("GetItemCount"), id)) or 0 end
+-- How many you carry (bank: the bank's too).
+function Util.ItemCount(id, bank) return Util.Clean(Util.Safe(ItemAPI("GetItemCount"), id, bank and true or nil)) or 0 end
+-- Its item level and the level it asks (nil until the game has it).
+function Util.ItemLevels(id)
+	local _, _, _, level, minimum = Util.Safe(ItemAPI("GetItemInfo"), id)
+	return Util.Clean(level), Util.Clean(minimum)
+end
 -- What the game knows at once of an item (id, link or name), without asking the server: the values of
 -- GetItemInfoInstant (id, type, subtype, equip slot, icon, class id, subclass id).
 function Util.ItemInstant(item)
 	if item == nil then return nil end
 	return Util.Safe(ItemAPI("GetItemInfoInstant"), item)
+end
+
+-- An item's stats (the game's names: ITEM_MOD_STRENGTH_SHORT...): a table, empty when the game has none yet.
+function Util.ItemStats(link)
+	local stats = link and Util.Safe(ItemAPI("GetItemStats"), link)
+	return type(stats) == "table" and stats or {}
 end
 
 -- How many make a stack of it (1: it does not stack).
@@ -383,6 +395,19 @@ end
 
 function Util.LoadItem(id)
 	if C_Item and C_Item.RequestLoadItemDataByID then Util.Safe(C_Item.RequestLoadItemDataByID, id) end
+end
+
+-- An area's name in your language (a zone, a dungeon), without what the game adds in parentheses.
+function Util.AreaName(area)
+	local name = area and Util.Clean(Util.Safe(C_Map and C_Map.GetAreaInfo, area))
+	return name and (name:gsub("%s*%b()", "")) or nil
+end
+
+-- A place's name made comparable: lower case, trimmed, without what the game adds in parentheses ("Les Paluns
+-- (Wetlands)" is "les paluns").
+function Util.PlainName(name)
+	if type(name) ~= "string" then return nil end
+	return (name:gsub("%s*%b()", ""):gsub("^%s+", ""):gsub("%s+$", ""):lower())
 end
 
 -- From a link: the item's id, its name.
@@ -481,6 +506,15 @@ function Util.HideOffScreen(frame, hidden)
 		end
 		offPoints[frame] = nil
 	end
+end
+
+-- A frame put out of sight by HideOffScreen (still shown for the game, not for you).
+function Util.IsOffScreen(frame) return offPoints[frame] ~= nil end
+
+-- A piece of a frame by its key (nil when it has none, or not a frame's table).
+function Util.Part(frame, key)
+	local part = type(frame) == "table" and frame[key]
+	return type(part) == "table" and part or nil
 end
 
 -- A menu of the game's (MenuUtil) at a frame; false when the game has none.

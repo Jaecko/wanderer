@@ -256,6 +256,7 @@ local function HomePage()
 	Checkbox("MINIMAP", L.MINIMAP_BUTTON, L.MINIMAP_HINT, true,
 		function() return ns.IsMinimapButtonShown and ns.IsMinimapButtonShown() or false end,
 		function(value) if ns.SetMinimapButtonShown then ns.SetMinimapButtonShown(value) end end)
+	TableCheckbox("world", "bar", L.BAR_SHOW, L.BAR_SHOW_DESC, function() if ns.SetBarShown then ns.SetBarShown(ns.db.world.bar) end end)
 	local function OpenKeys()
 		if Settings.OpenToCategory and Settings.KEYBINDINGS_CATEGORY_ID then
 			Settings.OpenToCategory(Settings.KEYBINDINGS_CATEGORY_ID)
@@ -273,7 +274,7 @@ local function HomePage()
 
 	-- Wanderer's keys, here; else the game's page of key bindings.
 	Header(L.KEYBINDS)
-	if not KeyRows() then Button(L.KEYBINDS, L.KEYBINDS_BUTTON, L.KEYBINDS_DESC, OpenKeys) end
+	if not KeyRows() then Button(L.KEYBINDS, L.OPEN, L.KEYBINDS_DESC, OpenKeys) end
 
 	-- Where the other settings are.
 	Header(L.SECTION_PAGES)
@@ -508,7 +509,9 @@ local function InterfacePage()
 
 	Header(L.SECTION_CLEAN)
 	TableCheckbox("world", "cleanMinimap", L.CLEAN_MINIMAP, L.CLEAN_MINIMAP_DESC, ns.RefreshClean)
+	TableCheckbox("world", "styledMinimap", L.STYLED_MINIMAP, L.STYLED_MINIMAP_DESC, ns.RefreshMinimapLook)
 	TableCheckbox("world", "cleanTracker", L.CLEAN_TRACKER, L.CLEAN_TRACKER_DESC, ns.RefreshClean)
+	TableCheckbox("world", "styledTracker", L.STYLED_TRACKER, L.STYLED_TRACKER_DESC, ns.RefreshTrackerLook)
 	TableCheckbox("world", "gatherIcons", L.GATHER_ICONS, L.GATHER_ICONS_DESC, ns.RefreshIcons)
 	TableCheckbox("world", "moveFrames", L.MOVE_FRAMES, L.MOVE_FRAMES_DESC, ns.RefreshGameFrames)
 
@@ -592,7 +595,7 @@ local function ConversationsPage()
 	Under(Slider("SCENE_TEXT_SIZE", L.SCENE_TEXT_SIZE, "scene.textSize", "%d"), scene, IsOn("scene", "enabled"))
 	TableCheckbox("scene", "camera", L.SCENE_CAMERA, L.SCENE_CAMERA_DESC)
 
-	Header(L.SECTION_QUESTS)
+	Header(L.QUESTS)
 	TableCheckbox("quest", "tags", L.QUEST_TAGS, L.QUEST_TAGS_DESC)
 	TableCheckbox("quest", "autoAccept", L.QUEST_AUTO_ACCEPT, L.QUEST_AUTO_ACCEPT_DESC)
 	TableCheckbox("quest", "autoTurnIn", L.QUEST_AUTO_TURNIN, L.QUEST_AUTO_TURNIN_DESC)
@@ -606,7 +609,7 @@ end
 local function PracticalPage()
 	Page(L.PAGE_PRACTICAL)
 	Header(L.TODO_TITLE)
-	Button(L.TODO_TITLE, L.MESSAGES_OPEN_BUTTON, L.TODO_OPEN_DESC, function()
+	Button(L.TODO_TITLE, L.OPEN, L.TODO_OPEN_DESC, function()
 		CloseSettings()
 		ns.ToggleTodo()
 	end)
@@ -677,7 +680,7 @@ local function SocialPage()
 	Under(TableCheckbox("messages", "popup", L.MESSAGES_POPUP, L.MESSAGES_POPUP_DESC), messages, messagesOn)
 	Under(TableCheckbox("messages", "hideInChat", L.MESSAGES_HIDE_CHAT, L.MESSAGES_HIDE_CHAT_DESC), messages, messagesOn)
 	Under(TableCheckbox("messages", "sound", L.MESSAGES_SOUND, L.MESSAGES_SOUND_DESC), messages, messagesOn)
-	Under(Button(L.MESSAGES_OPEN, L.MESSAGES_OPEN_BUTTON, nil, function() ns.ToggleMessages() end), messages, messagesOn)
+	Under(Button(L.MESSAGES_OPEN, L.OPEN, nil, function() ns.ToggleMessages() end), messages, messagesOn)
 	for _, side in ipairs({ "me", "them" }) do
 		Under(Button(L["MESSAGES_COLOR_" .. side:upper()], L.MESSAGES_COLOR_BUTTON, L.MESSAGES_COLOR_DESC, function()
 			local r, g, b = ns.MessageColor(side)
@@ -756,8 +759,9 @@ local finished = false
 function ns.FinishOptions()
 	if finished or not mainCategory then return end
 	finished = true
-	local tools = { Header = Header, Checkbox = TableCheckbox, Slider = Slider, Dropdown = Dropdown, Button = Button,
-		Under = Under, IsOn = IsOn, CloseSettings = CloseSettings }
+	-- (Toggle: a check box whose value the extension keeps itself, e.g. for each character)
+	local tools = { Header = Header, Checkbox = TableCheckbox, Toggle = Checkbox, Slider = Slider, Dropdown = Dropdown,
+		Button = Button, Under = Under, IsOn = IsOn, CloseSettings = CloseSettings }
 	for _, extension in ipairs(ns.EXTENSIONS) do
 		if extension.options then
 			Page(extension.title)

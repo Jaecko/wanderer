@@ -244,7 +244,7 @@ local function HideMainBarArt(layout)
 	end
 end
 
--- The game's menu and the bags at the bottom right, the bags over the menu;
+-- The game's menu and the bags at the bottom right, the bags over the menu, the damage meter over them;
 -- the experience and reputation bars at the top center.
 local function Corners(layout, mainY)
 	local system = Enum.EditModeSystem
@@ -259,6 +259,17 @@ local function Corners(layout, mainY)
 	if bags and menu then
 		bags.anchorInfo = { point = "BOTTOMRIGHT", relativeTo = "MicroMenuContainer", relativePoint = "TOPRIGHT", offsetX = 0, offsetY = 4 }
 		bags.isInDefaultPosition = false
+	end
+	-- The game's damage meter on the right of the bars, over the bags (never in the top left corner, where the
+	-- game puts it and the group frames are).
+	-- (its first window: the others the game opens are placed by you)
+	for _, entry in ipairs(system.DamageMeter and layout.systems or {}) do
+		if entry.system == system.DamageMeter then
+			entry.anchorInfo = bags and menu and { point = "BOTTOMRIGHT", relativeTo = "BagsBar", relativePoint = "TOPRIGHT", offsetX = 0, offsetY = 8 }
+				or { point = "BOTTOMRIGHT", relativeTo = "UIParent", relativePoint = "BOTTOMRIGHT", offsetX = -6, offsetY = 110 }
+			entry.isInDefaultPosition = false
+			break
+		end
 	end
 	local index = Enum.EditModeStatusTrackingBarSystemIndices
 	if not (system.StatusTrackingBar and index) then return end

@@ -87,23 +87,35 @@ local function Release(button)
 	saved[button] = nil
 end
 
+-- The icons are gathered: asked in the options, or Wanderer's bar shown (its "Other addons" list).
+function ns.IconsGathered()
+	return ns.db.enabled and (ns.db.world.gatherIcons or (ns.BarActive and ns.BarActive())) or false
+end
+
 -- Looks for new buttons (and keeps the drawer in order).
 function ns.GatherIcons()
 	if not drawer or InCombatLockdown() then return end
-	if not (ns.db.enabled and ns.db.world.gatherIcons) then return end
+	if not ns.IconsGathered() then return end
+	local before = #order
 	for _, button in ipairs(Candidates()) do Gather(button) end
 	Layout()
+	if #order ~= before and ns.RefreshBar then ns.RefreshBar() end
 end
 
 function ns.CountIcons() return #order end
 
-function ns.ToggleIconDrawer(owner)
+-- below: under its owner (a word of Wanderer's bar), else on its left (the minimap).
+function ns.ToggleIconDrawer(owner, below)
 	if not drawer then return end
 	if drawer:IsShown() then drawer:Hide() return end
 	ns.GatherIcons()
 	drawer:ClearAllPoints()
 	local anchor = owner or MinimapCluster or UIParent
-	drawer:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -6, 0)
+	if below then
+		drawer:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", -8, -4)
+	else
+		drawer:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -6, 0)
+	end
 	drawer:SetScale(ns.Skin.Scale())
 	outside = 0
 	drawer:Show()
@@ -111,12 +123,13 @@ end
 
 function ns.RefreshIcons()
 	if not drawer or InCombatLockdown() then return end
-	if ns.db.enabled and ns.db.world.gatherIcons then
+	if ns.IconsGathered() then
 		ns.GatherIcons()
 	else
 		for button in pairs(saved) do Release(button) end
 		wipe(order)
 		drawer:Hide()
+		if ns.RefreshBar then ns.RefreshBar() end
 	end
 end
 

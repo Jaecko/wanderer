@@ -43,7 +43,19 @@ function World.LevelColor(level, forQuest, unit)
 		if type(color) == "table" and color.r then return color.r, color.g, color.b end
 	end
 	if not level or level <= 0 then return 1, 0.1, 0.1 end -- "??": far above you
-	local color = Safe(forQuest and GetQuestDifficultyColor or GetCreatureDifficultyColor, level)
+	-- A quest: the quest log's own rule, the original game's (yellow only down to two levels under you, then
+	-- green while it still gives something), not the newer function's wider yellow.
+	if forQuest then
+		local player = Clean(Safe(UnitEffectiveLevel, "player")) or Clean(Safe(UnitLevel, "player")) or level
+		local gap = level - player
+		if gap >= 5 then return 1, 0.1, 0.1 end
+		if gap >= 3 then return 1, 0.5, 0.25 end
+		if gap >= -2 then return 1, 0.82, 0 end
+		local green = Clean(Safe(GetQuestGreenRange))
+		if (green and -gap <= green) or (not green and level > GreyLevel(player)) then return 0.25, 0.75, 0.25 end
+		return 0.5, 0.5, 0.5
+	end
+	local color = Safe(GetCreatureDifficultyColor, level)
 	if type(color) == "table" and color.r then return color.r, color.g, color.b end
 	return CreatureColor(level)
 end

@@ -489,11 +489,61 @@ function Skin.CreateInput(parent, name, maxLetters, opts)
 	return input
 end
 
-function Skin.CreateWindow(name, strata, parent)
+-- The window in front: like on a desktop, the one opened or clicked last, the map as much as the others.
+-- It stands one layer above the windows' own (the map's pieces, its canvas and pins, are drawn so high in
+-- that layer that no window passes them by a plain raise); the one before goes back to its layer. A window
+-- drawn higher by the game (a dialog) is left where it is. Wanderer off: each one back on its own layer.
+-- Never a protected window during a fight.
+local ORDER = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
+local STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP" }
+local originalStrata = setmetatable({}, { __mode = "k" })
+local front -- the window in front
+
+local function Touchable(window)
+	return not (InCombatLockdown() and window.IsProtected and window:IsProtected())
+end
+
+local function Back(window)
+	if window and originalStrata[window] and Touchable(window) then
+		pcall(window.SetFrameStrata, window, originalStrata[window])
+	end
+end
+
+function Skin.Front(window)
+	if not (window and window.SetFrameStrata) or not Touchable(window) or U.IsOffScreen(window) then return end
+	if not (ns.db and ns.db.enabled) then
+		Back(window)
+		return
+	end
+	if not originalStrata[window] then originalStrata[window] = window:GetFrameStrata() end
+	local own = ORDER[originalStrata[window]] or 3
+	if own > ORDER.MEDIUM then return end -- (a dialog, drawn higher: left alone)
+	if front ~= window then
+		Back(front)
+		front = window
+	end
+	pcall(window.SetFrameStrata, window, STRATA[ORDER.MEDIUM + 1])
+	pcall(window.SetToplevel, window, true)
+	pcall(window.Raise, window)
+end
+
+-- A window known here (brought in front once); the one in front now.
+function Skin.Managed(window) return originalStrata[window] ~= nil end
+function Skin.InFront() return front end
+
+-- Every window of Wanderer and of its extensions, now and to come, is made here: strata "MEDIUM" (or "HIGH")
+-- makes it a window like the game's, in front when opened or clicked (Skin.Front), never hidden by the map;
+-- "DIALOG" and above stay over everything. A window beside another (parent: that window) follows it, layer
+-- and all, in front with it.
+-- hud: a piece of the screen, not a window (the target's line): never brought in front.
+function Skin.CreateWindow(name, strata, parent, hud)
+	local own = (parent == nil or parent == UIParent) and not hud
 	parent = parent or UIParent
 	local ok, created = pcall(CreateFrame, "Frame", name, parent, "TooltipBackdropTemplate")
 	local window = ok and created or CreateFrame("Frame", name, parent)
-	if strata then window:SetFrameStrata(strata) end
+	local plain = strata == "MEDIUM" or strata == "HIGH"
+	if strata and not (plain and not own) then window:SetFrameStrata(plain and "MEDIUM" or strata) end
+	if own and plain then window:HookScript("OnShow", Skin.Front) end
 	window:SetSize(1, 1)
 	window:Hide()
 	-- Stays readable when the cinematic mode fades the interface.

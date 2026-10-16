@@ -18,7 +18,7 @@ local STEP_PERCENT, FINE_PERCENT = 1, 0.1 -- a percent
 local GOLD = { 1, 0.82, 0 }
 local QUIET = { 0.55, 0.55, 0.55 }
 
-local window, kicker, title, hint, rule, footer
+local window, kicker, title, hint, rule, footer, roles
 local tabs, rows, links = {}, {}, {}
 local selected -- id of the scale shown
 
@@ -51,7 +51,7 @@ local function Change(stat, direction)
 	Refresh()
 end
 
-local function TextButton(parent, text, onClick) return ns.Skin.CreateLink(parent, text, onClick) end
+local function TextButton(parent, text, onClick) return ns.Skin.SmallButton(parent, text, onClick) end
 
 local function Row(index)
 	if rows[index] then return rows[index] end
@@ -68,12 +68,14 @@ local function Row(index)
 	row.track:SetHeight(4)
 	row.track:SetColorTexture(1, 1, 1, 0.06)
 	row.plus = TextButton(row, "+", function() Change(row.stat, 1) end)
+	row.plus:SetSize(20, 18)
 	row.plus:SetPoint("RIGHT", row, "RIGHT", 0, 0)
 	row.value = ns.Skin.CreateText(row, "GameTooltipText", 1, 1, 1)
 	row.value:SetWidth(44)
 	row.value:SetJustifyH("CENTER")
 	row.value:SetPoint("RIGHT", row.plus, "LEFT", 0, 0)
 	row.minus = TextButton(row, "-", function() Change(row.stat, -1) end)
+	row.minus:SetSize(20, 18)
 	row.minus:SetPoint("RIGHT", row.value, "LEFT", 0, 0)
 	row.track:SetPoint("LEFT", row, "LEFT", 150, 0)
 	row.track:SetPoint("RIGHT", row.minus, "LEFT", -8, 0)
@@ -136,6 +138,18 @@ Refresh = function()
 	end
 	for index = #scales + 1, #tabs do tabs[index]:Hide() end
 	y = y + TAB_HEIGHT + 4
+	-- What you play (your choice): its weights are the ones shown.
+	local several = #ns.PlayChoices() > 1
+	roles:SetShown(several)
+	roles.label:SetShown(several)
+	if several then
+		roles.label:ClearAllPoints()
+		roles.label:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(y + 8))
+		roles:ClearAllPoints()
+		roles:SetPoint("LEFT", roles.label, "RIGHT", 10, 0)
+		roles:Refresh()
+		y = y + 34
+	end
 	rule:ClearAllPoints()
 	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -y)
 	rule:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin, -y)
@@ -182,10 +196,10 @@ Refresh = function()
 	local right = -margin
 	for _, link in ipairs(links) do
 		link:ClearAllPoints()
-		link:SetPoint("TOPRIGHT", window, "TOPRIGHT", right, -(y - 2))
+		link:SetPoint("TOPRIGHT", window, "TOPRIGHT", right, -(y - 4))
 		right = right - link:GetWidth() - 6
 	end
-	window:SetHeight(y + 18 + margin)
+	window:SetHeight(y + 26 + margin)
 	ns.Skin.Get(window):Layout()
 end
 ns.RefreshWeights = function() Refresh() end
@@ -209,6 +223,12 @@ local function CreateWindow()
 	rule:SetColorTexture(1, 0.82, 0, 0.2)
 	rule:SetHeight(1)
 	footer = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
+	roles = ns.Skin.Dropdown(window, ns.PlayChoices, function() return ns.PlayChoice() end, function(id) ns.PlayChoice(id) end,
+		L.PLAY_CHOICE_PICK)
+	roles:SetHeight(24)
+	roles.label = ns.Skin.Text(window, "GameTooltipTextSmall", "label")
+	roles.label:SetText(L.PLAY_CHOICE)
+	ns.Skin.Tooltip(roles, L.PLAY_CHOICE_DESC)
 	-- Right to left: export, import, restore.
 	links[1] = TextButton(window, L.WEIGHTS_EXPORT, function()
 		local scale = Selected()
