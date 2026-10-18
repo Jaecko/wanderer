@@ -112,38 +112,44 @@ do
 	login:SetScript("OnEvent", function() C_Timer.After(15, Prune) end)
 end
 
--- What your quests ask you to carry --------------------------------------------------------------------
+-- Your quests' objectives --------------------------------------------------------------------------------
 
--- Their item objectives, by the item's name (the game gives no item there): { quest, have, need }. Read when
--- first asked after the log changed; nothing runs otherwise.
-local needs
-local function ReadNeeds()
-	needs = {}
-	if not (QuestLog.GetNumQuestLogEntries and QuestLog.GetInfo and QuestLog.GetQuestObjectives) then return end
+-- An objective's name alone: "Linen Cloth: 3/10", "- 3/10 Linen Cloth" -> "linen cloth".
+function ns.ObjectiveName(text)
+	return (text:gsub("\194\160", " "):gsub("^%s*%-%s*", ""):gsub("%d+%s*/%s*%d+", ""):gsub("^[%s:]+", "")
+		:gsub("[%s:]+$", ""):lower())
+end
+
+-- Every objective of your log, by its name: { text, kind, complete, have, need, quest }. Read when first asked
+-- after the log changed; nothing runs otherwise. (The log is never protected, even in a fight.)
+local objectives
+function ns.QuestObjectives()
+	if objectives then return objectives end
+	objectives = {}
+	if not (QuestLog.GetNumQuestLogEntries and QuestLog.GetInfo and QuestLog.GetQuestObjectives) then return objectives end
 	for index = 1, Clean(Safe(QuestLog.GetNumQuestLogEntries)) or 0 do
 		local info = Safe(QuestLog.GetInfo, index)
 		local id = type(info) == "table" and not Clean(info.isHeader) and Clean(info.questID)
-		local objectives = id and Safe(QuestLog.GetQuestObjectives, id)
-		for _, objective in ipairs(type(objectives) == "table" and objectives or {}) do
+		local list = id and Safe(QuestLog.GetQuestObjectives, id)
+		for _, objective in ipairs(type(list) == "table" and list or {}) do
 			local text = Clean(objective.text)
-			if Clean(objective.type) == "item" and type(text) == "string" then
-				-- "Linen Cloth: 3/10", "3/10 Linen Cloth": the name alone
-				local name = text:gsub("\194\160", " "):gsub("%d+%s*/%s*%d+", ""):gsub("^[%s:]+", ""):gsub("[%s:]+$", ""):lower()
-				if name ~= "" then
-					needs[name] = { quest = Clean(info.title) or "", have = Clean(objective.numFulfilled) or 0,
-						need = Clean(objective.numRequired) or 0 }
-				end
+			local name = type(text) == "string" and ns.ObjectiveName(text)
+			-- (an item to carry kept first: another objective of the same name never hides it)
+			if name and name ~= "" and not (objectives[name] and objectives[name].kind == "item") then
+				objectives[name] = { text = text, kind = Clean(objective.type), complete = Clean(objective.finished) and true or false,
+					have = Clean(objective.numFulfilled) or 0, need = Clean(objective.numRequired) or 0, quest = Clean(info.title) or "" }
 			end
 		end
 	end
+	return objectives
 end
 
+-- What your quests ask you to carry: an item objective, by the item's name (the game gives no item there).
 function ns.QuestNeed(item)
 	local name = item and ns.Util.ItemName(item)
-	if not name then return nil end
-	if not needs then ReadNeeds() end
-	return needs[name:lower()]
+	local objective = name and ns.QuestObjectives()[name:lower()]
+	return objective and objective.kind == "item" and objective or nil
 end
 
 pcall(events.RegisterEvent, events, "QUEST_LOG_UPDATE")
-events:HookScript("OnEvent", function(_, event) if event == "QUEST_LOG_UPDATE" then needs = nil end end)
+events:HookScript("OnEvent", function(_, event) if event == "QUEST_LOG_UPDATE" then objectives = nil end end)

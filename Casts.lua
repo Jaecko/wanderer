@@ -67,7 +67,7 @@ function Cast:Size(widthOf)
 	self.icon:SetShown(shown and self.icon.wanted or false)
 	self.bar:SetShown(shown and self.timed or false)
 	if not shown then return 0, 0 end
-	local iconSpace = self.icon.wanted and ICON + 4 or 0
+	local iconSpace = self.icon.wanted and ns.Casts.ICON_SPACE or 0
 	local width = iconSpace + widthOf(self.text, FALLBACK_WIDTH)
 	local height = math.max(self.icon.wanted and ICON or 0, Measure(self.text, "GetStringHeight", 10))
 	if self.timed then height = height + GAP + BAR_HEIGHT end
@@ -93,7 +93,7 @@ function Cast:Place(anchor, x, gap)
 	return self.timed and self.bar or (self.icon.wanted and self.icon or self.text)
 end
 
-ns.Casts = {}
+ns.Casts = { ICON_SPACE = ICON + 4 } -- (the icon and its gap before the name)
 
 function ns.Casts.New(frame)
 	local self = setmetatable({ active = false, frame = frame }, Cast)
@@ -101,6 +101,7 @@ function ns.Casts.New(frame)
 	self.icon:SetSize(ICON, ICON)
 	self.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 	self.text = ns.Skin.CreateText(frame, "GameTooltipTextSmall", 1, 1, 1)
+	if self.text.SetWordWrap then self.text:SetWordWrap(false) end
 	self.bar = CreateFrame("StatusBar", nil, frame)
 	self.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
 	self.bar:SetHeight(BAR_HEIGHT)

@@ -259,6 +259,38 @@ local function DetectQuests(lines)
 end
 ns.DetectQuests = DetectQuests -- (tests)
 
+-- In a fight the game protects a character's tooltip, its quest lines too:
+-- the objectives read before are remembered for each kind of creature, and
+-- their progress is taken from your quest log (never protected) meanwhile.
+local remembered = {} -- creature id -> objectives last read
+
+local function CreatureId(guid)
+	return type(guid) == "string" and guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)") or nil
+end
+
+-- protected: some of the tooltip's lines could not be read.
+local function RememberedQuests(guid, quests, protected)
+	local key = CreatureId(guid)
+	if not key then return quests end
+	if not protected then
+		remembered[key] = quests and quests[1] and quests or nil
+		return quests
+	end
+	if quests and quests[1] then return quests end
+	local before = remembered[key]
+	if not before then return quests end
+	local now, log = {}, ns.QuestObjectives()
+	for _, quest in ipairs(before) do
+		local inLog = log[ns.ObjectiveName(quest.text)]
+		if inLog then
+			now[#now + 1] = { text = inLog.text, complete = inLog.complete, who = quest.who }
+		elseif quest.who then
+			now[#now + 1] = quest -- (a group member's: not in your log, kept as last read)
+		end
+	end
+	return now
+end
+
 -- NPC function such as "<Blacksmith>": the second line, when it is not the
 -- level/type line or another known line.
 local function DetectRole(lines)
@@ -628,10 +660,13 @@ end
 
 -- Laid out like the game's tooltips: left aligned, same margins and room
 -- for the badge (ns.Skin metrics), so every window looks the same.
+local remeasure -- (a second measure, on the next frame, is coming)
+local laidText -- the texts of the last layout (a second measure only when they change)
 local function Layout()
 	local margin = ns.Skin.Margin()
 	-- Measured at their own width; bounded again once the label is sized.
 	nameText:SetWidth(0)
+	cast.text:SetWidth(0)
 	for _, line in ipairs(LINES) do
 		line:SetWidth(0)
 		line:SetShown(line.forceShow or Clean(line:GetText()) ~= nil)
@@ -723,6 +758,8 @@ local function Layout()
 		previous, offset = powerBar, 0
 	end
 	if castHeight > 0 then
+		-- (never past the frame: cut, not spilled, if the game measured it short)
+		cast.text:SetWidth(math.max(1, column - (cast.icon.wanted and ns.Casts.ICON_SPACE or 0)))
 		previous, offset = cast:Place(previous, offset, LINE_GAP * 2), 0
 	end
 	if block then
@@ -751,6 +788,21 @@ local function Layout()
 	end
 	frame:SetSize(width + margin * 2, height + top + bottom)
 	skin:Layout()
+	-- (a line just shown or changed may be measured short by the game until it
+	-- is drawn: measured again on the next frame, so nothing spills out)
+	local texts = { tostring(Clean(nameText:GetText())), tostring(Clean(cast.text:GetText())),
+		tostring(Clean(targetText:GetText())) }
+	for _, line in ipairs(LINES) do texts[#texts + 1] = tostring(Clean(line:GetText())) end
+	texts = table.concat(texts, "\n")
+	if texts ~= laidText and not remeasure then
+		laidText = texts
+		remeasure = true
+		C_Timer.After(0, function()
+			remeasure = false
+			-- (hidden meanwhile: measured again the next time it shows)
+			if frame:IsShown() then Layout() else laidText = nil end
+		end)
+	end
 end
 
 local function PickHighlight(a)
@@ -793,6 +845,11 @@ local function AnalyzeUnit()
 		for _, line in ipairs(a.lines) do if line.text then clean[#clean + 1] = line end end
 		a.action = db.showProfessions and DetectProfessionAction(clean) or nil
 		a.quests = db.showQuests and DetectQuests(clean) or nil
+		if db.showQuests then
+			local protected = false
+			for _, line in ipairs(a.lines) do if line.secret then protected = true end end
+			a.quests = RememberedQuests(guid, a.quests, protected)
+		end
 		a.role = db.showNPCRole and DetectRole(clean) or nil
 		a.innkeeper = IsInnkeeper(clean)
 		local classification = Clean(Safe(UnitClassification, UNIT))

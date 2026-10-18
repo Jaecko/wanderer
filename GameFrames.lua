@@ -129,8 +129,10 @@ local function TakeAll()
 end
 
 -- A window of the game's open on the screen: a named panel with its close button or its title (not the
--- action bars, the chat, the portraits...).
+-- action bars, the chat, the portraits...). A window the game protects is never touched (an addon may
+-- not even ask whether it is shown).
 local function IsWindow(frame)
+	if frame.IsForbidden and frame:IsForbidden() then return false end
 	if frame == _G.WorldMapFrame or not (frame.IsShown and frame:IsShown()) then return false end
 	if ns.Skin.Managed(frame) then return true end
 	local name = frame.GetName and U.Clean(Safe(frame.GetName, frame))
@@ -162,7 +164,7 @@ local function Clicked()
 	local frame = U.MouseFocus()
 	local map = _G.WorldMapFrame
 	for _ = 1, 30 do
-		if not frame then return nil end
+		if not frame or (frame.IsForbidden and frame:IsForbidden()) then return nil end
 		if frame == map or (frame.GetParent and frame:GetParent() == UIParent and IsWindow(frame)) then return frame end
 		frame = frame.GetParent and frame:GetParent() or nil
 	end

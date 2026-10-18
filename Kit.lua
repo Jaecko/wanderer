@@ -330,7 +330,7 @@ function Skin.Icon(parent, size)
 	return holder
 end
 
--- An amount of money: gold, silver, copper (money:ShowCopper(false) where copper is not taken).
+-- An amount of money: gold, silver, copper (money:ShowCopper(false) hides the copper box).
 -- money:Set(copper), money:Get().
 function Skin.Money(parent, onChange)
 	local box = CreateFrame("Frame", nil, parent)
