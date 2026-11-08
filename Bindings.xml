@@ -5,9 +5,6 @@
 	<Binding name="WANDERER_PHOTO">
 		Wanderer_TogglePhoto()
 	</Binding>
-	<Binding name="WANDERER_MESSAGES">
-		Wanderer_ToggleMessages()
-	</Binding>
 	<Binding name="WANDERER_TODO">
 		Wanderer_ToggleTodo()
 	</Binding>

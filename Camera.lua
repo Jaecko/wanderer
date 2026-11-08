@@ -1,9 +1,11 @@
 local _, ns = ...
 
--- The camera comes closer to the character you talk to: conversations,
--- quests, merchants, trainers, bankers, flight masters, auction houses. It
--- frames the character (a hidden setting of the game) and goes back to your
--- own distance once every window of that character is closed. Going from a
+-- The camera comes closer to the character you talk to: conversations and
+-- quests (merchants, trainers, bankers, flight masters and auction houses too
+-- when asked). It frames the character when asked (a hidden setting of the
+-- game, which warns about it) and goes back to your own distance once every
+-- window of that character is closed. Another addon driving the camera
+-- (DynamicCam): it never moves. Going from a
 -- conversation to its merchant keeps it close: no back and forth.
 --
 -- The motion is slow and never hurried: a window must stay open a moment
@@ -18,16 +20,48 @@ local _, ns = ...
 --
 -- The player's values are kept in the saved variables while the camera is
 -- borrowed: they come back even after a crash.
+--
+-- Never inside a dungeon or a raid (a group waits), never with the calm
+-- movements asked for (world.calmMotion: no camera moved by Wanderer at all).
+-- The first time it moves (a conversation, a flight), one notice says so,
+-- with a way to leave the camera where it is.
 
+local L = ns.L
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
+
+-- Calm movements: Wanderer never moves the camera (scenes, travels, away) and its pieces only fade.
+function ns.CalmMotion()
+	local db = ns.db
+	return db and db.enabled and db.world and db.world.calmMotion and true or false
+end
+
+-- The first camera move of Wanderer on this character: told once, a line to leave the camera where it is
+-- (the scenes' and the travels' camera settings off).
+function ns.CameraNotice()
+	if not (ns.root and ns.Toast) then return end
+	local mine = ns.Mine()
+	if mine.cameraNoticed then return end
+	-- Seen only once really shown: one dropped from the queue (a long fight, too many notices) comes back the
+	-- next time; meanwhile one waiting is not asked for again.
+	if ns.ToastWaiting and ns.ToastWaiting(L.CAMERA_NOTICE) then return end
+	ns.Toast(L.CAMERA_NOTICE, L.CAMERA_NOTICE_TEXT, { duration = 12, wait = 60, kicker = L.ADDON_TITLE,
+		onShow = function() mine.cameraNoticed = true end,
+		lines = { { text = L.CAMERA_NOTICE_KEEP, onClick = function()
+			if not ns.db then return end
+			-- (as any setting you change: in every profile of this character, its places' too)
+			ns.ChangeEverywhere(function() ns.db.scene.camera, ns.db.travel.camera = false, false end)
+			ns.Print(L.CAMERA_NOTICE_DONE)
+		end } } })
+end
 
 local DISTANCE = 3.5 -- yards, over the shoulder; closer than this, the camera is left where it is
 local SPEED = "6" -- slower zoom than the game's, for a soft movement
 local SETTINGS = { -- set while the camera is borrowed only
-	test_cameraTargetFocusInteractEnable = "1",
 	cameraZoomSpeed = SPEED,
 }
+-- Framing the character: a hidden setting, only when asked (scene.cameraFrame).
+local FRAME_SETTING, FRAME_VALUE = "test_cameraTargetFocusInteractEnable", "1"
 local HOLD_DELAY = 0.4 -- a window must stay open this long before the camera moves
 local RELEASE_DELAY = 1 -- a window may open right after another one
 
@@ -37,6 +71,8 @@ local HOLDS = {
 	QUEST_COMPLETE = "quest", MERCHANT_SHOW = "merchant", TRAINER_SHOW = "trainer", BANKFRAME_OPENED = "bank",
 	TAXIMAP_OPENED = "taxi", AUCTION_HOUSE_SHOW = "auction",
 }
+-- The windows of a conversation; the others (shops, services) only when asked (scene.cameraShops).
+local TALKS = { gossip = true, quest = true }
 local RELEASES = {
 	GOSSIP_CLOSED = "gossip", QUEST_FINISHED = "quest", MERCHANT_CLOSED = "merchant", TRAINER_CLOSED = "trainer",
 	BANKFRAME_CLOSED = "bank", TAXIMAP_CLOSED = "taxi", AUCTION_HOUSE_CLOSED = "auction",
@@ -45,7 +81,19 @@ local RELEASES = {
 local holders = {} -- windows open, kind -> true
 local holdToken, releaseToken = 0, 0
 
-local function Saved() return ns.root and ns.root.sceneCamera end
+local function Saved() return ns.Kept("sceneCamera") end
+
+-- Your settings given back; kept until every one is written (in a fight: once it is over).
+local function GiveBack(saved)
+	if InCombatLockdown() then
+		return ns.Util.AfterFight("sceneCamera", function() if Saved() == saved then GiveBack(saved) end end)
+	end
+	local all = true
+	for cvar, value in pairs(saved.cvars or {}) do
+		if not ns.WriteCVar(cvar, value) then all = false end
+	end
+	if all and Saved() == saved then ns.Keep("sceneCamera", nil) end
+end
 
 -- A move: from where the camera really is (the game stops it where it is
 -- when a conversation opens, or when a camera setting is written), then
@@ -124,17 +172,21 @@ local function ZoomIn()
 	end
 	saved = { zoom = Clean(Safe(GetCameraZoom)), cvars = {} }
 	saved.aim = saved.zoom
-	for cvar, value in pairs(SETTINGS) do
+	local settings = {}
+	for cvar, value in pairs(SETTINGS) do settings[cvar] = value end
+	if ns.db.scene.cameraFrame then settings[FRAME_SETTING] = FRAME_VALUE end
+	for cvar, value in pairs(settings) do
 		local current = Clean(Safe(GetCVar, cvar))
 		if current then
 			saved.cvars[cvar] = current
 			ns.WriteCVar(cvar, value, true)
 		end
 	end
-	ns.root.sceneCamera = saved
+	ns.Keep("sceneCamera", saved)
 	if saved.zoom and saved.zoom > DISTANCE then
 		ZoomTo(DISTANCE)
 		saved.aim = DISTANCE
+		ns.CameraNotice()
 	end
 end
 
@@ -149,8 +201,7 @@ local function ZoomOut()
 	ZoomTo(saved.zoom, function()
 		-- Borrowed again meanwhile: it will be given back later.
 		if Saved() ~= saved or not saved.leaving then return end
-		for cvar, value in pairs(saved.cvars) do ns.WriteCVar(cvar, value) end
-		ns.root.sceneCamera = nil
+		GiveBack(saved)
 	end)
 end
 
@@ -158,7 +209,15 @@ end
 -- character, never for a mailbox or another object).
 local function Hold(kind)
 	local db = ns.db
-	if not (db and db.enabled and db.scene.camera) then return end
+	if not (db and db.enabled and db.scene.camera) or InCombatLockdown() or ns.CalmMotion() then return end
+	if not TALKS[kind] and not db.scene.cameraShops then return end
+	-- In a dungeon or a raid the camera stays still: a group waits.
+	local _, inside = Safe(IsInInstance)
+	if inside == "party" or inside == "raid" then return end
+	-- Another addon drives the camera (DynamicCam): never two hands on it.
+	if ns.Yields and ns.Yields("camera") then return end
+	-- Another addon shows the conversations (and moves the camera itself): never two hands on it.
+	if ns.SceneYielded and ns.SceneYielded() then return end
 	if not (Clean(Safe(UnitExists, "npc")) or Clean(Safe(UnitExists, "questnpc"))) then return end
 	holders[kind] = true
 	releaseToken = releaseToken + 1
@@ -187,8 +246,7 @@ end
 local function RestoreAfterCrash()
 	local saved = Saved()
 	if not saved then return end
-	ns.root.sceneCamera = nil
-	for cvar, value in pairs(saved.cvars or {}) do ns.WriteCVar(cvar, value) end
+	GiveBack(saved)
 	-- Still where Wanderer sent it (a /reload): back to your distance.
 	local now = Clean(Safe(GetCameraZoom))
 	local aim = saved.aim or saved.zoom

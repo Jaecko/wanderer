@@ -12,8 +12,11 @@ local L = ns.L
 -- Photo: a key (or /wanderer photo) hides everything but the label of what
 -- you hover. The same key, Escape or a fight brings everything back.
 --
+-- The names key held (WANDERER_REVEAL) brings the interface back meanwhile,
+-- but in the photo.
+--
 -- Never during a fight; every reason is cleared when one starts. On a flight
--- the chat stays: someone may be talking to you.
+-- the chat is left to its own behavior.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -24,6 +27,7 @@ local PEEK_TIME = 2 -- seconds the interface stays after the mouse left it
 local TRAVEL_ZOOM = 8 -- yards the camera steps back
 local CARD_TIME = 12 -- seconds the destination is shown fully
 local CARD_REST = 0.35 -- its opacity after, all the way to the landing
+local CHECK_EVERY = 0.1 -- seconds between looks at the mouse and the reasons (the fade itself moves every frame)
 
 local reasons = {} -- reason -> true
 local current, target = 1, 1
@@ -34,6 +38,7 @@ local card, cardText, cardShown = nil, nil, 0
 local driver
 local chatKept = {} -- chat frame -> true while it ignores the fading
 local minimapHidden = false
+local sinceCheck = 0
 
 -- The minimap's content (your arrow, the quest areas, the points) is drawn
 -- by the game and ignores opacity: once everything has faded, the minimap
@@ -73,6 +78,8 @@ end
 local function Wanted()
 	if InCombatLockdown() then return 1 end
 	if next(reasons) == nil then return 1 end
+	-- The names key held: the interface back meanwhile (never in the photo, asked for on purpose).
+	if ns.revealing and not reasons.photo then return 1 end
 	if reasons.travel and not reasons.photo and GetTime() < peekUntil then return 1 end
 	return 0
 end
@@ -80,6 +87,7 @@ end
 local function SetReason(reason, on)
 	reasons[reason] = on or nil
 	target = Wanted()
+	sinceCheck = CHECK_EVERY -- the chat looked at on the next frame
 	driver:Show()
 end
 
@@ -88,7 +96,7 @@ function ns.SetCurtainReason(reason, on) SetReason(reason, on) end
 
 -- Photo mode ---------------------------------------------------------------------------
 
-function ns.IsPhotoMode() return reasons.photo == true end
+function ns.IsPhotoMode() return reasons.photo == true end -- (tests)
 
 function ns.TogglePhotoMode()
 	if InCombatLockdown() then return end
@@ -100,8 +108,9 @@ function Wanderer_TogglePhoto() ns.TogglePhotoMode() end
 
 -- Travel -------------------------------------------------------------------------------
 
+-- (an extension naming the flight itself, Wanderer Maps' flight line: the title is its; the fade and the camera stay)
 local function ShowCard()
-	if not destination then return end
+	if not destination or ns.Yields("flightCard") then return end
 	cardText:SetText(destination)
 	card:SetScale(ns.Skin.Scale())
 	local margin = ns.Skin.Margin() + 10
@@ -114,42 +123,77 @@ local function ShowCard()
 	cardShown = 0
 end
 
--- ns.root.travelZoom: yards the camera stepped back (kept through a /reload).
+-- travelZoom (this character's, ns.Kept): your distance before the camera stepped back (kept
+-- through a /reload). The landing goes back to it (a step back blocked at the
+-- farthest distance would cost yards otherwise).
 local function StartTravel()
 	if reasons.travel then return end
 	if not (ns.db and ns.db.enabled and ns.db.travel.enabled) then return end
 	if not Clean(Safe(UnitOnTaxi, "player")) then return end
 	SetReason("travel", true)
 	ShowCard()
-	if ns.db.travel.camera and CameraZoomOut and not ns.root.travelZoom then
-		ns.root.travelZoom = TRAVEL_ZOOM
-		Safe(CameraZoomOut, TRAVEL_ZOOM)
+	-- (another addon driving the camera, DynamicCam: left to it)
+	-- (the calm movements: the camera left where it is)
+	if ns.db.travel.camera and CameraZoomOut and not ns.Kept("travelZoom") and not (ns.Yields and ns.Yields("camera"))
+		and not ns.CalmMotion() then
+		-- (a dialogue's camera still coming back: the distance it keeps for you, not the one on the way)
+		local scene = ns.Kept("sceneCamera")
+		local zoom = scene and scene.zoom or Clean(Safe(GetCameraZoom))
+		if zoom then
+			ns.Keep("travelZoom", zoom)
+			Safe(CameraZoomOut, TRAVEL_ZOOM)
+			ns.CameraNotice()
+		end
 	end
 end
 
 local function EndTravel()
-	if not reasons.travel and not ns.root.travelZoom then return end
+	local kept = ns.Kept("travelZoom")
+	if not reasons.travel and not kept then return end
 	SetReason("travel", false)
 	if not Clean(Safe(UnitOnTaxi, "player")) then destination = nil end
 	card:Hide()
 	-- Still flying (a loading screen): the camera stays back.
-	if ns.root.travelZoom and CameraZoomIn and not Clean(Safe(UnitOnTaxi, "player")) then
-		Safe(CameraZoomIn, ns.root.travelZoom)
-		ns.root.travelZoom = nil
+	if kept and not Clean(Safe(UnitOnTaxi, "player")) then
+		local before, now = kept, Clean(Safe(GetCameraZoom))
+		if now and now > before and CameraZoomIn then Safe(CameraZoomIn, now - before) end
+		if now and now < before and CameraZoomOut then Safe(CameraZoomOut, before - now) end
+		ns.Keep("travelZoom", nil)
 	end
 end
 
+-- (Wanderer or its travel mode switched off in flight: the interface back at once, the camera at the landing)
+function ns.RefreshCurtain()
+	if reasons.travel and not (ns.db and ns.db.enabled and ns.db.travel.enabled) then EndTravel() end
+end
+
 -- Motion -------------------------------------------------------------------------------
+
+-- A box taking your keys (the chat's line, a search).
+local function Typing() return GetCurrentKeyBoardFocus and Safe(GetCurrentKeyBoardFocus) ~= nil or false end
+
+-- The mouse where the minimap stepped out (hidden, it no longer answers the mouse: the world is under it).
+local function OverHiddenMinimap()
+	return minimapHidden and (U.IsMouseOver(_G.Minimap) or U.IsMouseOver(_G.MinimapCluster)) or false
+end
 
 local function OnUpdate(self, elapsed)
 	-- During a flight the interface stays away, whatever the mouse does, and
 	-- comes back only while the mouse is over one of its parts (invisible, they
 	-- still answer the mouse), a moment longer after.
-	if reasons.travel and not reasons.photo and not U.IsOverWorld() then peekUntil = GetTime() + PEEK_TIME end
-	target = Wanted()
-	-- Photo hides everything; a flight or an absence keeps the chat.
-	local keep = (reasons.travel or reasons.away) and not reasons.photo and true or false
-	if keep ~= (next(chatKept) ~= nil) then KeepChat(keep) end
+	sinceCheck = sinceCheck + elapsed
+	if sinceCheck >= CHECK_EVERY then
+		sinceCheck = 0
+		-- (or while you type: the chat's line is never written blind)
+		-- (the minimap stepped out once faded: its place under the mouse brings everything back, as the other parts)
+		if reasons.travel and not reasons.photo and (not U.IsOverWorld() or Typing() or OverHiddenMinimap()) then
+			peekUntil = GetTime() + PEEK_TIME
+		end
+		target = Wanted()
+		-- Photo hides everything; an absence keeps the chat. A flight leaves it alone (it fades by itself).
+		local keep = reasons.away and not reasons.photo and true or false
+		if keep ~= (next(chatKept) ~= nil) then KeepChat(keep) end
+	end
 	if current ~= target then
 		current = tween:Step(target, elapsed, FADE_IN, FADE_OUT)
 		UIParent:SetAlpha(current)
@@ -176,13 +220,16 @@ local function Clear()
 end
 
 function ns.InitCurtain()
-	if ns.root then ns.root.flights = nil end -- flight times, no longer kept
+	ns.root.flights = nil -- flight times, no longer kept
 	driver = CreateFrame("Frame")
 	driver:Hide()
 	driver:SetScript("OnUpdate", OnUpdate)
 
 	card = ns.Skin.CreateWindow("WandererTravelCard", "DIALOG")
-	card:SetPoint("TOP", UIParent, "TOP", 0, -150)
+	ns.Placeable({ key = "travelCard", label = function() return L.PLACING_TRAVEL end, frame = card, size = { 300, 70 },
+		scale = function() return ns.Skin.Scale() end, default = { "TOP", "TOP", 0, -150 },
+		enabled = function() return ns.db and ns.db.enabled and ns.db.travel.enabled and true or false end })
+	ns.PlaceApply("travelCard", card)
 	card:EnableMouse(false)
 	card.kicker = ns.Skin.CreateKicker(card, L.TRAVEL_KICKER)
 	card.kicker:SetPoint("TOP", card, "TOP", 0, -(ns.Skin.Margin() + 10))

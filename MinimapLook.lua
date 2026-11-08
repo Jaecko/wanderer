@@ -6,7 +6,8 @@ local L = ns.L
 -- zone in small golden capitals over a fine golden rule, the time and where you stand on one line, on a dark
 -- band fading at both ends. The game's own zone band, clock and coordinates step aside (their place is
 -- taken, nothing is lost: a click on the time opens the game's clock). Nothing else changes; switched off,
--- every piece goes back exactly as the game drew it. The map is moved up against the top of the screen. Never a protected frame during a fight.
+-- every piece goes back exactly as the game drew it. The map moves up, as much room above it as on its
+-- right. Never a protected frame during a fight.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -32,7 +33,8 @@ local searched, tries = 0, 0 -- when the coordinates were looked for last, how m
 local masked = false
 
 local function On()
-	return ns.db and ns.db.enabled and ns.db.world.styledMinimap and Minimap and MinimapCluster and true or false
+	return ns.db and ns.db.enabled and ns.db.world.styledMinimap and Minimap and MinimapCluster
+		and not ns.Yields("minimapLook") and true or false
 end
 
 local function Free(frame)
@@ -143,7 +145,7 @@ local function DrawInfo()
 	local zone = Clean(Safe(GetMinimapZoneText)) or Clean(Safe(GetZoneText)) or ""
 	info.zone:SetText(U.Upper(zone))
 	local where = Position()
-	info.line:SetText(where and (Clock() .. "   ·   " .. where) or Clock())
+	info.line:SetText(where and (Clock() .. U.SEPARATOR .. where) or Clock())
 end
 
 local function MakeInfo()
@@ -158,13 +160,7 @@ local function MakeInfo()
 		half:SetPoint("BOTTOM")
 		half:SetPoint(side)
 		half:SetPoint(index == 1 and "RIGHT" or "LEFT", info, "CENTER")
-		half:SetColorTexture(1, 1, 1, 1)
-		local dark, clear = CreateColor and CreateColor(0.02, 0.02, 0.03, 0.62), CreateColor and CreateColor(0.02, 0.02, 0.03, 0)
-		if dark and half.SetGradient then
-			half:SetGradient("HORIZONTAL", index == 1 and clear or dark, index == 1 and dark or clear)
-		else
-			half:SetColorTexture(0.02, 0.02, 0.03, 0.4)
-		end
+		ns.Skin.FadingRule(half, 0.62, index == 1, { 0.02, 0.02, 0.03 })
 	end
 	info.zone = info:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	info.zone:SetPoint("TOP", info, "TOP", 0, -7)
@@ -178,14 +174,7 @@ local function MakeInfo()
 		rule:SetPoint("TOP", info.zone, "BOTTOM", 0, -4)
 		rule:SetPoint(index == 1 and "RIGHT" or "LEFT", info, "CENTER")
 		rule:SetWidth(80)
-		rule:SetColorTexture(1, 1, 1, 1)
-		local gold, clear = CreateColor and CreateColor(C.gold[1], C.gold[2], C.gold[3], 0.55),
-			CreateColor and CreateColor(C.gold[1], C.gold[2], C.gold[3], 0)
-		if gold and rule.SetGradient then
-			rule:SetGradient("HORIZONTAL", index == 1 and clear or gold, index == 1 and gold or clear)
-		else
-			rule:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 0.3)
-		end
+		ns.Skin.FadingRule(rule, 0.55, index == 1)
 		info["rule" .. side] = rule
 	end
 	info.line = info:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -200,6 +189,7 @@ local function MakeInfo()
 		GameTooltip:AddLine(Clean(Safe(GetZoneText)) or "", 1, 0.82, 0)
 		local sub = Clean(Safe(GetSubZoneText))
 		if sub and sub ~= "" then GameTooltip:AddLine(sub, 1, 1, 1) end
+		ns.AddLayerLine(GameTooltip)
 		GameTooltip:AddLine(L.MINIMAP_INFO_HINT, 0.55, 0.53, 0.46, true)
 		GameTooltip:Show()
 	end)
@@ -218,11 +208,11 @@ end
 -- Applying ---------------------------------------------------------------------------------------
 
 -- The map moved up: as much room above it as on its right, for a quiet balance; only up, from where the
--- game lays it out (its size, its distance from the right edge, the buttons of the game: theirs). What moves
--- is the map's own holder (the map with it), else the map.
+-- game lays it out (its size, its distance from the right edge, the buttons of the game: theirs). Only the
+-- map's own holder moves (the map with it); without one, nothing moves.
 local function Top()
-	local holder = Part(MinimapCluster, "MinimapContainer") or Minimap
-	if not Free(holder) or not (UIParent:GetTop() and UIParent:GetRight() and Minimap:GetTop()) then return end
+	local holder = Part(MinimapCluster, "MinimapContainer")
+	if not holder or not Free(holder) or not (UIParent:GetTop() and UIParent:GetRight() and Minimap:GetTop()) then return end
 	Keep(holder)
 	-- (from where it stands now: the rest of the way, nothing when it is there already)
 	local screen, map = UIParent:GetEffectiveScale(), Minimap:GetEffectiveScale()
@@ -298,7 +288,7 @@ function ns.RefreshMinimapLook()
 		for frame in pairs(kept) do GiveBack(frame) end
 		coords, searched = nil, 0
 		-- (the discreet minimap, when asked, hides the ring again)
-		if ns.RefreshClean then ns.RefreshClean() end
+		ns.RefreshClean()
 	end
 end
 

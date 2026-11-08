@@ -12,7 +12,10 @@ local L = ns.L
 --
 -- Edit Mode: each profile can name one of the game's Edit Mode layouts;
 -- Wanderer makes it the active layout (so each place can have its own, with
--- the profiles by place). Never during a fight.
+-- the profiles by place). Never during a fight. Layouts are only written on a
+-- click (a layout made, a bar shown or hidden). Wanderer turned off: the layout
+-- that was active before it chose one comes back, and the game's group frame
+-- options it set with a layout too (unless you changed them since).
 --
 -- Only opacities are changed, nothing is moved: switched off, everything is
 -- back as the game draws it.
@@ -23,9 +26,7 @@ local Safe, Clean = U.Safe, U.Clean
 local CHECK_EVERY = 0.1
 local FADE_IN, FADE_OUT = 0.35, 0.8 -- seconds of a full fade
 local TRACKER_REST = 0.7
-local TRACKER_MODULES = { "QuestObjectiveTracker", "CampaignQuestObjectiveTracker", "ScenarioObjectiveTracker",
-	"AchievementObjectiveTracker", "BonusObjectiveTracker", "WorldQuestObjectiveTracker",
-	"ProfessionsRecipeTracker", "MonthlyActivitiesObjectiveTracker", "AdventureObjectiveTracker" }
+local TRACKER_MODULES = ns.TRACKER_MODULES -- (TrackerLook.lua, loaded before)
 
 local driver
 local since = 0
@@ -71,6 +72,10 @@ local function TrackerHeaders(alpha)
 	end
 end
 
+-- The tracker's look taken by another (Wanderer Quests' own list, Kaliel's Tracker): the game's list's opacity is
+-- theirs (Wanderer Quests holds it at 0 in a fight, out of sight).
+local function TrackerTaken() return ns.Yields and ns.Yields("trackerLook") ~= nil end
+
 -- Motion -------------------------------------------------------------------------------
 
 local function OnUpdate(_, elapsed)
@@ -79,7 +84,8 @@ local function OnUpdate(_, elapsed)
 	elapsed, since = since, 0
 	local world = ns.db and ns.db.enabled and ns.db.world
 	if world and world.cleanMinimap and MinimapCluster then
-		local over = ns.Util.IsMouseOver(MinimapCluster)
+		-- (the names key held: shown too, as under the mouse)
+		local over = ns.revealing or ns.Util.IsMouseOver(MinimapCluster)
 		hoverMinimap = minimapTween:Step(over and 1 or 0, elapsed, FADE_IN, FADE_OUT)
 		sinceButtons = sinceButtons + elapsed
 		if hoverMinimap ~= buttonsAlpha or sinceButtons >= BUTTONS_AGAIN then
@@ -87,8 +93,8 @@ local function OnUpdate(_, elapsed)
 			SetAlphas(MinimapButtons(), hoverMinimap)
 		end
 	end
-	if world and world.cleanTracker and ObjectiveTrackerFrame then
-		local over = ObjectiveTrackerFrame:IsShown() and ns.Util.IsMouseOver(ObjectiveTrackerFrame) or false
+	if world and world.cleanTracker and ObjectiveTrackerFrame and not TrackerTaken() then
+		local over = ns.revealing or (ObjectiveTrackerFrame:IsShown() and ns.Util.IsMouseOver(ObjectiveTrackerFrame)) or false
 		hoverTracker = trackerTween:Step(over and 1 or TRACKER_REST, elapsed, FADE_IN, FADE_OUT)
 		ObjectiveTrackerFrame:SetAlpha(hoverTracker)
 	end
@@ -112,6 +118,91 @@ function ns.EditModeLayouts()
 	return (Layouts())
 end
 
+-- What Wanderer changed for this character (Mine().layoutHeld): before, the layout active before it chose
+-- one; set, the one it made active; cvars, the group frames' options written with a layout
+-- (name -> { before, value }); off, given back while Wanderer is off.
+local function LayoutHeld()
+	local mine = ns.Mine()
+	mine.layoutHeld = type(mine.layoutHeld) == "table" and mine.layoutHeld or {}
+	return mine.layoutHeld
+end
+
+-- The active layout's name now.
+local function ActiveName()
+	local names, active = Layouts()
+	return active and names[active] or nil
+end
+
+-- A layout made active by Wanderer (index in the game's list), the one before remembered (before: its name,
+-- read before the list changed).
+local function Activate(index, name, before)
+	local held = LayoutHeld()
+	if held.before == nil then held.before = before or ActiveName() end
+	pcall(C_EditMode.SetActiveLayout, index)
+	held.set = name
+end
+
+-- One of the game's options set with a layout, your value kept.
+local function WriteHeld(cvar, value)
+	local now = Clean(Safe(GetCVar, cvar))
+	if now == nil then return end
+	local held = LayoutHeld()
+	held.cvars = type(held.cvars) == "table" and held.cvars or {}
+	local entry = held.cvars[cvar]
+	-- (changed by you since Wanderer wrote it: your value is the one to keep)
+	if not entry or now ~= entry.value then
+		entry = { before = now }
+		held.cvars[cvar] = entry
+	end
+	entry.value = value
+	ns.WriteCVar(cvar, value)
+end
+
+-- Wanderer turned off: your layout and your options back (those you did not change since).
+local function GiveBackLayout()
+	local mine = ns.Mine()
+	local held = mine.layoutHeld
+	if type(held) ~= "table" or held.off then return end
+	if InCombatLockdown() then
+		pendingLayout = true
+		return
+	end
+	for cvar, entry in pairs(type(held.cvars) == "table" and held.cvars or {}) do
+		if entry.before ~= nil and Clean(Safe(GetCVar, cvar)) == entry.value then ns.WriteCVar(cvar, entry.before) end
+	end
+	if held.before and held.set and C_EditMode and C_EditMode.SetActiveLayout then
+		local names, active = Layouts()
+		-- (the game's layouts not known yet, at loading: given back once they are)
+		if not active then
+			pendingLayout = true
+			return
+		end
+		if names[active] == held.set then
+			for index, name in ipairs(names) do
+				if name == held.before then
+					pcall(C_EditMode.SetActiveLayout, index)
+					break
+				end
+			end
+		end
+	end
+	held.before, held.set, held.off = nil, nil, true
+end
+
+-- Wanderer on again: the options set with a layout, written again (those still as given back).
+local function TakeBackLayout()
+	local held = ns.Mine().layoutHeld
+	if type(held) ~= "table" or not held.off then return end
+	if InCombatLockdown() then
+		pendingLayout = true
+		return
+	end
+	held.off = nil
+	for cvar, entry in pairs(type(held.cvars) == "table" and held.cvars or {}) do
+		if entry.value ~= nil and Clean(Safe(GetCVar, cvar)) == entry.before then ns.WriteCVar(cvar, entry.value) end
+	end
+end
+
 -- The layout of the active profile becomes the game's active layout.
 function ns.ApplyEditLayout()
 	local wanted = ns.db and ns.db.enabled and ns.db.world.editLayout
@@ -124,7 +215,7 @@ function ns.ApplyEditLayout()
 	local names, active = Layouts()
 	for index, name in ipairs(names) do
 		if name == wanted then
-			if index ~= active then pcall(C_EditMode.SetActiveLayout, index) end
+			if index ~= active then Activate(index, wanted) end
 			return
 		end
 	end
@@ -166,26 +257,14 @@ local function SetSetting(entry, setting, value)
 	entry.settings[#entry.settings + 1] = { setting = setting, value = value }
 end
 
-local function Place(entry, point, relativePoint, x, y)
+local function Anchor(entry, point, relativeTo, relativePoint, x, y)
 	if not entry then return end
-	entry.anchorInfo = { point = point, relativeTo = "UIParent", relativePoint = relativePoint, offsetX = x, offsetY = y }
+	entry.anchorInfo = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, offsetX = x, offsetY = y }
 	entry.isInDefaultPosition = false
 end
 
--- A bar: where it sits and how it shows ("Always", "InCombat", "Hidden").
-local function Bar(layout, name, y, visible)
-	local system = Enum.EditModeSystem.ActionBar
-	local entry = SystemEntry(layout, system, BarIndex(name))
-	if not entry then return end
-	local setting = Enum.EditModeActionBarSetting
-	SetSetting(entry, setting.Orientation, Enum.ActionBarOrientation.Horizontal)
-	SetSetting(entry, setting.NumRows, 1)
-	SetSetting(entry, setting.NumIcons, 12)
-	if visible and name ~= "MainBar" and Enum.ActionBarVisibleSetting then
-		SetSetting(entry, setting.VisibleSetting, Enum.ActionBarVisibleSetting[visible])
-	end
-	if y then Place(entry, "BOTTOM", "BOTTOM", 0, y) end
-	return entry
+local function Place(entry, point, relativePoint, x, y)
+	Anchor(entry, point, "UIParent", relativePoint, x, y)
 end
 
 -- Your portrait and your target's over the bars. The target's cast bar sits
@@ -207,8 +286,8 @@ end
 -- Your group, in the top left corner the portraits left free: the game's
 -- raid-style frames (health, role, who is targeted, dispels), wide enough
 -- for the names, sorted by role (tanks, healers, then the others); the raid
--- in the same place. The class colors of the game's option make each one
--- recognisable at a glance.
+-- is placed with the look (Finish). The class colors of the game's option
+-- make each one recognisable at a glance.
 local GROUP_X, GROUP_Y = 24, -170
 local GROUP_WIDTH, GROUP_HEIGHT = 96, 40 -- the game makes them 72 by 36 at least
 local function Group(layout)
@@ -226,8 +305,6 @@ local function Group(layout)
 			SetSetting(party, setting.SortPlayersBy, Enum.SortPlayersBy.Role)
 		end
 	end
-	local raid = index.Raid and SystemEntry(layout, system, index.Raid)
-	if raid then Place(raid, "TOPLEFT", "TOPLEFT", GROUP_X, GROUP_Y) end
 end
 
 -- No art around the main bar: its frame, its page arrows and the gryphons
@@ -256,18 +333,17 @@ local function Corners(layout, mainY)
 	local room = half - 6 - menuWidth - (BLOCK_X + BLOCK_WIDTH)
 	Place(menu, "BOTTOMRIGHT", "BOTTOMRIGHT", -6, room >= BLOCK_GAP and 4 or mainY + BLOCK_HEIGHT + 8)
 	local bags = system.Bags and SystemEntry(layout, system.Bags, nil)
-	if bags and menu then
-		bags.anchorInfo = { point = "BOTTOMRIGHT", relativeTo = "MicroMenuContainer", relativePoint = "TOPRIGHT", offsetX = 0, offsetY = 4 }
-		bags.isInDefaultPosition = false
-	end
+	if menu then Anchor(bags, "BOTTOMRIGHT", "MicroMenuContainer", "TOPRIGHT", 0, 4) end
 	-- The game's damage meter on the right of the bars, over the bags (never in the top left corner, where the
 	-- game puts it and the group frames are).
 	-- (its first window: the others the game opens are placed by you)
 	for _, entry in ipairs(system.DamageMeter and layout.systems or {}) do
 		if entry.system == system.DamageMeter then
-			entry.anchorInfo = bags and menu and { point = "BOTTOMRIGHT", relativeTo = "BagsBar", relativePoint = "TOPRIGHT", offsetX = 0, offsetY = 8 }
-				or { point = "BOTTOMRIGHT", relativeTo = "UIParent", relativePoint = "BOTTOMRIGHT", offsetX = -6, offsetY = 110 }
-			entry.isInDefaultPosition = false
+			if bags and menu then
+				Anchor(entry, "BOTTOMRIGHT", "BagsBar", "TOPRIGHT", 0, 8)
+			else
+				Place(entry, "BOTTOMRIGHT", "BOTTOMRIGHT", -6, 110)
+			end
 			break
 		end
 	end
@@ -276,18 +352,9 @@ local function Corners(layout, mainY)
 	local first = SystemEntry(layout, system.StatusTrackingBar, index.StatusTrackingBar1)
 	Place(first, "TOP", "TOP", 0, -2)
 	local second = SystemEntry(layout, system.StatusTrackingBar, index.StatusTrackingBar2)
-	if second and first then
-		second.anchorInfo = { point = "TOP", relativeTo = "MainStatusTrackingBarContainer", relativePoint = "BOTTOM", offsetX = 0, offsetY = -2 }
-		second.isInDefaultPosition = false
-	end
+	if first then Anchor(second, "TOP", "MainStatusTrackingBarContainer", "BOTTOM", 0, -2) end
 end
 
--- What the game stacks over the bottom bars by itself (cast bar, swing timers,
--- extra button...): it measures the bars left in their default place, and
--- Wanderer's bars are all moved, so these would fall on them. Placed here over
--- the stack instead: the cast bar between the portraits, the swing timers
--- over it, the extra and encounter buttons higher, the vehicle exit beside
--- the main bar, the totems beside the stance bar.
 -- A bar out of the bottom stack: its shape, how it shows ("Always",
 -- "InCombat"), and where it sits (no point: the game's own place, where the
 -- game also keeps the quest tracker clear of it).
@@ -300,6 +367,12 @@ local function BarAt(layout, name, visible, shape, point, relativePoint, x, y)
 	SetSetting(entry, setting.NumIcons, 12)
 	if visible and Enum.ActionBarVisibleSetting then SetSetting(entry, setting.VisibleSetting, Enum.ActionBarVisibleSetting[visible]) end
 	if point then Place(entry, point, relativePoint, x, y) end
+end
+
+-- A bar of the bottom stack: one row of 12, centered at its height, and how it shows (the main bar: always).
+local ROW = {}
+local function Bar(layout, name, y, visible)
+	BarAt(layout, name, name ~= "MainBar" and visible or nil, ROW, "BOTTOM", "BOTTOM", 0, y)
 end
 
 -- Bars 5 to 8 (and 4 when it is not in the stack): bar 5 (and 4) upright on
@@ -327,47 +400,35 @@ local function SmallSwing(entry)
 	if settings.Visibility and visibility and visibility.InCombat then SetSetting(entry, settings.Visibility, visibility.InCombat) end
 end
 
-local function OverTheBars(layout, top, mainY)
+-- What the game stacks over the bottom bars by itself (extra button...): it
+-- measures the bars left in their default place, and Wanderer's bars are all
+-- moved, so these would fall on them. Placed here over the stack instead: the
+-- extra and encounter buttons; the swing timers made small (the look places
+-- them, with the cast bar, the vehicle exit and the totems: Finish).
+local function OverTheBars(layout, top)
 	local system = Enum.EditModeSystem
-	local function At(entry, point, relativePoint, x, y) Place(entry, point, relativePoint, x, y) end
-	if system.CastBar then At(SystemEntry(layout, system.CastBar, nil), "BOTTOM", "BOTTOM", 0, top + 50) end
 	local swing = Enum.EditModeSwingTimerSystemIndices
 	if system.SwingTimer and swing then
-		-- Small, just over the cast bar.
-		local y = top + 80
 		for _, index in ipairs({ swing.MainHand, swing.OffHand, swing.Ranged }) do
 			local entry = SystemEntry(layout, system.SwingTimer, index)
-			At(entry, "BOTTOM", "BOTTOM", 0, y)
 			if entry then SmallSwing(entry) end
-			y = y + 16
 		end
 	end
-	if system.ExtraAbilities then At(SystemEntry(layout, system.ExtraAbilities, nil), "BOTTOM", "BOTTOM", 0, top + 160) end
-	if system.EncounterBar then At(SystemEntry(layout, system.EncounterBar, nil), "BOTTOM", "BOTTOM", 0, top + 300) end
-	-- Over the block of bar 8, by the main bar.
-	if system.VehicleLeaveButton then
-		At(SystemEntry(layout, system.VehicleLeaveButton, nil), "BOTTOMLEFT", "BOTTOM", BLOCK_X, mainY + BLOCK_HEIGHT + 8)
-	end
-	-- Totems on the left of the cast bar, over the stance bar: clear of both.
-	if system.TotemActionBar then At(SystemEntry(layout, system.TotemActionBar, nil), "BOTTOMRIGHT", "BOTTOM", -120, top + 44) end
+	if system.ExtraAbilities then Place(SystemEntry(layout, system.ExtraAbilities, nil), "BOTTOM", "BOTTOM", 0, top + 160) end
+	if system.EncounterBar then Place(SystemEntry(layout, system.EncounterBar, nil), "BOTTOM", "BOTTOM", 0, top + 300) end
 end
 
--- The look of Wanderer's layouts, as the player shaped it in Edit Mode (2026-10, the stacked one), kept for
--- every one of them, each around its own stack (top: the frame of the stack's highest bar). Over that bar:
--- the stance bar on its left end, the vehicle's exit on its right, the swing timers above its right end; the
--- pet and totem bars against the main bar's right; the cast bar under your portrait, the durability beside
--- it; the tooltip left of the game's menu; the focus, the bosses and the raid where they read best.
-local function Anchor(entry, point, relativeTo, relativePoint, x, y)
-	if not entry then return end
-	entry.anchorInfo = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, offsetX = x, offsetY = y }
-	entry.isInDefaultPosition = false
-end
 local function Settings(entry, list)
 	if not entry then return end
 	for _, pair in ipairs(list) do SetSetting(entry, pair[1], pair[2]) end
 end
 local SWING_LOOK = { { 0, 2 }, { 1, 50 }, { 2, 1 }, { 3, 60 }, { 5, 0 }, { 6, 1 } } -- (as the player set them)
 
+-- The look of Wanderer's layouts, as the player shaped it in Edit Mode (2026-10, the stacked one), kept for
+-- every one of them, each around its own stack (top: the frame of the stack's highest bar). Over that bar:
+-- the stance bar on its left end, the vehicle's exit on its right, the swing timers above its right end; the
+-- pet and totem bars against the main bar's right; the cast bar under your portrait, the durability beside
+-- it; the tooltip left of the game's menu; the focus, the bosses and the raid where they read best.
 local function Finish(layout, top)
 	local system = Enum.EditModeSystem
 	local bar = system.ActionBar
@@ -418,12 +479,9 @@ local LAYOUTS = {
 		end
 		OtherBars(layout, "Always", 10, false)
 		local above = math.max(top, 10 + SIDE_HEIGHT) + 4
-		local system = Enum.EditModeSystem.ActionBar
-		Place(SystemEntry(layout, system, BarIndex("StanceBar")), "BOTTOMRIGHT", "BOTTOM", -4, above)
-		Place(SystemEntry(layout, system, BarIndex("PetActionBar")), "BOTTOMLEFT", "BOTTOM", 4, above)
 		HideMainBarArt(layout)
 		Corners(layout, 10)
-		OverTheBars(layout, above - 4, 10)
+		OverTheBars(layout, above - 4)
 		Portraits(layout, 180, above + 46)
 		Group(layout)
 		Finish(layout, "MultiBarRight") -- (bar 4, the highest of the stack)
@@ -436,13 +494,10 @@ local LAYOUTS = {
 		Bar(layout, "Bar2", 40 + ACTION_BAR_STEP, "InCombat")
 		Bar(layout, "Bar3", 40 + ACTION_BAR_STEP * 2, "InCombat")
 		OtherBars(layout, "InCombat", 40, true)
-		local system = Enum.EditModeSystem.ActionBar
 		local above = math.max(40 + ACTION_BAR_STEP * 3, 40 + SIDE_HEIGHT) + 4
-		Place(SystemEntry(layout, system, BarIndex("StanceBar")), "BOTTOMRIGHT", "BOTTOM", -4, above)
-		Place(SystemEntry(layout, system, BarIndex("PetActionBar")), "BOTTOMLEFT", "BOTTOM", 4, above)
 		HideMainBarArt(layout)
 		Corners(layout, 40)
-		OverTheBars(layout, above - 4, 40)
+		OverTheBars(layout, above - 4)
 		Portraits(layout, 160, above + 46)
 		Group(layout)
 		Finish(layout, "MultiBarBottomRight") -- (bar 3, the highest over the main bar)
@@ -456,6 +511,37 @@ function ns.LayoutName(key)
 	return L["LAYOUT_" .. key:upper()]
 end
 
+-- The bars shown ---------------------------------------------------------------------
+-- Which of bars 2 to 8 show is the game's own option, for each character (Options > Action Bars, kept by the
+-- server; Edit Mode adds when each one shows). Wanderer never keeps a second switch for it: it opens the
+-- game's page.
+function ns.OpenGameActionBars()
+	local GameSettings = _G.Settings -- (Settings in this file is a layout helper)
+	local id = GameSettings and GameSettings.ACTION_BAR_CATEGORY_ID
+	-- (Wanderer's own settings out of the way: the game's page in view)
+	if ns.CloseSettingsWindow then ns.CloseSettingsWindow() end
+	if id and GameSettings.OpenToCategory and pcall(GameSettings.OpenToCategory, id) then return true end
+	local panel = _G.SettingsPanel
+	if panel and panel.Open and pcall(panel.Open, panel) then return true end
+	return false
+end
+
+-- The game said its layouts again: read from them.
+function ns.LayoutsUpdated()
+	ns.RefreshOptions()
+	ns.RefreshWelcome()
+end
+
+-- How Wanderer's own fade (Cinema.lua) treats the bars now: "combat", faded out of combat even with a target;
+-- "calm", faded when nothing happens; nil, never faded.
+function ns.BarsFade()
+	local cinema = ns.db and ns.db.enabled and ns.db.cinema
+	if type(cinema) ~= "table" then return nil end
+	if cinema.combatOnly then return "combat" end
+	if cinema.enabled then return "calm" end
+	return nil
+end
+
 -- Makes (or makes again) one of Wanderer's layouts and uses it with this
 -- profile. Returns true when done.
 function ns.MakeLayout(key)
@@ -466,6 +552,7 @@ function ns.MakeLayout(key)
 		ns.Print(L.MSG_LAYOUT_COMBAT)
 		return false
 	end
+	local before = ActiveName()
 	local presets = Safe(manager.GetCopyOfPresetLayouts, manager)
 	local info = Safe(edit.GetLayouts)
 	if type(presets) ~= "table" or not presets[1] or type(info) ~= "table" then return false end
@@ -499,28 +586,34 @@ function ns.MakeLayout(key)
 	end
 	if not pcall(edit.SaveLayouts, { layouts = all, activeLayout = info.activeLayout }) then return false end
 	if not existing and edit.OnLayoutAdded then pcall(edit.OnLayoutAdded, index, true, false) end
-	ns.db.world.editLayout = name
-	if edit.SetActiveLayout then pcall(edit.SetActiveLayout, index) end
+	-- (as any setting you change: in every profile of this character, else the next place put the old one back)
+	ns.ChangeEverywhere(function() ns.db.world.editLayout = name end)
+	if edit.SetActiveLayout then Activate(index, name, before) end
 	-- The group frames raid-style and in class colors: the game's options (older
 	-- games keep the raid style there, not in Edit Mode), set once here; yours after.
-	if key ~= "blizzard" and ns.WriteCVar then
-		ns.WriteCVar("useCompactPartyFrames", "1")
+	if key ~= "blizzard" then
+		WriteHeld("useCompactPartyFrames", "1")
 		-- The swing timer, for the classes that strike (never a caster's bother).
-		if STRIKERS[Clean(select(2, Safe(UnitClass, "player"))) or ""] then ns.WriteCVar("showSwingTimer", "1") end
-		ns.WriteCVar("raidFramesDisplayClassColor", "1")
-		if CompactPartyFrame_UpdateShown and CompactPartyFrame then Safe(CompactPartyFrame_UpdateShown, CompactPartyFrame) end
+		if STRIKERS[Clean(select(2, Safe(UnitClass, "player"))) or ""] then WriteHeld("showSwingTimer", "1") end
+		WriteHeld("raidFramesDisplayClassColor", "1")
 	end
-	if ns.debug then
-		local frames, setting = Enum.EditModeUnitFrameSystemIndices or {}, Enum.EditModeUnitFrameSetting or {}
-		ns.Print(("Group: Edit Mode party %s, raid style setting %s, game option %s"):format(tostring(frames.Party),
-			tostring(setting.UseRaidStylePartyFrames), tostring(Safe(GetCVar, "useCompactPartyFrames"))))
-	end
-	if ns.RefreshOptions then ns.RefreshOptions() end
+	ns.RefreshOptions()
 	ns.Print(L.MSG_LAYOUT_READY:format(name))
-	return true
+	return true, index, all
 end
 
 -- Settings -----------------------------------------------------------------------------
+
+-- The layout and its options as Wanderer on or off calls for.
+local function ApplyLayouts()
+	if ns.db and ns.db.enabled then
+		TakeBackLayout()
+		ns.ApplyEditLayout()
+	else
+		pendingLayout = false
+		GiveBackLayout()
+	end
+end
 
 function ns.RefreshClean()
 	if not driver then return end
@@ -533,13 +626,41 @@ function ns.RefreshClean()
 	end
 	TrackerHeaders(world.cleanTracker and 0 or 1)
 	if not world.cleanTracker and ObjectiveTrackerFrame then
-		ObjectiveTrackerFrame:SetAlpha(1)
+		if not TrackerTaken() then ObjectiveTrackerFrame:SetAlpha(1) end
 		hoverTracker = 1
 		trackerTween:Set(1)
 	end
 	driver:SetShown((world.cleanMinimap or world.cleanTracker) and true or false)
-	ns.ApplyEditLayout()
+	ApplyLayouts()
 end
+
+-- The minimap's and the tracker's look, one choice each: the game's ("game"), discreet ("discreet"), or in
+-- Wanderer's style ("wanderer", discreet as well). The settings and the welcome share them; profile: the one
+-- written (the active one unless said).
+local LOOK_KEYS = { minimap = { "cleanMinimap", "styledMinimap" }, tracker = { "cleanTracker", "styledTracker" } }
+local function LookOf(which, profile)
+	local world = (profile or ns.db).world or {}
+	local keys = LOOK_KEYS[which]
+	return world[keys[2]] and "wanderer" or world[keys[1]] and "discreet" or "game"
+end
+local function SetLookOf(which, value, profile)
+	local world = (profile or ns.db).world
+	local keys = LOOK_KEYS[which]
+	world[keys[1]], world[keys[2]] = value ~= "game", value == "wanderer"
+end
+function ns.MinimapLook(profile) return LookOf("minimap", profile) end
+function ns.TrackerLook(profile) return LookOf("tracker", profile) end
+function ns.SetMinimapLook(value, profile)
+	SetLookOf("minimap", value, profile)
+	ns.RefreshClean()
+	if ns.RefreshMinimapLook then ns.RefreshMinimapLook() end
+end
+function ns.SetTrackerLook(value, profile)
+	SetLookOf("tracker", value, profile)
+	ns.RefreshClean()
+	if ns.RefreshTrackerLook then ns.RefreshTrackerLook() end
+end
+ns.LOOK_CHOICES = { "game", "discreet", "wanderer" }
 
 function ns.InitClean()
 	driver = CreateFrame("Frame")
@@ -554,9 +675,15 @@ function ns.InitClean()
 	local events = CreateFrame("Frame")
 	events:RegisterEvent("PLAYER_ENTERING_WORLD")
 	events:RegisterEvent("PLAYER_REGEN_ENABLED")
+	pcall(events.RegisterEvent, events, "EDIT_MODE_LAYOUTS_UPDATED")
 	events:SetScript("OnEvent", function(_, event)
+		if event == "EDIT_MODE_LAYOUTS_UPDATED" then
+			-- (a layout to give back that waited for the game's list)
+			if pendingLayout and not InCombatLockdown() then ApplyLayouts() end
+			return ns.LayoutsUpdated()
+		end
 		if event == "PLAYER_REGEN_ENABLED" then
-			if pendingLayout then ns.ApplyEditLayout() end
+			if pendingLayout then ApplyLayouts() end
 		else
 			ns.RefreshClean()
 		end

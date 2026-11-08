@@ -7,9 +7,9 @@ local L = ns.L
 --   contemplation  the camera turns slowly around your character;
 --   hearth         by the fire: your character sits and rests; the camera
 --                  faces them, a little aside, a few yards away. The game's
---                  own campfire can burn in
---                  front of them: a key of Wanderer lights it (the game's
---                  "Basic Campfire") and settles you there. Nothing added;
+--                  own campfire can burn in front of them: a key of Wanderer
+--                  lights it (the game's "Basic Campfire") and settles you
+--                  there. Nothing added;
 --   panorama       the camera steps far back and turns over the landscape;
 -- The camera only turns around your character (the free camera, as with the
 -- left mouse button: your character never turns) and changes its distance;
@@ -17,8 +17,10 @@ local L = ns.L
 -- ambiance ends it turns them back, softly, to the camera you had. Moving the
 -- camera yourself (holding a mouse button to turn it, the wheel to zoom) or a
 -- key ends the ambiance at once; a mouse simply moved does not. Still away
--- and quiet for a while, it comes back. The mark gone (moving, acting, /afk), everything is back. Never during
--- a fight, in an instance, on a flight or in a conversation.
+-- and quiet for a while, it comes back. The mark gone (moving, acting, /afk),
+-- everything is back. Never during a fight, in an instance, on a flight, in
+-- a conversation, in a group or marked for PvP out of a resting place. The
+-- calm movements asked for: the ambiance never moves the camera.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -48,7 +50,7 @@ local SIT_AFTER = 0.3 -- seconds
 local CAMPFIRE = 818 -- the game's "Basic Campfire" (cooking)
 local CAMPFIRE_CAST = 2.2 -- seconds before sitting down by it
 
-local card, kicker, nameText, line, list
+local card, kicker, nameText, line
 local driver, keys
 local style -- the ambiance running, or nil
 local since -- when the absence began
@@ -65,6 +67,8 @@ local settleAt, settledZoom -- the zoom of the ambiance, watched for the wheel
 
 local function Settings()
 	local db = ns.db
+	-- (another addon's away screen, ElvUI's: left to it, the camera never turned by both)
+	if ns.Yields and ns.Yields("away") then return nil end
 	return db and db.enabled and db.away.enabled and db.away or nil
 end
 
@@ -72,10 +76,12 @@ local function IsAway()
 	return Clean(Safe(UnitIsAFK, "player")) and true or false
 end
 
--- Only in peace: no fight, no instance, no flight, no conversation.
+-- Only in peace: no fight, no instance, no flight, no conversation, no group (someone waits for you), never
+-- marked for PvP out of a resting place.
 local function Peaceful()
 	if InCombatLockdown() or ns.inCombat or ns.sceneActive then return false end
-	if Clean(Safe(IsInInstance)) then return false end
+	if Clean(Safe(IsInInstance)) or Clean(Safe(IsInGroup)) then return false end
+	if Clean(Safe(UnitIsPVP, "player")) and not Clean(Safe(IsResting)) then return false end
 	return not Clean(Safe(UnitOnTaxi, "player"))
 end
 
@@ -90,14 +96,11 @@ local function Fill()
 	local place = Place()
 	if place then text = text .. "  ·  " .. place end
 	line:SetText(text)
-	local rows = {}
-	list:SetText(table.concat(rows, "\n"))
-	list:SetShown(rows[1] ~= nil)
 	local margin = ns.Skin.Margin() + 14
 	local width = math.max(U.Measure(nameText, "GetStringWidth", 200), U.Measure(line, "GetStringWidth", 160),
-		list:IsShown() and U.Measure(list, "GetStringWidth", 300) or 0, U.Measure(kicker, "GetStringWidth", 80))
+		U.Measure(kicker, "GetStringWidth", 80))
 	local height = U.Measure(kicker, "GetStringHeight", 12) + 6 + U.Measure(nameText, "GetStringHeight", 26) + 6
-		+ U.Measure(line, "GetStringHeight", 14) + (list:IsShown() and (14 + U.Measure(list, "GetStringHeight", 100)) or 0)
+		+ U.Measure(line, "GetStringHeight", 14)
 	card:SetSize(math.min(width, 640) + margin * 2, height + margin * 2)
 	ns.Skin.Get(card):Layout()
 end
@@ -150,17 +153,32 @@ end
 local function HoldFollow(on)
 	if on and not followBefore then
 		followBefore = Clean(Safe(GetCVar, FOLLOW))
-		if ns.root then ns.root.awayFollow = followBefore end -- given back even after a crash
-		if followBefore and ns.WriteCVar then ns.WriteCVar(FOLLOW, "0") end
+		ns.Keep("awayFollow", followBefore) -- given back even after a crash
+		if followBefore then ns.WriteCVar(FOLLOW, "0") end
 	elseif not on and followBefore then
-		if ns.WriteCVar then ns.WriteCVar(FOLLOW, followBefore) end
+		-- (kept until it is written: in a fight, once it is over)
+		if InCombatLockdown() then return ns.Util.AfterFight("awayFollow", function() HoldFollow(false) end) end
+		if not ns.WriteCVar(FOLLOW, followBefore) then return end
 		followBefore = nil
-		if ns.root then ns.root.awayFollow = nil end
+		ns.Keep("awayFollow", nil)
 	end
 end
 
+-- Another addon driving the camera (DynamicCam): the ambiance shows without moving it.
+local cameraHeld = false
+
 local function CameraAway()
 	moves = moves + 1
+	-- (the calm movements: the ambiance shows without moving it either)
+	cameraHeld = not (ns.Yields and ns.Yields("camera")) and not ns.CalmMotion()
+	if style == "hearth" then
+		-- Seated, resting (the game does it only when it marks you away itself).
+		local token = moves
+		C_Timer.After(SIT_AFTER, function()
+			if token == moves and style == "hearth" and DoEmote then Safe(DoEmote, "SIT") end
+		end)
+	end
+	if not cameraHeld then return end
 	-- Counted from the camera you have now: it is the one to come back to.
 	StopSpin()
 	yaw = 0
@@ -173,11 +191,6 @@ local function CameraAway()
 			Safe(CameraZoomOut, CLOSE)
 		end
 		Spin(1, MOVE, TURN)
-		-- Seated, resting (the game does it only when it marks you away itself).
-		local token = moves
-		C_Timer.After(SIT_AFTER, function()
-			if token == moves and style == "hearth" and DoEmote then Safe(DoEmote, "SIT") end
-		end)
 	end
 	local back = STEP_BACK[style]
 	if back and CameraZoomOut then Safe(CameraZoomOut, back) end
@@ -190,6 +203,8 @@ end
 -- and your distance; the game's following given back once it is there.
 local function CameraBack()
 	moves = moves + 1
+	if not cameraHeld then return end
+	cameraHeld = false
 	StopSpin()
 	settleAt, settledZoom = nil, nil
 	local turned = yaw % 360
@@ -226,12 +241,8 @@ local function Begin()
 	CameraAway()
 	kicker:SetText(ns.Util.Upper(L.AWAY_KICKER))
 	nameText:SetText(U.FullName("player") or "")
-	card:ClearAllPoints()
-	if style == "hearth" then
-		card:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -140, 120) -- aside, the character in the middle
-	else
-		card:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 140)
-	end
+	-- (where you put it, else as the style asks: Place.lua)
+	ns.PlaceApply("awayCard", card)
 	card:SetScale(ns.Skin.Scale())
 	Fill()
 	cardAlpha = 0
@@ -269,19 +280,31 @@ function ns.RefreshAway()
 end
 
 function ns.InitAway()
-	ns.InitCampfire()
 	-- A turn of the camera started before a /reload: stopped.
 	Safe(MoveViewLeftStop)
 	Safe(MoveViewRightStop)
+	-- A camera left held by a crash: your following setting comes back (at login, once the game knows who you are:
+	-- kept per character; loaded after it, a /reload: now).
+	local function GiveFollowBack()
+		local follow = ns.Kept("awayFollow")
+		if follow and ns.WriteCVar(FOLLOW, follow) then ns.Keep("awayFollow", nil) end
+	end
 	local leaving = CreateFrame("Frame")
 	leaving:RegisterEvent("PLAYER_LOGOUT")
-	leaving:SetScript("OnEvent", function() HoldFollow(false) end)
-	-- A camera left held by a crash: your following setting comes back.
-	if ns.root and ns.root.awayFollow then
-		if ns.WriteCVar then ns.WriteCVar(FOLLOW, ns.root.awayFollow) end
-		ns.root.awayFollow = nil
-	end
+	leaving:RegisterEvent("PLAYER_LOGIN")
+	leaving:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_LOGIN" then GiveFollowBack() else HoldFollow(false) end
+	end)
+	if IsLoggedIn and IsLoggedIn() then GiveFollowBack() end
 	card = ns.Skin.CreateWindow("WandererAwayCard", "DIALOG")
+	-- By the hearth: aside, the character in the middle; else under it.
+	ns.Placeable({ key = "awayCard", label = function() return L.PLACING_AWAY end, frame = card, size = { 320, 110 },
+		scale = function() return ns.Skin.Scale() end, enabled = function() return Settings() ~= nil end,
+		default = function()
+			local settings = Settings()
+			if (style or settings and settings.style) == "hearth" then return { "BOTTOMRIGHT", "BOTTOMRIGHT", -140, 120 } end
+			return { "BOTTOM", "BOTTOM", 0, 140 }
+		end })
 	card:EnableMouse(false)
 	local margin = ns.Skin.Margin() + 14
 	kicker = ns.Skin.CreateKicker(card)
@@ -293,10 +316,6 @@ function ns.InitAway()
 	line = ns.Skin.CreateText(card, "GameTooltipText", 0.9, 0.86, 0.78)
 	line:SetPoint("TOP", nameText, "BOTTOM", 0, -6)
 	line:SetJustifyH("CENTER")
-	list = ns.Skin.CreateText(card, "GameTooltipText", 0.92, 0.9, 0.86)
-	list:SetPoint("TOP", line, "BOTTOM", 0, -14)
-	list:SetJustifyH("LEFT")
-	list:SetSpacing(4)
 	card:Hide()
 
 	-- Keys are a sign of you; they still reach the game (never kept).
@@ -391,6 +410,8 @@ function ns.GoAway()
 	if IsAway() then return end
 	if DoEmote then Safe(DoEmote, "SIT") end
 	C_Timer.After(0.6, function()
-		if not IsAway() and SendChatMessage then Safe(SendChatMessage, "", "AFK") end
+		-- (the game's newer place for it first)
+		local send = C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
+		if not IsAway() and send then Safe(send, "", "AFK") end
 	end)
 end

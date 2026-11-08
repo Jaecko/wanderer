@@ -48,30 +48,14 @@ function ns.RefreshSounds()
 	end
 end
 
-local function RegisterDialog()
-	if not StaticPopupDialogs then return end
-	StaticPopupDialogs.WANDERER_SOUNDS = {
-		text = L.SOUNDS_PROMPT, button1 = ACCEPT, button2 = CANCEL, hasEditBox = true, editBoxWidth = 350,
-		timeout = 0, whileDead = true, hideOnEscape = true,
-		OnShow = function(self)
-			local box = U.EditBoxOf(self)
-			box:SetText(ns.db.sounds.list)
-			box:HighlightText()
-		end,
-		OnAccept = function(self)
-			local box = U.EditBoxOf(self)
-			ns.db.sounds.list = strtrim(box:GetText() or "")
-			ns.RefreshSounds()
-			ns.Print(L.MSG_SOUNDS:format(#ns.ParseSoundList(ns.db.sounds.list)))
-		end,
-	}
-end
-
 function ns.EditSounds()
-	if StaticPopup_Show then StaticPopup_Show("WANDERER_SOUNDS") end
+	ns.Skin.AskText(L.SOUNDS_PROMPT, ns.db.sounds.list, function(text)
+		ns.ChangeEverywhere(function() ns.db.sounds.list = text end)
+		ns.RefreshSounds()
+		ns.Print(L.MSG_SOUNDS:format(#ns.ParseSoundList(ns.db.sounds.list)))
+	end, 0, true)
 end
 
 function ns.InitSounds()
-	RegisterDialog()
 	ns.RefreshSounds()
 end

@@ -2,16 +2,14 @@ local _, ns = ...
 local L = ns.L
 
 -- What can be known of a player beyond the label's first look: the branch
--- they play and its role, their talents, their item level. WoW Forever keeps
--- the three branches of old in one tree of today's talent system: read by
--- their columns, named from Wanderer's knowledge of every class. Other
--- players need an inspection: asked out of combat, within reach, throttled,
--- kept a few minutes per character. Used by the label (Label.lua).
+-- they play and its role, their talents, their item level. Other players
+-- need an inspection: asked out of combat, within reach, throttled, kept a
+-- few minutes per character. Used by the label (Label.lua).
 
 local U = ns.Util
 local Safe, Clean, IsSecret = U.Safe, U.Clean, U.IsSecret
 local HasAtlas = U.HasAtlas
-local SEPARATOR = ns.Util.SEPARATOR
+local SEPARATOR = U.SEPARATOR
 
 local INSPECT_DELAY = 1.5
 local INSPECT_KEEP = 300 -- seconds an inspection is trusted before asking again
@@ -19,9 +17,6 @@ local INSPECT_KEEP = 300 -- seconds an inspection is trusted before asking again
 local GEAR_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }
 
 -- Inspection of other players ------------------------------------------------
--- Specialization, talents and equipment are only known after an inspection:
--- requested out of combat, within reach, throttled, and kept per character
--- for a few minutes.
 
 local inspected = {} -- GUID -> { time, spec, talents, itemLevel }
 local pendingGUID, lastInspect = nil, 0
@@ -36,7 +31,7 @@ end
 -- WoW Forever keeps the three branches of old in one tree of today's talent
 -- system, side by side: each node belongs to the branch of its column. The
 -- columns are found from where the nodes stand (the two widest gaps between
--- them), the names from the class's specializations (or the branches' own).
+-- them), the names from Wanderer's knowledge of every class (or the game's).
 local BRANCHES = 3
 
 -- What Wanderer knows of the classes: their three branches in the game's
@@ -79,38 +74,75 @@ local function BranchNames(unit)
 	return names
 end
 
+-- A talent tree: its nodes, each in its branch, its tier (its row within the branch, from 1) and its
+-- column; what it gives (the spell of its first entry), its ranks (bought, at most) and the nodes it opens
+-- (the arrows). nil when the game says nothing.
+local function ReadTree(configID)
+	if not (C_Traits and C_Traits.GetConfigInfo and configID) then return nil end
+	local config = Safe(C_Traits.GetConfigInfo, configID)
+	local treeID = type(config) == "table" and config.treeIDs and config.treeIDs[1]
+	if not treeID then return nil end
+	local nodes, xs = {}, {}
+	for _, nodeID in ipairs(Safe(C_Traits.GetTreeNodes, treeID) or {}) do
+		local node = Safe(C_Traits.GetNodeInfo, configID, nodeID)
+		local x = type(node) == "table" and Clean(node.posX)
+		if x and node.isVisible ~= false then
+			local y = Clean(node.posY) or 0
+			local opens = {}
+			for _, edge in ipairs(type(node.visibleEdges) == "table" and node.visibleEdges or {}) do
+				local target = Clean(edge.targetNode)
+				if target then opens[#opens + 1] = target end
+			end
+			local entry = node.entryIDs and Clean(node.entryIDs[1])
+			nodes[#nodes + 1] = { id = nodeID, x = x, y = y, entry = entry, opens = opens,
+				ranks = Clean(node.ranksPurchased) or Clean(node.currentRank) or 0, most = Clean(node.maxRanks) or 1 }
+			xs[#xs + 1] = x
+		end
+	end
+	if #nodes < BRANCHES then return nil end
+	-- The two widest gaps between the columns split the three branches.
+	table.sort(xs)
+	local gaps = {}
+	for index = 2, #xs do gaps[#gaps + 1] = { size = xs[index] - xs[index - 1], at = (xs[index] + xs[index - 1]) / 2 } end
+	table.sort(gaps, function(a, b) return a.size > b.size end)
+	if not (gaps[2] and gaps[2].size > 0) then return nil end
+	local first, second = math.min(gaps[1].at, gaps[2].at), math.max(gaps[1].at, gaps[2].at)
+	-- Each node in its branch, its row and its column there.
+	local rowsOf, columnsOf = { {}, {}, {} }, { {}, {}, {} }
+	for _, node in ipairs(nodes) do
+		node.branch = node.x < first and 1 or (node.x < second and 2 or 3)
+		rowsOf[node.branch][node.y], columnsOf[node.branch][node.x] = true, true
+	end
+	local function Order(set)
+		local list, place = {}, {}
+		for value in pairs(set) do list[#list + 1] = value end
+		table.sort(list)
+		for index, value in ipairs(list) do place[value] = index end
+		return place
+	end
+	for branch = 1, BRANCHES do rowsOf[branch], columnsOf[branch] = Order(rowsOf[branch]), Order(columnsOf[branch]) end
+	for _, node in ipairs(nodes) do
+		node.tier, node.column = rowsOf[node.branch][node.y], columnsOf[node.branch][node.x]
+		local entryInfo = node.entry and Safe(C_Traits.GetEntryInfo, configID, node.entry)
+		local definition = type(entryInfo) == "table" and Clean(entryInfo.definitionID)
+		local info = definition and Safe(C_Traits.GetDefinitionInfo, definition)
+		node.spell = type(info) == "table" and Clean(info.spellID) or nil
+	end
+	return nodes
+end
+
 local function ReadTraits(inspect, unit)
-	if not (C_Traits and C_Traits.GetConfigInfo) then return end
 	local configID
 	if inspect then
 		configID = Constants and Constants.TraitConsts and Constants.TraitConsts.INSPECT_TRAIT_CONFIG_ID
 	else
 		configID = C_ClassTalents and Clean(Safe(C_ClassTalents.GetActiveConfigID))
 	end
-	local config = configID and Safe(C_Traits.GetConfigInfo, configID)
-	local treeID = type(config) == "table" and config.treeIDs and config.treeIDs[1]
-	if not treeID then return end
-	local nodes, xs = {}, {}
-	for _, nodeID in ipairs(Safe(C_Traits.GetTreeNodes, treeID) or {}) do
-		local node = Safe(C_Traits.GetNodeInfo, configID, nodeID)
-		local x = type(node) == "table" and Clean(node.posX)
-		if x and node.isVisible ~= false then
-			nodes[#nodes + 1] = { x = x, ranks = Clean(node.ranksPurchased) or Clean(node.currentRank) or 0 }
-			xs[#xs + 1] = x
-		end
-	end
-	if #nodes < BRANCHES then return end
-	-- The two widest gaps between the columns split the three branches.
-	table.sort(xs)
-	local gaps = {}
-	for index = 2, #xs do gaps[#gaps + 1] = { size = xs[index] - xs[index - 1], at = (xs[index] + xs[index - 1]) / 2 } end
-	table.sort(gaps, function(a, b) return a.size > b.size end)
-	if not (gaps[2] and gaps[2].size > 0) then return end
-	local first, second = math.min(gaps[1].at, gaps[2].at), math.max(gaps[1].at, gaps[2].at)
+	local nodes = ReadTree(configID)
+	if not nodes then return end
 	local points, total = { 0, 0, 0 }, 0
 	for _, node in ipairs(nodes) do
-		local branch = node.x < first and 1 or (node.x < second and 2 or 3)
-		points[branch] = points[branch] + node.ranks
+		points[node.branch] = points[node.branch] + node.ranks
 		total = total + node.ranks
 	end
 	if total == 0 then return end
@@ -120,12 +152,11 @@ local function ReadTraits(inspect, unit)
 	return trees
 end
 
-
-local function ItemLevelOf(link)
-	local level = C_Item and Clean(Safe(C_Item.GetDetailedItemLevelInfo, link))
-	if level then return level end
-	local _, _, _, base = Safe(GetItemInfo, link)
-	return Clean(base)
+-- Your own tree (for the extensions: a talents' plan): { nodes, the branches' names }.
+function ns.TalentTree()
+	local nodes = ReadTree(C_ClassTalents and Clean(Safe(C_ClassTalents.GetActiveConfigID)))
+	if not nodes then return nil end
+	return { nodes = nodes, names = BranchNames("player") }
 end
 
 -- Average item level of what the unit wears (a two-handed weapon counts
@@ -137,7 +168,7 @@ local function ReadItemLevel(unit)
 	for _, slot in ipairs(GEAR_SLOTS) do
 		local link = Clean(Safe(GetInventoryItemLink, unit, slot))
 		if link then
-			local level = ItemLevelOf(link)
+			local level = U.ItemLevel(link)
 			if not level then return nil, true end
 			sum, worn = sum + level, worn + 1
 			local equip = select(9, Safe(GetItemInfo, link))
@@ -148,10 +179,15 @@ local function ReadItemLevel(unit)
 end
 
 -- Whether a fresh inspection can be asked now (nothing is asked in a fight).
+local asked = {} -- guid -> when it was asked and did not answer yet
+local INSPECT_RETRY = 30
 local function CanAsk(unit)
 	if not NotifyInspect or InCombatLockdown() then return false end
 	if InspectFrame and InspectFrame:IsShown() then return false end
-	return Clean(Safe(CanInspect, unit)) and true or false
+	if not Clean(Safe(CanInspect, unit)) then return false end
+	local guid = Clean(Safe(UnitGUID, unit))
+	if guid and asked[guid] and GetTime() - asked[guid] < INSPECT_RETRY then return false end
+	return true
 end
 
 -- Close enough to be inspected (unknown counts as close).
@@ -167,9 +203,10 @@ local function Inspection(unit)
 	if not guid then return end
 	local entry = inspected[guid]
 	if entry and GetTime() - entry.time < INSPECT_KEEP then return entry end
-	if not CanAsk(unit) or GetTime() - lastInspect < INSPECT_DELAY then return entry end
+	if not CanAsk(unit) or not InReach(unit) or GetTime() - lastInspect < INSPECT_DELAY then return entry end
 	lastInspect = GetTime()
 	pendingGUID = guid
+	asked[guid] = GetTime()
 	NotifyInspect(unit)
 	return entry
 end
@@ -208,8 +245,6 @@ local function GetSpec(unit)
 	return entry and entry.spec
 end
 
--- The role a talent tree gives, by class and tree order (the game's trees):
--- the tree holding the most points decides. Feral druids may tank or strike.
 local ROLE_ICONS = { TANK = "roleicon-tiny-tank", HEALER = "roleicon-tiny-healer", DAMAGER = "roleicon-tiny-dps" }
 
 -- The role as the game's small icons (both for a feral druid), its name
@@ -221,7 +256,8 @@ local function RoleIcons(role)
 	return "|cffc8c8c8" .. (_G[role] or role) .. "|r "
 end
 
--- The role of the main talent tree (your group's roles show on its frames).
+-- The role the main branch gives, by class and branch order: the branch holding the most points decides
+-- (none on a tie). A feral druid may tank or strike.
 local function Role(talents, unit)
 	if not talents then return end
 	local best, most, tie = nil, -1, false
@@ -277,6 +313,7 @@ end
 local function OnReady(guid, unit)
 	if not pendingGUID or not Clean(guid) or guid ~= pendingGUID then return false end
 	pendingGUID = nil
+	asked[guid] = nil
 	if Clean(Safe(UnitGUID, unit)) ~= guid then return false end
 	ReadInspection(guid, unit, 0)
 	return true
@@ -286,38 +323,3 @@ ns.Inspect = {
 	Spec = GetSpec, Known = Known, InReach = InReach, Own = function() return ReadTraits(false, "player") end,
 	TalentLine = TalentLine, ItemLevelText = ItemLevelText, OnReady = OnReady, cache = inspected,
 }
-
--- What the game answers about talents and what Wanderer reads from it, for
--- you and for the last player inspected (/wanderer talents).
-function ns.DebugTalents()
-	local function show(value)
-		if IsSecret(value) then return "<secret>" end
-		return value == nil and "-" or tostring(value)
-	end
-	-- The points bought in each configuration of today's talent system.
-	local function traits(configID)
-		if not (C_Traits and configID) then return "-" end
-		local info = Safe(C_Traits.GetConfigInfo, configID)
-		if type(info) ~= "table" then return "no config" end
-		local trees, nodes, ranks = 0, 0, 0
-		for _, treeID in ipairs(info.treeIDs or {}) do
-			trees = trees + 1
-			for _, nodeID in ipairs(Safe(C_Traits.GetTreeNodes, treeID) or {}) do
-				local node = Safe(C_Traits.GetNodeInfo, configID, nodeID)
-				local bought = type(node) == "table" and Clean(node.ranksPurchased)
-				if bought and bought > 0 then nodes, ranks = nodes + 1, ranks + bought end
-			end
-		end
-		return ("%d trees, %d nodes, %d ranks"):format(trees, nodes, ranks)
-	end
-	local function branches(list)
-		local out = {}
-		for _, tree in ipairs(list or {}) do out[#out + 1] = tree.name .. " " .. tree.points end
-		return #out > 0 and table.concat(out, ", ") or "-"
-	end
-	local inspectID = Constants and Constants.TraitConsts and Constants.TraitConsts.INSPECT_TRAIT_CONFIG_ID
-	local ownID = C_ClassTalents and Safe(C_ClassTalents.GetActiveConfigID)
-	ns.Print("Traits: inspect (" .. show(inspectID) .. ") " .. traits(inspectID) .. " | own (" .. show(ownID) .. ") " .. traits(ownID))
-	ns.Print("Branches: inspect " .. branches(ReadTraits(true, "target")) .. " | own " .. branches(ReadTraits(false, "player")))
-end
-

@@ -52,13 +52,15 @@ local ESSENTIAL = { showClass = true, shiftDetails = true, showStatus = true, sh
 
 -- Settings stored in each profile.
 local DEFAULTS = {
-	styleVersion = 10,
+	styleVersion = 11,
 	enabled = true,
 	preset = "immersion",
+	playstyle = "", -- the way to play chosen (Playstyles.lua), "" before any
 	show = {},
 	combatEnemies = false, -- enemy names in a fight: asked for (their health bars show anyway)
 	groupMarks = true, -- in the world, the name of each member of your group, small, over their head
 	guildMarks = true, -- and of each member of your guild, in the guild's color
+	knownMarks = false, -- and of the players this character has met (Acquaintances.lua)
 	enemyNames = "names", -- "names" (as the names settings say), "always", "never", "near" (as you come near)
 	nearNames = {
 		distance = 45, -- yards from the camera beyond which the enemies' names are gone
@@ -84,8 +86,8 @@ local DEFAULTS = {
 		showRace = true,
 		showClass = true,
 		showSpec = true,
-		ownPortrait = true,
-		stickyTarget = true, -- your target stays described while nothing else is hovered (off: as before) -- over your portrait, the label shows you (the closer look included)
+		ownPortrait = true, -- over your portrait, the label shows you (the closer look included)
+		stickyTarget = true, -- your target stays described while nothing else is hovered (off: as before)
 		shiftDetails = true, -- Shift over a player: talents, item level, guild rank
 		showCasts = true,
 		showCreatureType = true,
@@ -115,23 +117,26 @@ local DEFAULTS = {
 		highlightRank = true,
 		threatAlert = true,
 		threatSound = true,
-		threatVignette = true,
 		hideInCombat = false,
 		combatLight = true, -- in a fight, only what matters for it (level, health, cast, target...)
 		scale = 1,
+		textScale = 1,
 		offset = 22,
 		bgOpacity = 55,
 		padding = 8,
 		font = "default",
 	},
 	rp = {
+		leaveCard = true, -- a player with a Total RP 3 profile: TRP3's own card, not the label
 		useName = true,
 		showTitle = true,
 		showStatus = true,
 	},
 	tooltips = {
 		upgrade = true, -- over an item: better or worse for the branch you play
+		calculatedWeights = true, -- those weights calculated from your own figures (StatModel.lua), when they can be
 		reagents = true, -- over a crafting reagent: the professions that use it
+		sellPrice = true, -- over an item: what a merchant would give for it, wherever you are
 		enabled = true,
 		cursor = true,
 		icon = true,
@@ -141,22 +146,26 @@ local DEFAULTS = {
 		enabled = false,
 		alpha = 20,
 		delay = 4,
-		combatOnly = true,
+		-- faded out of a fight even with a target: asked for (on by default before the ways to play; a saved profile keeps its own)
+		combatOnly = false,
 	},
 	merchant = {
 		sellJunk = true,
 		repair = true,
 		guildRepair = false,
 		repairReminder = true, -- back in town with worn equipment: a smith would be welcome
+		provisions = true, -- what you buy again and again, offered at merchants when low (bought on a click only)
 	},
 	loot = {
 		fast = true,
+		feed = true, -- what you pick up, one line each at the side of the screen (LootFeed.lua)
+		feedQuality = 1, -- the least quality shown (quest items always)
+		feedMoney = true,
+		feedReceived = true, -- quest rewards and purchases too
+		feedTime = 4, -- seconds each line stays (an epic thing longer)
 	},
 	trainer = {
 		learnAll = true,
-	},
-	session = {
-		breakEvery = 0, -- minutes, 0: never
 	},
 	sounds = {
 		enabled = true,
@@ -168,12 +177,20 @@ local DEFAULTS = {
 		splash = false, -- the music and the ambience lowered while the line is in the water
 	},
 	crafts = {
-		skillUps = true, -- a short notice for the points gained in a profession
+		skillUps = false, -- a short notice for the points gained in a profession (the game says it in the chat)
+		gatherReach = true, -- a notice when a new gathering rank lets you gather something new
+		ceiling = true, -- a profession at its ceiling: a trainer teaches the next rank (information)
 	},
 	gestures = {
 		read = false, -- automations: off until the player asks
 		levelUp = false,
 		greet = false,
+		sitAtFire = true, -- a click on a campfire seats you by it
+	},
+	hands = { -- what the game makes you do by hand, done for you: off until asked
+		easyDestroy = false, -- destroying an item without typing the word
+		bagsClosed = false, -- the bags no longer open by themselves for the game's windows
+		standUp = false, -- stand up or dismount when an action is refused for it
 	},
 	travel = {
 		enabled = true,
@@ -190,30 +207,68 @@ local DEFAULTS = {
 		show = "own", -- the game's damage meter: "own" (the game's own setting), "on" or "off" (the dungeons' profile: on)
 		look = "game", -- "game" (as it is) or "text" (text only)
 	},
+	dots = {
+		enabled = false, -- what your damage over time will still deal: asked for
+		mark = true, -- and the skull on the portrait, whole when they will finish it
+		target = true, -- on your target's frame
+		focus = true, -- on your focus's frame
+		tot = true, -- on your target's target
+		plates = true, -- on the nameplates
+	},
+	hots = {
+		enabled = false, -- what your heals over time will still heal: asked for
+		mark = true, -- and the plus that fills up, whole when they will be topped
+		player = true, -- on your own frame
+		group = true, -- on the party frames and the game's group and raid frames
+		target = true, -- on your target and focus, when friendly
+		plates = true, -- on friendly nameplates
+	},
+	-- The unit frames in Wanderer's look (UnitFrames.lua, Portraits.lua): on, as the user's own main plays them
+	-- (validated in game 2026-11-07; off in a click, offered again at the welcome); the values below are the look "Ink lines".
+	unitFrames = {
+		enabled = true,
+		health = "class", -- "class" (players) and attitude (creatures), "gradient", "one", "classic"
+		texture = "flat", -- "smooth", "clean" (flat, a hint of light on top), "flat", "classic"
+		ground = "dark", -- behind the missing part: "dark", "faded" (the bar's colour, dimmed), "classic"
+		power = "wanderer", -- "wanderer" (softer hues) or "game"
+		art = "lines", -- the frames' metal: "game" or "lines" (gone, a fine ink line instead)
+		texts = "wanderer", -- the values and names: "wanderer" (narrow numbers, Wanderer's font) or "game"
+		ring = "gold", -- around the portraits: "off", "class" (and attitude), "gold" (yours gold, the others by class)
+		badge = "others", -- a class badge on players' faces: "off", "others", "all"
+		iconStyle = "ink", -- the class icons: "game", "classic", "ink"
+		greyDead = true, -- dead, ghost or offline: the portrait greyed
+		thickness = "medium", -- the Ink lines block: "fine" (the game's), "medium", "thick" (ElvUI-like)
+		lowHealth = true, -- your health and your party's turn to a deep red below 35 % (full at 20 %)
+		castInBlock = true, -- Ink lines: your cast bar (and your target's) under the block, the game's unseen meanwhile
+		shortNumbers = false, -- large values as 12.3k (what is shown stays the game's choice)
+		quarterMarks = false, -- fine marks at a quarter, half and three quarters of the health
+		colourBlind = false, -- blue and orange instead of green and red
+		wanderer = true, -- Wanderer's own bars and portraits (the label, its casts, the scenes) follow the look
+		show = { player = "game", target = "game", party = "game", tot = "game" }, -- "game", "face" or "icon"
+		frames = { player = true, target = true, focus = true, tot = true, pet = true, party = true, group = true, boss = true,
+			castBars = true },
+	},
+	sparkles = {
+		nodes = false, -- the game's gathering icon over the herb or vein you come near: asked for
+		questObjects = false, -- and over quest objects: asked for
+	},
+	emotes = {
+		enabled = false, -- the emote bar: asked for
+	},
 	threat = {
 		show = true, -- in groups and dungeons only
 		alert = true, -- in dungeons and raids, for the one holding the monsters
 	},
-	messages = {
-		enabled = false, -- private messages in their own window: asked for
-		popup = true, -- the window opens on a new message (never in a fight)
-		hideInChat = true, -- and the chat no longer shows them
-		sound = true, -- the game's own whisper sound, which the chat no longer plays for them
-	},
-	chat = {
-		group = true, -- which tabs "Create the chat tabs" makes
-		arrowHistory = true, -- Up and Down bring back your sent messages, kept between sessions
-		copyButton = true, -- a discreet copy button in the corner of the chat
-		keepLog = true, -- each tab keeps its last lines from one session to the next
-		links = true, -- web addresses in the chat become links, ready to copy
-		fontSize = 16, -- every chat window at this size (the game sets it one by one)
-		guild = true,
-		whispers = true,
-	},
 	scene = {
 		enabled = true,
-		camera = true,
-		textSize = 15,
+		camera = true, -- closer to the character you talk to (conversations and quests)
+		cameraShops = false, -- also at merchants, trainers, bankers, flight masters, auction houses: asked for
+		cameraFrame = false, -- the character framed (a hidden setting of the game, which warns): asked for
+		textSize = 16,
+		hush = false, -- the music and the ambience lowered while a scene is shown
+		parchment = false, -- the scene and the reading window on parchment
+		reader = true, -- books, plaques and letters in Wanderer's reading window
+		bgOpacity = 90, -- the panel's background, %
 	},
 	quest = {
 		tags = true, -- elite and group quests said in their scene and in a character's list
@@ -227,15 +282,19 @@ local DEFAULTS = {
 		acceptInvites = false,
 		acceptResurrect = false,
 		acceptSummon = false,
+		inviteOnWord = false, -- a whisper made of one word brings its sender into your group
+		inviteWord = "",
 	},
 	bars = {
-		border = 100, -- the frame around each action button, % (100: as the game draws it, 0: gone)
-		background = 100, -- the background of each slot, %
+		border = 15, -- the frame around each action button, % (100: as the game draws it, 0: gone)
+		background = 45, -- the background of each slot, %
 	},
 	world = {
 		threshold = true, -- at a dungeon's door: your quests there, your worn equipment
+		townCard = true, -- arriving in a town or an inn: what waits there, in one notice (information)
 		actionCam = false,
-		filterErrors = true,
+		calmMotion = false, -- no camera moved by Wanderer, its pieces fade without moving: asked for
+		filterErrors = false, -- the red messages repeated in fights, filtered: asked for
 		hideTalkingHead = false,
 		cleanMinimap = false, -- the game's frames as they are, until asked
 		-- Wanderer's looks: the quest tracker, the minimap, the bar (offered at the welcome; off until asked).
@@ -244,8 +303,10 @@ local DEFAULTS = {
 		bar = false,
 		cleanTracker = false,
 		gatherIcons = false, -- other addons' buttons: left alone until asked
+		layer = true, -- your layer: one line over the zone's name, never on the screen
+		lootSparkle = false, -- the game's sparkle on quest items kept through the graphics presets: asked for
 		editLayout = "", -- "": the game's Edit Mode layout is left alone
-		moveFrames = false, -- the game's windows where the game puts them, until asked
+		moveFrames = true, -- the game's windows moved where you drop them (kept)
 	},
 }
 ns.DEFAULTS = DEFAULTS
@@ -257,6 +318,73 @@ ns.DEFAULTS = DEFAULTS
 -- with the same engine (Skin) as every Wanderer window.
 ns.EXTENSIONS = {}
 
+-- An extension's launcher in the menu and the bar, while it is on: spec.launcher = { label (a text, or a
+-- function giving it), open, shown() (false: not offered now), attention() (true: something waits there),
+-- count() (a number shown beside it, 0: none), summary() (up to 3 lines { text, role } said on hover) }.
+function ns.LauncherOf(extension)
+	local launcher = extension.launcher
+	if type(launcher) ~= "table" or not (launcher.label and launcher.open) then return nil end
+	local settings = ns.db and ns.db[extension.key]
+	if type(settings) == "table" and settings.enabled == false then return nil end
+	if type(launcher.shown) == "function" and not launcher.shown() then return nil end
+	local label = launcher.label
+	if type(label) == "function" then label = label() end
+	return { label = label, open = launcher.open, attention = type(launcher.attention) == "function" and launcher.attention or nil,
+		count = type(launcher.count) == "function" and launcher.count or nil,
+		summary = type(launcher.summary) == "function" and launcher.summary or nil, extension = extension }
+end
+
+-- What a launcher says on hover: up to 3 lines { text, role } (its summary failing or empty: none).
+function ns.LauncherSummary(launcher)
+	if not (launcher and launcher.summary) then return {} end
+	local ok, lines = pcall(launcher.summary)
+	local list = {}
+	if not (ok and type(lines) == "table") then return list end
+	for _, line in ipairs(lines) do
+		if type(line) == "string" then line = { text = line } end
+		if type(line) == "table" and type(line.text or line[1]) == "string" and #list < 3 then
+			list[#list + 1] = { text = line.text or line[1], role = line.role or line[2] }
+		end
+	end
+	return list
+end
+
+-- A launcher's count (0: none; failing: none).
+function ns.LauncherCount(launcher)
+	if not (launcher and launcher.count) then return 0 end
+	local ok, count = pcall(launcher.count)
+	return ok and tonumber(count) or 0
+end
+
+-- Something waits in an extension's window (the minimap button says it).
+function ns.LaunchersWaiting()
+	for _, extension in ipairs(ns.EXTENSIONS) do
+		local launcher = ns.LauncherOf(extension)
+		if launcher and launcher.attention and launcher.attention() then return true end
+	end
+	return false
+end
+
+-- A piece of Wanderer's saved data an extension keeps itself now, handed over once and gone from here
+-- (byCharacter: this character's part of a table kept by character).
+function ns.MoveOut(name, byCharacter)
+	local root = ns.root
+	if not root or root[name] == nil then return nil end
+	if not byCharacter then
+		local value = root[name]
+		root[name] = nil
+		return value
+	end
+	if type(root[name]) ~= "table" then return nil end
+	local key = ns.CharacterKey()
+	local value = root[name][key]
+	root[name][key] = nil
+	if next(root[name]) == nil then root[name] = nil end
+	return value
+end
+
+-- spec: { key, addon, title, defaults, ranges, options, launcher, takes }. takes = { job = function() return on end }:
+-- the jobs it does in Wanderer's place while on() says so (Compat.lua: Wanderer's option greyed, "Done by" it).
 local function RegisterExtension(spec)
 	if type(spec) ~= "table" or type(spec.key) ~= "string" or DEFAULTS[spec.key] then return false end
 	ns.EXTENSIONS[#ns.EXTENSIONS + 1] = spec
@@ -265,58 +393,135 @@ local function RegisterExtension(spec)
 	-- The active profile gets them now; the others when they are chosen.
 	if ns.db then
 		ns.db[spec.key] = type(ns.db[spec.key]) == "table" and ns.db[spec.key] or {}
-		for key, value in pairs(DEFAULTS[spec.key]) do
-			if type(ns.db[spec.key][key]) ~= type(value) then ns.db[spec.key][key] = value end
-		end
+		ns.Sanitize(DEFAULTS[spec.key], ns.db[spec.key], spec.key)
 	end
 	return true
 end
 
 _G.Wanderer = setmetatable({
 	-- What the extensions may count on: 2 = the reagents, the junk rules and sales, the links, the bags' ids;
-	-- 3 = the reminders (a line added, known, the window opened); 4 = the shared pieces (Skin: Kit.lua;
+	-- 3 = the reminders (a line added, known); 4 = the shared pieces (Skin: Kit.lua;
 	-- Util: items, the map, time) and the extensions' own setup (Locale, WhenLoaded); 5 = the reagents' table,
 	-- an area's name, an item's levels and its count with the bank, the check box; 6 = what you play (chosen,
-	-- kept per character), the dropdown, a comparison changed.
-	API = 6,
+	-- kept per character), the dropdown, a comparison changed; 7 = the account's characters; 8 = the class color,
+	-- money in letters, a signal, a tooltip of lines, a game window set aside, the comparison's switch; 9 = a button
+	-- in the game's own look, your talent tree, the merchants' purchases (Util), the items an extension buys itself;
+	-- 10 = the chat's moving out (saved data handed over, the copy window, the scenes, the launchers' counts);
+	-- 11 = what the NPCs offered and asked for (QuestOffers); 12 = the creatures dropping quest items (QuestUnitDrops);
+	-- 13 = the world's levels (ZoneLevels); the town card's lines (TownLine), notices taking a click (Toast);
+	-- 14 = the jobs an extension does in Wanderer's place (spec.takes), the characters' window lines (CharacterLine),
+	-- the options' Needs, the launchers' summary and count, the settings cog of a window's heading (Skin.Header);
+	-- 15 = Util.AfterFight, Util.Try, Util.ShownPlates, Util.LearnServices, Util.HasFishingPole, Skin.FitScale,
+	-- Skin.GlyphText, Skin.ProgressLine, Skin.UnitBar, OpenOptions, RemoveTodo, HasFishingPole, SetPortrait, the shared word PIN_FAILED,
+	-- Skin.ShowTip, Skin.KeyListener, Skin.LineHeight, the dropdown's tip, Skin.Ask's strata, Skin.Tabs SetList, OnCharacterForgotten;
+	-- 16 = Util.ChatInsert, the job "trackerLook" an extension may take (spec.takes); 17 = ChangeEverywhere.
+	API = 17,
+	-- A place's levels and fishing (ZoneData.lua): by its area id, or by its map (onMap); no id: the whole list.
+	ZoneLevels = function(id, onMap) return ns.ZoneLevels and ns.ZoneLevels(id, onMap) end,
 	RegisterExtension = RegisterExtension,
+	-- What each NPC talked to offered or asked for, as Wanderer remembers it: npc id -> { offers = { quest id = true },
+	-- receives = { ... } } (read only).
+	QuestOffers = function() return ns.root and ns.root.questBook or {} end,
+	-- fn(npc id) -> the items that creature drops ({ item id, ... }) or nil: one your quests still ask you to carry
+	-- marks it as a quest objective, its line in the label.
+	QuestUnitDrops = function(fn) ns.QuestUnitDrops(fn) end,
 	Settings = function(key) return ns.db and ns.db.enabled and ns.db[key] or nil end,
+	-- change() writes in W.Settings(key): the same then in every profile of this character (its own and its
+	-- places'), as the options pages do. A window's own button or menu writing a setting goes through it. (API 17.)
+	ChangeEverywhere = function(change) if ns.db then ns.ChangeEverywhere(change) else change() end end,
+	-- The characters of this account Wanderer has met ({ key, name, realm, class, faction, level, money, seen, me },
+	-- the last seen first; others: without this one), this one's key, one let go.
+	Characters = function(others) return ns.Characters(others) or {} end,
+	CharacterKey = function() return ns.CharacterKey() end,
+	ForgetCharacter = function(key) ns.ForgetCharacter(key) end,
+	-- fn() called when a line is cast (the double click) without a fishing pole in hand, everything else
+	-- allowing it: an extension may put one in hand.
+	OnFishingNoPole = function(fn) ns.fishingNoPole = fn end,
+	-- A fishing pole in your main hand. (API 15, as Util.HasFishingPole,
+	-- Util.IsFishingSpell, Util.AfterFight, Util.Go's info and RemoveTodo.)
+	HasFishingPole = function() return ns.Util.HasFishingPole() end,
+	-- Your talent tree, read from the game: { nodes = { { id, branch, tier, column, spell, ranks, most, opens } },
+	-- names (the three branches) }, nil when the game says nothing.
+	TalentTree = function() return ns.TalentTree() end,
+	-- The characters' window.
+	ToggleCharacters = function() ns.ToggleCharacters() end,
+	-- Wanderer's settings window, at a page ("ext:chat"; nil: where it was). (API 15.)
+	OpenOptions = function(page) ns.OpenOptions(page) end,
+	-- Saved data Wanderer kept before an extension took it over: given once (see ns.MoveOut).
+	MoveOut = function(name, byCharacter) return ns.MoveOut(name, byCharacter) end,
+	-- A chat window's lines as plain text, ready to copy (nil: the tab shown).
+	CopyChat = function(frame) ns.CopyChat(frame) end,
+	-- The Wanderer tab of the chat (diagnostic mode): its window's number.
+	IsDebugTab = function(index) return ns.IsDebugTab(index) end,
+	-- A conversation scene shown (the words of a character, face to face).
+	InScene = function() return ns.sceneActive and true or false end,
+	-- Another addon doing one of Wanderer's jobs now ("sellJunk", "fastLoot"... see Compat.lua): its name, else
+	-- nil; and the muted line for an option left to it.
+	-- A portrait of Wanderer's look (texture, unit, where): a face, or the class icon in the unit frames' style when
+	-- the game (or the player's exception) shows one there; true when an icon. W.Skin.UnitBar(bar, look, r, g, b): a bar
+	-- in the unit frames' look. (API 15.)
+	SetPortrait = function(texture, unit, where) return ns.SetPortrait(texture, unit, where) end,
+	Yields = function(feature) return ns.Yields(feature) end,
+	YieldText = function(feature) return ns.YieldText(feature) end,
+	-- fn(info) -> a line under the reading window's title, or nil (info: title, item, creator, object, zone...).
+	ReaderNote = function(fn) ns.ReaderNote(fn) end,
+	-- A change that only takes effect after a reload (reason: a few words): the menu's Reload says it.
+	NeedReload = function(reason) ns.NeedReload(reason) end,
+	-- The extensions' launchers drawn again (a count changed: the menu, the bar, the minimap button).
+	RefreshLaunchers = function() ns.RefreshMinimapButton() end,
+	-- Whether gear is judged for your branch at all (the tooltips' setting).
+	ComparisonOn = function()
+		return ns.db and ns.db.enabled and ns.db.tooltips.upgrade and not (ns.Yields and ns.Yields("upgradeArrows")) and true or false
+	end,
 	Util = ns.Util,
 	Print = function(text) ns.Print(text) end,
 	-- What an item is worth to you: { text, r, g, b } lines, the first one the best.
-	UpgradeLines = function(link) return ns.UpgradeLines and ns.UpgradeLines(link) or {} end,
-	IsUpgrade = function(link) return ns.IsUpgrade and ns.IsUpgrade(link) or false end,
+	UpgradeLines = function(link) return ns.UpgradeLines(link) or {} end,
+	IsUpgrade = function(link) return ns.IsUpgrade(link) or false end,
 	-- How much better for your branch (a percentage), nil when it is not.
-	UpgradeGain = function(link) if ns.UpgradeGain then return ns.UpgradeGain(link) end end,
+	UpgradeGain = function(link) return ns.UpgradeGain(link) end,
 	-- What you play (chosen by you, kept for each character): the choices of your class { id, label }, the one
 	-- chosen (nil: none yet), or a new one chosen (id).
-	PlayChoices = function() return ns.PlayChoices and ns.PlayChoices() or {} end,
-	PlayChoice = function(id) if ns.PlayChoice then return ns.PlayChoice(id) end end,
-	-- fn() called when a comparison changed (a weight, a scale, what you play, your talents).
+	PlayChoices = function() return ns.PlayChoices() or {} end,
+	PlayChoice = function(id) return ns.PlayChoice(id) end,
 	-- A quest level's color, as the quest log colors it: r, g, b.
 	QuestLevelColor = function(level) return ns.World.LevelColor(level, true) end,
-	OnComparisonChanged = function(fn) if ns.OnComparisonChanged then ns.OnComparisonChanged(fn) end end,
+	-- fn() called when a comparison changed (a weight, a scale, what you play, your talents).
+	OnComparisonChanged = function(fn) ns.OnComparisonChanged(fn) end,
 	-- Gear your class can wear: true or false (nil: not gear).
-	CanWear = function(link) if ns.CanWear then return ns.CanWear(link) end end,
+	CanWear = function(link) return ns.CanWear(link) end,
 	-- Who uses a crafting reagent: { { name, mine, alt, count } }, see Reagents.lua.
-	ReagentUses = function(item) return ns.ReagentUses and ns.ReagentUses(item) or {} end,
+	ReagentUses = function(item) return ns.ReagentUses(item) or {} end,
 	-- Every crafting reagent known (item id -> the professions using it, as bits) and those bits by name.
-	Reagents = function() return ns.REAGENT_PROFESSIONS or {}, ns.REAGENT_BITS or {} end,
-	-- At a merchant: what is junk (rule(item id, quality) -> true, false or nil), selling a list of { bag, slot, id }.
-	AddJunkRule = function(rule) if ns.AddJunkRule then ns.AddJunkRule(rule) end end,
-	SellItems = function(items) return ns.SellItems and ns.SellItems(items) or false end,
+	Reagents = function() return ns.REAGENT_PROFESSIONS, ns.REAGENT_BITS end,
+	-- At a merchant: what is junk (rule(item id, quality) -> true, false, "ask" (sold on a click only) or nil),
+	-- selling a list of { bag, slot, id }.
+	AddJunkRule = function(rule) ns.AddJunkRule(rule) end,
+	-- (this Wanderer understands "ask": an item then waits for a click, never sold by itself)
+	JUNK_ASK = true,
+	-- rule(item id) -> true: an extension buys that item itself at merchants (the provisions leave it to it).
+	AddBuyRule = function(rule) ns.AddBuyRule(rule) end,
+	SellItems = function(items) return ns.SellItems(items) or false end,
 	-- The junk of your bags as the rules say ({ bag, slot, id }).
-	FindJunk = function() return ns.FindJunk and ns.FindJunk() or {} end,
-	IsMerchantOpen = function() return ns.IsMerchantOpen and ns.IsMerchantOpen() or false end,
-	IsSellingJunk = function() return ns.IsSellingJunk and ns.IsSellingJunk() or false end,
+	FindJunk = function() return ns.FindJunk() or {} end,
+	IsMerchantOpen = function() return ns.IsMerchantOpen() or false end,
+	IsSellingJunk = function() return ns.IsSellingJunk() or false end,
 	-- An item one of your quests asks you to carry: { quest, have, need }, else nil (Quests.lua).
-	QuestNeed = function(item) if ns.QuestNeed then return ns.QuestNeed(item) end end,
-	-- The reminders: a line added (see Todo.lua), one known by its key, the window opened.
-	AddTodo = function(text, opts) if ns.AddTodo then return ns.AddTodo(text, opts) end return false end,
-	HasTodo = function(key) return ns.HasTodo and ns.HasTodo(key) or false end,
+	QuestNeed = function(item) return ns.QuestNeed(item) end,
+	-- The reminders: a line added (see Todo.lua), one known by its key.
+	AddTodo = function(text, opts) return ns.AddTodo(text, opts) end,
+	HasTodo = function(key) return ns.HasTodo(key) or false end,
+	RemoveTodo = function(key) return ns.RemoveTodo(key) or false end,
 	-- A short notice at the top of the screen (Toast.lua): a title, a few words.
-	Toast = function(title, text, options) if ns.Toast then ns.Toast(title, text, options) end end,
-	OpenTodo = function() if ns.ToggleTodo and not (ns.TodoShown and ns.TodoShown()) then ns.ToggleTodo() end end,
+	Toast = function(title, text, options) ns.Toast(title, text, options) end,
+	-- fn() -> { text, onClick, hint } or nil: a line of the card shown on arriving in a town or an inn (Town.lua);
+	-- key ("trainer", "shopping", "mail"...): one line of that kind, a new provider taking its place.
+	TownLine = function(fn, key) ns.TownLine(fn, key) end,
+	-- fn(character key) -> { text, r, g, b, chip } or nil: a line of that character in the characters' window (its
+	-- hover; chip: a few words on its row when it is urgent); key ("mail"...): one line of that kind.
+	CharacterLine = function(fn, key) ns.CharacterLine(fn, key) end,
+	-- fn(character key) called when a character is forgotten (its window's Forget): let go of what you keep for it.
+	OnCharacterForgotten = function(fn) ns.OnCharacterForgotten(fn) end,
 	-- An extension's words: its languages' tables ({ enUS = {...}, frFR = {...} }, the client's added by its own
 	-- file, loaded after); a word it lacks in English, then Wanderer's words shared by every addon (OPEN, SELL...),
 	-- else the key itself. esMX reads esES when it has none.
@@ -324,7 +529,7 @@ _G.Wanderer = setmetatable({
 		local client = GetLocale and GetLocale() or "enUS"
 		return setmetatable({}, { __index = function(_, key)
 			local here = tables[client] or (client == "esMX" and tables.esES) or nil
-			return here and here[key] or (tables.enUS or {})[key] or rawget(ns.L, key) or key
+			return here and here[key] or (tables.enUS or {})[key] or ns.L[key] or key
 		end })
 	end,
 	-- An addon's start, once its own files are loaded (its saved variables with them).
@@ -352,12 +557,13 @@ ns.RANGES = {
 	["label.offset"] = { 0, 80, 2 },
 	["label.padding"] = { 0, 20, 1 },
 	["label.bgOpacity"] = { 0, 100, 5 },
+	["label.textScale"] = { 0.9, 1.3, 0.05 },
 	["cinema.alpha"] = { 0, 80, 5 },
 	["cinema.delay"] = { 1, 15, 1 },
 	["bars.border"] = { 0, 100, 5 },
 	["bars.background"] = { 0, 100, 5 },
 	["scene.textSize"] = { 12, 22, 1 },
-	["chat.fontSize"] = { 10, 24, 1 },
+	["scene.bgOpacity"] = { 30, 100, 5 },
 }
 local function Keys(list, field)
 	local keys = {}
@@ -366,6 +572,11 @@ local function Keys(list, field)
 end
 local CHOICES = {
 	["preset"] = function() return ns.PRESET_ORDER end,
+	["playstyle"] = function()
+		local list = { "" }
+		for _, key in ipairs(ns.PLAYSTYLE_ORDER or {}) do list[#list + 1] = key end
+		return list
+	end,
 	["revealMode"] = function() return { "hold", "toggle" } end,
 	["nearNames.show"] = function() return { "bar", "name" } end,
 	["enemyNames"] = function() return ns.ENEMY_NAMES end,
@@ -377,6 +588,13 @@ local CHOICES = {
 	["meter.show"] = function() return { "own", "on", "off" } end,
 	["meter.look"] = function() return { "game", "text" } end,
 }
+-- (the unit frames' choices: UnitFrames.lua)
+for _, field in ipairs({ "health", "texture", "ground", "power", "art", "texts", "ring", "badge", "iconStyle", "thickness" }) do
+	CHOICES["unitFrames." .. field] = function() return ns.UF_CHOICES and ns.UF_CHOICES[field] or {} end
+end
+for _, row in ipairs({ "player", "target", "party", "tot" }) do
+	CHOICES["unitFrames.show." .. row] = function() return { "game", "face", "icon" } end
+end
 for _, zone in ipairs(ns.ZONES) do CHOICES["zones." .. zone] = function() return ns.ZONE_CHOICES end end
 
 local function IsAllowed(path, value)
@@ -412,12 +630,7 @@ end
 
 local DEFAULT_PROFILE = "Default"
 
-local function DeepCopy(t)
-	if type(t) ~= "table" then return t end
-	local copy = {}
-	for k, v in pairs(t) do copy[k] = DeepCopy(v) end
-	return copy
-end
+local DeepCopy = ns.Util.Copy
 
 -- In diagnostic mode, in the Wanderer chat tab (only Wanderer's lines there).
 function ns.Print(msg)
@@ -458,6 +671,109 @@ end
 -- A setting changed for a moment (camera): never left as an unknown value.
 ns.WriteCVar = WriteCVar
 
+-- The music and the ambience lowered for a while (a line in the water, a scene), given back after. One
+-- snapshot of your values and a share for each reason: the smallest share held applies, the values come back
+-- once no reason is left. Kept in the saved variables, so they come back at the next login after a crash.
+-- What Wanderer wrote is kept too: a volume found at another value was moved meanwhile (by you, or by another
+-- addon lowering it for its own reason), so it is yours again and never written over. Each change fades in
+-- half a second.
+local VOLUME_CVARS = { "Sound_MusicVolume", "Sound_AmbienceVolume" }
+local VOLUME_FADE = 0.5 -- seconds
+local VOLUME_STEPS = 10
+local SAME_VOLUME = 0.005
+local fades = {} -- cvar -> its fade under way
+local fadeTargets = {} -- cvar -> where that fade goes
+local fadeWriters = {} -- cvar -> how that fade writes (its last word kept with the snapshot)
+
+local function VolumeText(value)
+	return tostring(math.floor(value * 1000 + 0.5) / 1000)
+end
+
+local function SameVolume(a, b)
+	a, b = tonumber(a), tonumber(b)
+	return a ~= nil and b ~= nil and math.abs(a - b) < SAME_VOLUME
+end
+
+local function StopFade(cvar)
+	if fades[cvar] then fades[cvar]:Cancel() end
+	fades[cvar], fadeTargets[cvar], fadeWriters[cvar] = nil, nil, nil
+end
+
+-- Leaving the game (logout, reload) in the middle of a fade: each volume written where it was going at once.
+function ns.FinishVolumeFades()
+	for cvar in pairs(fades) do
+		local target, write = fadeTargets[cvar], fadeWriters[cvar]
+		StopFade(cvar)
+		if target and write then write(target) end
+	end
+end
+
+-- One volume brought to a value, step by step (written: Wanderer's last word for each, kept with the snapshot).
+local function FadeVolume(cvar, target, written)
+	StopFade(cvar)
+	local from = tonumber(ns.Util.Safe(GetCVar, cvar)) or target
+	local function Write(value)
+		local text = VolumeText(value)
+		WriteCVar(cvar, text)
+		written[cvar] = text
+	end
+	if math.abs(from - target) < SAME_VOLUME or not (C_Timer and C_Timer.NewTicker) then return Write(target) end
+	local step = 0
+	fadeTargets[cvar] = target
+	fadeWriters[cvar] = Write
+	fades[cvar] = C_Timer.NewTicker(VOLUME_FADE / VOLUME_STEPS, function()
+		-- Moved by someone else on its way: theirs.
+		if written[cvar] and not SameVolume(ns.Util.Safe(GetCVar, cvar), written[cvar]) then return StopFade(cvar) end
+		step = step + 1
+		Write(from + (target - from) * step / VOLUME_STEPS)
+		if step >= VOLUME_STEPS then StopFade(cvar) end
+	end, VOLUME_STEPS)
+end
+
+local function ApplyVolumes(root)
+	local share
+	for _, held in pairs(root.volumeShares or {}) do share = math.min(share or 1, held) end
+	root.volumesWritten = type(root.volumesWritten) == "table" and root.volumesWritten or {}
+	local written = root.volumesWritten
+	for cvar, value in pairs(root.volumes or {}) do
+		local now = ns.Util.Safe(GetCVar, cvar)
+		if written[cvar] and not fades[cvar] and not SameVolume(now, written[cvar]) then
+			-- Changed since Wanderer wrote it: left as it is, and no longer Wanderer's to give back.
+			root.volumes[cvar], written[cvar] = nil, nil
+		elseif tonumber(value) then
+			FadeVolume(cvar, share and tonumber(value) * share or tonumber(value), written)
+		end
+	end
+	if not share then root.volumes, root.volumeShares, root.volumesWritten = nil, nil, nil end
+end
+function ns.LowerVolumes(key, share)
+	local root = ns.root
+	if not root then return end
+	if not root.volumes then
+		root.volumes = {}
+		for _, cvar in ipairs(VOLUME_CVARS) do
+			-- (a value still coming back: where it goes is yours)
+			local value = fadeTargets[cvar] or tonumber(ns.Util.Safe(GetCVar, cvar))
+			if value then root.volumes[cvar] = VolumeText(value) end
+		end
+	end
+	root.volumeShares = root.volumeShares or {}
+	root.volumeShares[key] = share
+	ApplyVolumes(root)
+end
+function ns.RestoreVolumes(key)
+	local root = ns.root
+	if not root then return end
+	-- (an older version kept the values under the reason's own key)
+	if type(root[key]) == "table" then
+		for cvar, value in pairs(root[key]) do WriteCVar(cvar, value) end
+		root[key] = nil
+	end
+	if not (root.volumeShares and root.volumeShares[key]) then return end
+	root.volumeShares[key] = nil
+	ApplyVolumes(root)
+end
+
 -- The game warns when one of its hidden ("test_") settings is changed, and
 -- asks again after every reload. Once you have accepted it (the settings
 -- Wanderer wrote stayed on), Wanderer closes it by itself from then on; refusing it
@@ -495,14 +811,13 @@ if StaticPopup_Show then
 	end)
 end
 
--- Other variables Wanderer drives: name -> value wanted by the profile, or nil
--- to leave the player's own.
 -- Above every head: the nameplates the label needs, out of instances (the
 -- game keeps the plates of allies to itself there). Plates.lua keeps the ones
 -- Wanderer turned on invisible.
 local function AllHeads(db)
 	local zone = ns.zone or "world"
 	return db.label.allHeads and db.label.anchor == "head" and zone ~= "dungeon" and zone ~= "raid" and zone ~= "pvp"
+		and not (ns.Yields and ns.Yields("nameplates")) -- (another addon's plates: left to it)
 end
 
 -- In instances the health bars are the player's own choice (the game's
@@ -527,6 +842,20 @@ local function NearNames(db)
 	return db.enemyNames == "near" and AllHeads(db) and not ns.inCombat
 end
 
+-- The game's loot sparkle on quest items: it only shows with the outline mode off, which the graphics presets
+-- turn on again (the option keeps it so). Touched only while the option is on: your values kept when it is
+-- switched on, given back when it is switched off; never otherwise.
+local SPARKLE_CVARS = {
+	outlineModeShowLootEffectWhenDisabled = "1", graphicsOutlineMode = "0", OutlineEngineMode = "0",
+	raidGraphicsOutlineMode = "0", RAIDOutlineEngineMode = "0",
+}
+
+local function ActionCam(db)
+	return db.world.actionCam and not (ns.Yields and ns.Yields("camera"))
+end
+
+-- Other variables Wanderer drives: name -> value wanted by the profile, or nil
+-- to leave the player's own.
 local MANAGED_CVARS = {
 	-- The enemies' plates themselves (V in the game): their names need them.
 	nameplateShowEnemies = function(db) return db.enemyNames == "near" and AllHeads(db) and "1" or nil end,
@@ -551,8 +880,6 @@ local MANAGED_CVARS = {
 	nameplateShowFriends = FriendlyPlates, -- its older name
 	nameplateShowFriendlyNPCs = function(db) return AllHeads(db) and "1" or nil end,
 	nameplateShowEnemyMinus = function(db) return AllHeads(db) and "1" or nil end,
-	-- Action camera (hidden settings of the game): pitch following the ground,
-	-- camera slightly over the shoulder.
 	-- The game's damage meter, shown or not by the profile (the dungeons': shown).
 	damageMeterEnabled = function(db)
 		local show = type(db.meter) == "table" and db.meter.show
@@ -560,34 +887,152 @@ local MANAGED_CVARS = {
 		if show == "off" then return "0" end
 		return nil
 	end,
-	test_cameraDynamicPitch = function(db) return db.world.actionCam and "1" or nil end,
-	test_cameraOverShoulder = function(db) return db.world.actionCam and "0.5" or nil end,
+	-- Action camera (hidden settings of the game): pitch following the ground,
+	-- camera slightly over the shoulder. (another addon driving the camera: yours, left to it)
+	test_cameraDynamicPitch = function(db) return ActionCam(db) and "1" or nil end,
+	test_cameraOverShoulder = function(db) return ActionCam(db) and "0.5" or nil end,
 }
 
--- Remember the player's own values so they can always be restored.
-local function Snapshot()
-	local original = {}
-	for _, cat in ipairs(ns.CATEGORIES) do
-		for _, cvar in ipairs(cat.cvars) do
-			if CVarExists(cvar) then original[cvar] = GetCVar(cvar) end
+local function ApplySparkle()
+	local db, root = ns.db, ns.root
+	if not (db and root) then return end
+	-- (another addon keeping the sparkle: left to it)
+	local other = ns.Yields("lootSparkle")
+	local on = db.enabled and db.world.lootSparkle and not other
+	if not (on or root.sparkleOriginal) then return end
+	if InCombatLockdown() then
+		pendingApply = true
+		return
+	end
+	if on then
+		root.sparkleOriginal = root.sparkleOriginal or {}
+		for cvar, value in pairs(SPARKLE_CVARS) do
+			if CVarExists(cvar) then
+				if root.sparkleOriginal[cvar] == nil then root.sparkleOriginal[cvar] = GetCVar(cvar) end
+				WriteCVar(cvar, value)
+			end
 		end
+	else
+		-- Your values back; the sparkle's own switch stays the other addon's.
+		for cvar, value in pairs(root.sparkleOriginal) do
+			if not (other and SPARKLE_CVARS[cvar] == "1") then WriteCVar(cvar, value) end
+		end
+		root.sparkleOriginal = nil
 	end
-	for cvar in pairs(MANAGED_CVARS) do
-		if CVarExists(cvar) then original[cvar] = GetCVar(cvar) end
-	end
-	ns.root.original = original
 end
 
-function ns.RestoreOriginal()
-	if not ns.root.original then return end
-	-- A setting the game refused (in a fight): kept to put back at the next
-	-- load, never mistaken for the player's own.
-	local refused = false
-	for cvar, value in pairs(ns.root.original) do
-		WriteCVar(cvar, value)
-		if CVarExists(cvar) and GetCVar(cvar) ~= value then refused = true end
+-- A graphics preset chosen while the sparkle is kept: kept again a moment later (after the fight).
+local sparkleWatch = CreateFrame("Frame")
+pcall(sparkleWatch.RegisterEvent, sparkleWatch, "CVAR_UPDATE")
+sparkleWatch:SetScript("OnEvent", function(_, _, name)
+	local db = ns.db
+	if not (db and db.enabled and db.world.lootSparkle and type(name) == "string") or ns.Yields("lootSparkle") then return end
+	for cvar, value in pairs(SPARKLE_CVARS) do
+		if cvar:lower() == name:lower() and ns.Util.Safe(GetCVar, cvar) ~= value then
+			C_Timer.After(1, ApplySparkle)
+			return
+		end
 	end
-	ns.root.dirty = refused
+end)
+
+-- The game's settings Wanderer drives (the names, the plates, the damage meter...), held like the volumes:
+-- ns.root.original keeps your own value of each (the one before Wanderer wrote it, else the one seen now),
+-- ns.root.cvarsWritten what Wanderer wrote (saved: after a crash, given back at the next load). A setting
+-- found at another value than Wanderer wrote was changed meanwhile (V for the plates, the damage meter's
+-- switch, the game's options, another addon): it is yours, never written over nor "given back". Wanderer
+-- writes it again only once what it wants changes (cvarsLeft: what it wanted then, for each character).
+local function SameValue(a, b)
+	if a == b then return true end
+	local x, y = tonumber(a), tonumber(b)
+	return x ~= nil and y ~= nil and math.abs(x - y) < 0.001
+end
+
+-- Saved before 0.46 (no record of what Wanderer wrote): every setting found away from the value kept as yours
+-- counted as Wanderer's, so it comes back (as it did then).
+local function AdoptOldSnapshot(root)
+	local written = {}
+	for cvar, value in pairs(type(root.original) == "table" and root.original or {}) do
+		local now = CVarExists(cvar) and GetCVar(cvar)
+		if now and not SameValue(now, value) then written[cvar] = now end
+	end
+	root.cvarsWritten = written
+end
+
+local function Held()
+	local root = ns.root
+	if root.cvarsWritten == nil then AdoptOldSnapshot(root) end
+	root.original = type(root.original) == "table" and root.original or {}
+	root.cvarsWritten = type(root.cvarsWritten) == "table" and root.cvarsWritten or {}
+	root.cvarsLeft = type(root.cvarsLeft) == "table" and root.cvarsLeft or {}
+	local key = ns.CharacterKey()
+	root.cvarsLeft[key] = type(root.cvarsLeft[key]) == "table" and root.cvarsLeft[key] or {}
+	return root.original, root.cvarsWritten, root.cvarsLeft[key]
+end
+
+-- Your value written back: false when the game refused it for now (in a fight).
+local function GiveBack(cvar, original, written)
+	local value = original[cvar]
+	if value ~= nil then
+		WriteCVar(cvar, value)
+		if not SameValue(GetCVar(cvar), value) then return false end
+	end
+	written[cvar] = nil
+	return true
+end
+
+local heldThisSession = {} -- cvar -> true once looked at since the game started (a /reload too)
+local clampedWish = {} -- cvar -> the wish the game kept within its limits (written then holds what it took)
+
+-- One setting as Wanderer wants it now (wish: a value, nil: yours). False when the game refused it.
+local function Hold(cvar, wish)
+	if not CVarExists(cvar) then return true end
+	local original, written, left = Held()
+	local now = GetCVar(cvar)
+	if written[cvar] ~= nil and not SameValue(now, written[cvar]) then
+		-- First look this session: the game did not keep Wanderer's value (a crash), nothing of yours there.
+		if heldThisSession[cvar] then left[cvar] = written[cvar] end
+		written[cvar] = nil
+	end
+	heldThisSession[cvar] = true
+	if written[cvar] == nil then original[cvar] = now end
+	if wish == nil then
+		left[cvar] = nil
+		if written[cvar] == nil then return true end
+		return GiveBack(cvar, original, written)
+	end
+	-- (changed by you while Wanderer wanted this same value: yours)
+	if left[cvar] ~= nil and SameValue(left[cvar], wish) then return true end
+	left[cvar] = nil
+	-- (this same wish already kept within the game's limits: nothing more to write)
+	if written[cvar] ~= nil and clampedWish[cvar] ~= nil and SameValue(clampedWish[cvar], wish) then return true end
+	WriteCVar(cvar, wish, true)
+	local after = GetCVar(cvar)
+	if not SameValue(after, wish) then
+		-- (kept within the game's own limits: the value it took is still Wanderer's to give back)
+		if after ~= nil and not SameValue(after, now) then
+			written[cvar], clampedWish[cvar] = after, wish
+			return true
+		end
+		return false
+	end
+	written[cvar], clampedWish[cvar] = wish, nil
+	return true
+end
+
+-- Every setting Wanderer wrote given back, unless changed since (yours already). One the game refused (in a
+-- fight) stays written down, given back at the next load.
+function ns.RestoreOriginal()
+	local original, written = Held()
+	local names = {}
+	for cvar in pairs(written) do names[#names + 1] = cvar end
+	for _, cvar in ipairs(names) do
+		if not CVarExists(cvar) or not SameValue(GetCVar(cvar), written[cvar]) then
+			written[cvar] = nil
+		else
+			GiveBack(cvar, original, written)
+		end
+	end
+	ns.root.dirty = next(written) ~= nil
 end
 
 -- Whether the game itself writes the name above this unit right now.
@@ -641,32 +1086,30 @@ function ns.Apply()
 	local db = ns.db
 	if not db then return end
 	-- The game's damage meter dressed (or given back its own look when Wanderer is off).
-	if ns.ApplyMeter then ns.ApplyMeter() end
+	ns.ApplyMeter()
+	-- The unit frames in Wanderer's look (or given back theirs).
+	if ns.ApplyUnitFrames then ns.ApplyUnitFrames() end
+	pendingApply = false
+	ApplySparkle()
 	if not db.enabled then
 		ns.RestoreOriginal()
 		return
 	end
-	-- Never write before the player's own values are remembered.
-	if not ns.root.original then Snapshot() end
 	local failed = false
 	for _, cat in ipairs(ns.CATEGORIES) do
 		local value = ShouldShowCategory(cat) and "1" or "0"
 		for _, cvar in ipairs(cat.cvars) do
-			if not WriteCVar(cvar, value) then failed = true end
+			if not Hold(cvar, value) then failed = true end
 		end
 	end
-	local original = ns.root.original
+	-- (nil wanted: yours, given back if Wanderer wrote it and you did not change it since)
 	for cvar, wanted in pairs(MANAGED_CVARS) do
-		-- Added after the snapshot was taken (older version): the current value
-		-- is still the player's own, Wanderer never wrote it.
-		if original and original[cvar] == nil and CVarExists(cvar) then original[cvar] = GetCVar(cvar) end
-		local own = wanted(db)
-		local value = own or (original and original[cvar])
-		if value and not WriteCVar(cvar, value, own ~= nil) then failed = true end
+		if not Hold(cvar, wanted(db)) then failed = true end
 	end
-	ns.root.dirty = true
-	-- Some variables may be locked during combat: retry afterwards.
-	pendingApply = failed and InCombatLockdown()
+	local _, written = Held()
+	ns.root.dirty = next(written) ~= nil
+	-- Some variables may be locked during combat: retry afterwards (the sparkle's own wait kept).
+	pendingApply = pendingApply or (failed and InCombatLockdown())
 end
 
 -- Profiles by place ------------------------------------------------------------
@@ -685,7 +1128,7 @@ end
 -- The profile this place calls for.
 local function WantedProfile()
 	local root = ns.root
-	local own = root.profileKeys[ns.CharacterKey()] or DEFAULT_PROFILE
+	local own = ns.ChosenProfile()
 	local byPlace = ns.PlaceProfiles()[ns.zone or "world"]
 	if byPlace and root.profiles[byPlace] then return byPlace end
 	return own
@@ -705,7 +1148,7 @@ function ns.UpdatePlaceProfile()
 	ns.SetProfile(wanted, true) -- quietly: the place speaks for itself
 end
 
--- One profile per kind of place, made from the current one, ready to adjust.
+-- One profile per kind of place, made from the character's own, ready to adjust.
 -- What each place asks of the interface. The minimap, the quests and the
 -- chat are never faded; the rest (portraits, action bars, menus, bags,
 -- experience) fades out of the way when it is not needed, and comes back at
@@ -715,7 +1158,7 @@ end
 --   fight even with a target (talking to a merchant brings nothing back).
 --   Open world: barely there while calm; a target brings everything back
 --   (cooldowns and range before a pull), a fight too.
---   Flights (travel mode, every place): everything fades but the chat.
+--   Flights (travel mode, every place): everything fades, the chat too (back under the mouse, or while typing).
 local PLACE_SETTINGS = {
 	dungeon = { enabled = false, combatOnly = false },
 	city = { enabled = false, combatOnly = true, alpha = 0, delay = 2 },
@@ -725,12 +1168,96 @@ local PLACE_SETTINGS = {
 local PLACE_METER = { dungeon = "on", city = "off", world = "off" }
 ns.PLACE_METER = PLACE_METER
 
+-- What a place's profile is made with for a setting (MakePlaceProfiles below); nil: a profile that is no
+-- place's of this character, or a setting the places leave alone.
+function ns.PlaceValue(path, profile)
+	if not (ns.root and type(ns.root.profiles) == "table") then return nil end
+	local map = ns.PlaceProfiles()
+	for zone, settings in pairs(PLACE_SETTINGS) do
+		if map[zone] and ns.root.profiles[map[zone]] == profile then
+			if path == "meter.show" then return PLACE_METER[zone] end
+			if path == "travel.enabled" then return true end
+			local key = path:match("^cinema%.(.+)$")
+			if key then return settings[key] end
+			return nil
+		end
+	end
+	return nil
+end
+
+-- A place's profile, this character's: the place, then the name of the character's own profile (its name
+-- while it has none).
+local function PlaceProfileName(zone)
+	local own = type(ns.root.ownProfile) == "table" and ns.root.ownProfile[ns.CharacterKey()]
+	return L["PLACE_PROFILE_" .. zone:upper()] .. " (" .. (own or ns.CharacterName()) .. ")"
+end
+
+-- A setting you change: the same in every profile of this character (its own and its places'), but what the
+-- places are for (the interface fading, travel, the damage meter), kept to the place where it was changed.
+-- Before, a change made in town went back on the road and the setting seemed not to hold.
+local PLACE_ONLY = { ["cinema.enabled"] = true, ["cinema.combatOnly"] = true, ["cinema.alpha"] = true,
+	["cinema.delay"] = true, ["travel.enabled"] = true, ["meter.show"] = true }
+function ns.ChangeEverywhere(change)
+	local active, before = ns.db, DeepCopy(ns.db)
+	change()
+	-- (a profile chosen, or no profile: nothing to carry)
+	if not (ns.root and ns.db == active and type(before) == "table") then return end
+	local others, seen = {}, { [active] = true }
+	local function Add(name)
+		local profile = name and ns.root.profiles[name]
+		if type(profile) == "table" and not seen[profile] then
+			seen[profile] = true
+			others[#others + 1] = profile
+		end
+	end
+	Add(ns.ChosenProfile())
+	for _, name in pairs(ns.PlaceProfiles()) do Add(name) end
+	if not others[1] then return end
+	local function Carry(now, was, keys)
+		for key, value in pairs(now) do
+			local path = {}
+			for index, part in ipairs(keys) do path[index] = part end
+			path[#path + 1] = key
+			local old = type(was) == "table" and was[key] or nil
+			if type(value) == "table" then
+				Carry(value, old, path)
+			elseif old ~= value and not PLACE_ONLY[table.concat(path, ".")] then
+				for _, profile in ipairs(others) do
+					local at = profile
+					for index = 1, #path - 1 do
+						if type(at[path[index]]) ~= "table" then at[path[index]] = {} end
+						at = at[path[index]]
+					end
+					at[path[#path]] = DeepCopy(value)
+				end
+			end
+		end
+		-- (a key removed, a line taken out of a list: removed there too)
+		if type(was) ~= "table" then return end
+		for key in pairs(was) do
+			if now[key] == nil then
+				local path = {}
+				for index, part in ipairs(keys) do path[index] = part end
+				path[#path + 1] = key
+				if not PLACE_ONLY[table.concat(path, ".")] then
+					for _, profile in ipairs(others) do
+						local at = profile
+						for index = 1, #path - 1 do at = type(at) == "table" and at[path[index]] or nil end
+						if type(at) == "table" then at[key] = nil end
+					end
+				end
+			end
+		end
+	end
+	Carry(active, before, {})
+end
+
 -- quiet: only made (or set again), nothing said or switched (the welcome's ways do it after).
 function ns.MakePlaceProfiles(quiet)
 	local map = ns.PlaceProfiles()
-	local source = ns.root.profileKeys[ns.CharacterKey()] or DEFAULT_PROFILE
+	local source = ns.ChosenProfile()
 	for _, zone in ipairs({ "world", "city", "dungeon" }) do
-		local name = L["PLACE_PROFILE_" .. zone:upper()]
+		local name = PlaceProfileName(zone)
 		if not ns.root.profiles[name] then ns.root.profiles[name] = DeepCopy(ns.root.profiles[source]) end
 		-- Made ready for the place (asked again: set again; the rest is yours).
 		local profile = ns.root.profiles[name]
@@ -747,8 +1274,16 @@ function ns.MakePlaceProfiles(quiet)
 	if quiet then return end
 	ns.UpdatePlaceProfile()
 	if ns.initialized then ns.RefreshAll() end
-	if ns.RefreshOptions then ns.RefreshOptions() end
+	ns.RefreshOptions()
 	ns.Print(L.MSG_PLACE_PROFILES_MADE)
+end
+
+-- The profiles by place let go for this character (the profiles themselves stay): its own profile everywhere.
+function ns.ClearPlaceProfiles()
+	local map = ns.PlaceProfiles()
+	for zone in pairs(map) do map[zone] = nil end
+	ns.UpdatePlaceProfile()
+	ns.RefreshOptions()
 end
 
 local function UpdateZone()
@@ -760,48 +1295,42 @@ local function UpdateZone()
 	end
 end
 
--- Refreshes every module after a settings change.
+-- Every module refreshed after a settings change, in this order (Wanderer's looks last: over what the
+-- discreet minimap and tracker give back).
+local REFRESH = { "RefreshOptions", "RefreshLabel", "RefreshMinimapButton", "RefreshCinema", "RefreshTooltips", "RefreshTrainer",
+	"RefreshScreen", "RefreshSounds", "RefreshScene", "RefreshClean", "RefreshIcons", "RefreshBarSlots", "RefreshGameFrames",
+	"RefreshTargetInfo", "RefreshPlates", "RefreshDots", "RefreshHots", "RefreshAway", "RefreshMinimapLook", "RefreshTrackerLook", "RefreshCrafts",
+	"RefreshCurtain", "RefreshLootFeed" }
+
+-- (one failing is reported, the others still refreshed)
 function ns.RefreshAll()
-	ns.Apply()
+	ns.Util.Try(ns.Apply)
 	for _, extension in ipairs(ns.EXTENSIONS) do
-		if extension.refresh then pcall(extension.refresh) end
+		if extension.refresh then ns.Util.Try(extension.refresh) end
 	end
-	if ns.RefreshOptions then ns.RefreshOptions() end
-	if ns.RefreshLabel then ns.RefreshLabel() end
-	if ns.RefreshMinimapButton then ns.RefreshMinimapButton() end
-	if ns.RefreshCinema then ns.RefreshCinema() end
-	if ns.RefreshTooltips then ns.RefreshTooltips() end
-	if ns.RefreshTrainer then ns.RefreshTrainer() end
-	if ns.RefreshScreen then ns.RefreshScreen() end
-	if ns.RefreshSounds then ns.RefreshSounds() end
-	if ns.RefreshScene then ns.RefreshScene() end
-	if ns.RefreshClean then ns.RefreshClean() end
-	if ns.RefreshIcons then ns.RefreshIcons() end
-	if ns.RefreshBarSlots then ns.RefreshBarSlots() end
-	if ns.RefreshChatComfort then ns.RefreshChatComfort() end
-	if ns.RefreshGameFrames then ns.RefreshGameFrames() end
-	if ns.RefreshMail then ns.RefreshMail() end
-	if ns.RefreshTargetInfo then ns.RefreshTargetInfo() end
-	if ns.RefreshPlates then ns.RefreshPlates() end
-	if ns.RefreshAway then ns.RefreshAway() end
-	-- (Wanderer's looks last: over what the discreet minimap and tracker give back)
-	if ns.RefreshMinimapLook then ns.RefreshMinimapLook() end
-	if ns.RefreshTrackerLook then ns.RefreshTrackerLook() end
+	for _, name in ipairs(REFRESH) do
+		if ns[name] then ns.Util.Try(ns[name]) end
+	end
 end
 
 function ns.SetPreset(preset)
 	local values = ns.PRESETS[preset]
 	if not values then return end
-	ns.db.preset = preset
-	for _, cat in ipairs(ns.CATEGORIES) do
-		ns.db.show[cat.key] = values[cat.key] and true or false
-	end
-	ns.db.label.enabled = preset ~= "all"
+	-- (as any setting you change: in every profile of this character, its places' too; /wanderer immersion too)
+	ns.ChangeEverywhere(function()
+		ns.db.preset = preset
+		for _, cat in ipairs(ns.CATEGORIES) do
+			ns.db.show[cat.key] = values[cat.key] and true or false
+		end
+		ns.db.label.enabled = preset ~= "all"
+	end)
 	ns.RefreshAll()
 end
 
+-- (the card's switch and /wanderer on, off, reset too: in every profile of this character, else Wanderer came
+-- back on in the next place)
 function ns.SetEnabled(enabled)
-	ns.db.enabled = enabled and true or false
+	ns.ChangeEverywhere(function() ns.db.enabled = enabled and true or false end)
 	-- Every module, so nothing of Wanderer stays active (e.g. its interaction key).
 	ns.RefreshAll()
 end
@@ -810,10 +1339,183 @@ end
 -- WandererDB = { profiles = { name = settings }, profileKeys = { character = name },
 --             original, dirty, questBook, minimap }
 
-function ns.CharacterKey()
+-- This character, as Wanderer keeps its own data: its identity in the game (WoW Forever's names have several
+-- words and its realm says nothing: two characters may share a first name). Before 0.45, its first name and
+-- realm (OldCharacterKey), moved once to the new key.
+local function OldCharacterKey()
 	local name = UnitName("player") or "?"
 	local realm = GetRealmName and GetRealmName() or "?"
 	return name .. " - " .. realm
+end
+function ns.CharacterKey()
+	return ns.Util.Clean(ns.Util.Safe(UnitGUID, "player")) or OldCharacterKey()
+end
+
+-- The tables kept by character (Characters.lua lets a forgotten one go from all of them). The chat's four
+-- stay until each character's part has gone to Wanderer Chat.
+ns.BY_CHARACTER = { "profileKeys", "placeProfiles", "welcomedBy", "characters", "chatHistory", "chatLog", "chatFontBefore",
+	"messages", "reagentsKnown", "todo", "playChoice", "provisions", "ownProfile", "mine", "cvarsLeft", "craftCeilings" }
+
+-- This character's name, as its own profile is called.
+function ns.CharacterName()
+	return ns.Util.Clean(ns.Util.FullName("player")) or ns.Util.Clean(ns.Util.Safe(UnitName, "player")) or "?"
+end
+
+-- Each character its own profile, named after it (a name taken: a number after it), made the first time it
+-- is needed: from the profile it shared until then (from), else Wanderer's defaults. Another profile, chosen
+-- by you, is shared on purpose.
+function ns.OwnProfile(from)
+	local root, key = ns.root, ns.CharacterKey()
+	root.ownProfile = type(root.ownProfile) == "table" and root.ownProfile or {}
+	local name = root.ownProfile[key]
+	if name and root.profiles[name] then return name end
+	local base = ns.CharacterName()
+	name = base
+	local number = 2
+	while root.profiles[name] do
+		name = base .. " " .. number
+		number = number + 1
+	end
+	root.profiles[name] = from and root.profiles[from] and DeepCopy(root.profiles[from]) or {}
+	root.ownProfile[key] = name
+	return name
+end
+
+-- The profile this character uses outside the places' own: the one chosen, else its own. Until 0.45, every
+-- character shared "Default" unless another was chosen: each takes its copy of it, once.
+function ns.ChosenProfile()
+	local root, key = ns.root, ns.CharacterKey()
+	local chosen = root.profileKeys[key]
+	local hasOwn = type(root.ownProfile) == "table" and root.ownProfile[key]
+	if chosen and root.profiles[chosen] and (chosen ~= DEFAULT_PROFILE or hasOwn) then return chosen end
+	if chosen == DEFAULT_PROFILE and not hasOwn and root.profiles[DEFAULT_PROFILE] then
+		ns.movedToOwn = true
+		return ns.OwnProfile(DEFAULT_PROFILE)
+	end
+	return ns.OwnProfile()
+end
+
+-- Until 0.45, the places' profiles had one name for every character: each takes this character's name, a
+-- copy when another character uses it too (a profile you chose for a place stays as chosen).
+local function OwnPlaceProfiles(root)
+	local key = ns.CharacterKey()
+	local map = type(root.placeProfiles) == "table" and root.placeProfiles[key]
+	if type(map) ~= "table" then return end
+	local made = {}
+	for zone, name in pairs(map) do
+		local shared = false
+		for _, place in ipairs({ "world", "city", "dungeon" }) do
+			if name == L["PLACE_PROFILE_" .. place:upper()] then shared = place end
+		end
+		if shared and root.profiles[name] then
+			made[name] = made[name] or PlaceProfileName(shared)
+			root.profiles[made[name]] = root.profiles[made[name]] or DeepCopy(root.profiles[name])
+			map[zone] = made[name]
+		end
+	end
+	-- (the old name used by no one else now: gone)
+	for name in pairs(made) do
+		local used = false
+		for _, places in pairs(root.placeProfiles) do
+			if type(places) == "table" then
+				for _, other in pairs(places) do used = used or other == name end
+			end
+		end
+		for _, chosen in pairs(root.profileKeys or {}) do used = used or chosen == name end
+		if not used then root.profiles[name] = nil end
+	end
+end
+
+-- Settings once kept for the whole account, each character's own now (ns.Mine()): the account's value of
+-- before, copied once to every character known then, and gone. A character made later starts with none.
+local ACCOUNT_TO_CHARACTER = { "todoAtLogin", "todoSize", "minimap", "framePoints", "scales", "weightOverrides" }
+-- The windows' spots (Skin.Dress: todoPos, questsPos...): this character's, in mine.spots.
+local function IsSpot(name, value)
+	return type(name) == "string" and name:match("Pos$") ~= nil and type(value) == "table" and type(value[1]) == "string"
+end
+local function SplitAccountSettings(root)
+	local known = { [ns.CharacterKey()] = true }
+	for _, name in ipairs({ "profileKeys", "characters", "todo", "welcomedBy" }) do
+		if type(root[name]) == "table" then
+			for key in pairs(root[name]) do known[key] = true end
+		end
+	end
+	for _, name in ipairs(ACCOUNT_TO_CHARACTER) do
+		if root[name] ~= nil then
+			root.mine = type(root.mine) == "table" and root.mine or {}
+			for key in pairs(known) do
+				root.mine[key] = type(root.mine[key]) == "table" and root.mine[key] or {}
+				if root.mine[key][name] == nil then root.mine[key][name] = DeepCopy(root[name]) end
+			end
+			root[name] = nil
+		end
+	end
+	for name, value in pairs(root) do
+		if IsSpot(name, value) then
+			root.mine = type(root.mine) == "table" and root.mine or {}
+			for key in pairs(known) do
+				local mine = type(root.mine[key]) == "table" and root.mine[key] or {}
+				root.mine[key] = mine
+				mine.spots = type(mine.spots) == "table" and mine.spots or {}
+				if mine.spots[name] == nil then mine.spots[name] = DeepCopy(value) end
+			end
+		end
+	end
+	local spots = {}
+	for name, value in pairs(root) do
+		if IsSpot(name, value) then spots[#spots + 1] = name end
+	end
+	for _, name in ipairs(spots) do root[name] = nil end
+end
+
+-- This character's own settings outside its profile (the todo list's size, the minimap button...).
+function ns.Mine()
+	local root = ns.root
+	root.mine = type(root.mine) == "table" and root.mine or {}
+	local key = ns.CharacterKey()
+	root.mine[key] = type(root.mine[key]) == "table" and root.mine[key] or {}
+	return root.mine[key]
+end
+
+-- What this character keeps through a /reload or a crash to put the game back as it was (the camera's distance,
+-- the settings it borrowed): never another character's. One kept for the account before 0.45 is moved to it,
+-- but for a camera distance (another character's: dropped; the settings borrowed are the account's: moved).
+local ACCOUNT_KEPT = { travelZoom = "drop", sceneCamera = "cvars" }
+function ns.Kept(key)
+	local mine = ns.Mine()
+	local old = ns.root[key]
+	if old ~= nil then
+		ns.root[key] = nil
+		local rule = ACCOUNT_KEPT[key]
+		if rule == "cvars" then
+			mine[key] = type(old) == "table" and type(old.cvars) == "table" and { cvars = old.cvars } or nil
+		elseif rule ~= "drop" then
+			mine[key] = old
+		end
+	end
+	return mine[key]
+end
+function ns.Keep(key, value)
+	ns.Kept(key)
+	ns.Mine()[key] = value
+end
+
+-- Where this character put Wanderer's windows: name -> { anchor, x, y, free }.
+function ns.Spots()
+	local mine = ns.Mine()
+	mine.spots = type(mine.spots) == "table" and mine.spots or {}
+	return mine.spots
+end
+-- (moved from the old key to the new one, once, at the first load after 0.45)
+local function MoveCharacterKey(root)
+	local old, new = OldCharacterKey(), ns.CharacterKey()
+	if old == new then return end
+	for _, name in ipairs(ns.BY_CHARACTER) do
+		local list = root[name]
+		if type(list) == "table" and list[old] ~= nil and list[new] == nil then
+			list[new], list[old] = list[old], nil
+		end
+	end
 end
 
 -- Moves the settings of versions before profiles into the default profile.
@@ -823,7 +1525,13 @@ local function Migrate(root)
 	for key in pairs(DEFAULTS) do
 		if root[key] ~= nil then profile[key] = root[key] root[key] = nil end
 	end
+	-- (nothing of before: no profile yet, each character makes its own)
+	if next(profile) == nil then
+		root.profiles = {}
+		return
+	end
 	root.profiles = { [DEFAULT_PROFILE] = profile }
+	root.profileKeys = { [ns.CharacterKey()] = DEFAULT_PROFILE }
 end
 
 -- One of the three levels of the label's content, every line set at once.
@@ -839,7 +1547,7 @@ function ns.SetLabelContent(level)
 		end
 	end
 	label.content = level
-	if ns.RefreshLabel then ns.RefreshLabel() end
+	ns.RefreshLabel()
 end
 
 function ns.SetProfile(name, byPlace)
@@ -882,10 +1590,33 @@ function ns.SetProfile(name, byPlace)
 		end
 		profile.styleVersion = 10
 	end
-	-- 0.43: Wanderer's bar, a setting of the profile (it was the account's while tried): kept as it was.
+	-- 0.43: Wanderer's bar, a setting of the profile (it was the account's while tried): kept as it was, in
+	-- every profile at once (the place profiles are chosen later than the first).
 	if (profile.styleVersion or 0) < 11 then
-		if type(profile.world) == "table" and type(root.bar) == "table" and root.bar.hide == false then profile.world.bar = true end
+		if type(root.bar) == "table" and root.bar.hide == false then
+			for _, other in pairs(root.profiles or {}) do
+				if type(other) == "table" and type(other.world) == "table" and (other.styleVersion or 0) < 11 then other.world.bar = true end
+			end
+			if type(profile.world) == "table" then profile.world.bar = true end
+		end
+		root.bar = nil
 		profile.styleVersion = 11
+	end
+	-- 0.45: the points gained in a profession, said by the game in the chat already: no notice any more, once
+	-- for every profile (a new gathering reach is still told); free after.
+	if (profile.styleVersion or 0) < 12 then
+		if type(profile.crafts) == "table" then profile.crafts.skillUps = false end
+		profile.styleVersion = 12
+	end
+	-- 0.46: the scene camera at the shops and its framing, asked for now; a profile that had the camera keeps
+	-- them as it had them (a new profile starts without).
+	if (profile.styleVersion or 0) < 13 then
+		local scene = profile.scene
+		if type(scene) == "table" and scene.camera ~= nil then
+			if scene.cameraShops == nil then scene.cameraShops = scene.camera == true end
+			if scene.cameraFrame == nil then scene.cameraFrame = scene.camera == true end
+		end
+		profile.styleVersion = 13
 	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
@@ -898,7 +1629,6 @@ function ns.SetProfile(name, byPlace)
 	if profile.away.style == "journal" then profile.away.style = "contemplation" end
 	-- 0.40: the damage meter's Wanderer look, heavier than the game's, dropped.
 	if type(profile.meter) == "table" and profile.meter.look == "wanderer" then profile.meter.look = "game" end
-	-- Not in DEFAULTS (nil means the game's own key): checked on its own.
 	-- Settings of modules that are gone (the game does it itself).
 	profile.interact, profile.questLog, profile.dev = nil, nil, nil
 	if not byPlace then root.profileKeys[ns.CharacterKey()] = name end
@@ -907,6 +1637,8 @@ function ns.SetProfile(name, byPlace)
 	if ns.initialized then ns.RefreshAll() end
 end
 
+ns.Sanitize = Sanitize
+
 -- The active profile back to Wanderer's defaults. The journal, the other
 -- profiles and the game's own settings are not part of it.
 function ns.ResetProfile()
@@ -914,8 +1646,8 @@ function ns.ResetProfile()
 	ns.root.profiles[name] = {}
 	-- A place's profile stays the place's: the character keeps their own.
 	ns.SetProfile(name, name ~= ns.root.profileKeys[ns.CharacterKey()])
-	if ns.RefreshOptions then ns.RefreshOptions() end
-	if ns.RefreshThemeGrids then ns.RefreshThemeGrids() end
+	ns.RefreshOptions()
+	ns.RefreshThemeGrids()
 	ns.Print(L.MSG_RESET_PROFILE:format(name))
 end
 
@@ -931,11 +1663,14 @@ function ns.CopyProfile(name, source)
 	ns.SetProfile(name)
 end
 
+-- A character's own profile stays (reset it instead); those who used another one deleted go back to theirs.
 function ns.DeleteProfile(name)
-	if name == DEFAULT_PROFILE then return false end
+	for _, own in pairs(ns.root.ownProfile or {}) do
+		if own == name then return false end
+	end
 	ns.root.profiles[name] = nil
 	for character, profile in pairs(ns.root.profileKeys) do
-		if profile == name then ns.root.profileKeys[character] = DEFAULT_PROFILE end
+		if profile == name then ns.root.profileKeys[character] = nil end
 	end
 	for _, places in pairs(ns.root.placeProfiles or {}) do
 		for zone, profile in pairs(places) do
@@ -1049,8 +1784,6 @@ BINDING_NAME_WANDERER_REVEAL = L.BINDING_REVEAL
 BINDING_NAME_WANDERER_PHOTO = L.BINDING_PHOTO
 BINDING_NAME_WANDERER_MARKERS = L.BINDING_MARKERS
 BINDING_NAME_WANDERER_TODO = L.BINDING_TODO
-BINDING_NAME_WANDERER_MESSAGES = L.BINDING_MESSAGES
-function Wanderer_ToggleMessages() ns.ToggleMessages() end
 _G["BINDING_NAME_CLICK WandererCampfire:LeftButton"] = L.BINDING_CAMPFIRE
 
 -- Events --------------------------------------------------------------------
@@ -1079,35 +1812,51 @@ events:SetScript("OnEvent", function(_, event, arg1)
 			pcall(SetCVar, "SoftTargetInteract", original.SoftTargetInteract)
 			original.SoftTargetInteract = nil
 		end
+		-- (0.44.33: the sparkle's settings were briefly kept with the others, to be put back at logout: never theirs)
+		if original then
+			for cvar in pairs(SPARKLE_CVARS) do original[cvar] = nil end
+		end
 		WandererDB.profileKeys = WandererDB.profileKeys or {}
-		ns.SetProfile(WandererDB.profileKeys[ns.CharacterKey()] or DEFAULT_PROFILE)
+		MoveCharacterKey(WandererDB)
+		SplitAccountSettings(WandererDB)
+		-- (the character's own profile first: the places' are named after it)
+		local chosen = ns.ChosenProfile()
+		OwnPlaceProfiles(WandererDB)
+		ns.SetProfile(chosen)
 		-- Modules are built once: frames, hooks and events must never be doubled.
 		if not ns.initialized then
-			for _, init in ipairs({ "InitLabel", "InitOptions", "InitMinimapButton", "InitBar", "InitCinema", "InitTooltips",
+			for _, init in ipairs({ "InitCompat", "InitLabel","InitOptions", "InitMinimapButton", "InitBar", "InitCinema", "InitTooltips",
 				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
-				"InitTagging", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitScene", "InitCamera", "InitGestures", "InitCurtain", "InitAway", "InitClean", "InitMinimapLook", "InitTrackerLook", "InitIcons", "InitMail", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitMessages", "InitGameFrames", "InitBarSlots", "InitChatComfort", "InitNews", "InitPreview", "InitWelcome" }) do
-				if ns[init] then ns[init]() end
+				"InitTagging", "InitAcquaintances", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitTown", "InitScene", "InitReader", "InitCamera", "InitGestures", "InitCurtain", "InitCampfire", "InitAway", "InitClean", "InitMinimapLook", "InitLayer", "InitProvisions", "InitDots", "InitDotBars", "InitHots", "InitHotBars", "InitTrackerLook", "InitIcons", "InitHands", "InitCharacters", "InitWorth", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitGameFrames", "InitBarSlots", "InitNews", "InitUnitFrames", "InitPortraits", "InitPreview", "InitSparkles", "InitLootFeed", "InitEmotes", "InitWelcome" }) do
+				-- (one module failing at its start is reported, the others still start)
+				if ns[init] then ns.Util.Try(ns[init]) end
 			end
 			ns.initialized = true
 		end
 	elseif event == "PLAYER_LOGIN" then
-		-- Values are restored on every clean logout, so the current ones are the
-		-- player's own. After a crash (dirty), keep the previous snapshot.
-		if not ns.root.dirty or not ns.root.original then Snapshot() end
-		if ns.FinishOptions then ns.FinishOptions() end
+		-- (the character known by its name at loading, when the game had not given its identity yet)
+		MoveCharacterKey(ns.root)
+		ns.FinishOptions()
 		ns.inCombat = InCombatLockdown()
 		ns.zone = DetectZone()
 		ns.Apply()
 		ns.UpdatePlaceProfile()
+		if ns.movedToOwn then
+			ns.movedToOwn = nil
+			C_Timer.After(6, function() ns.Print(L.MSG_OWN_PROFILE:format(ns.root.ownProfile[ns.CharacterKey()] or "?")) end)
+		end
 	elseif event == "PLAYER_LOGOUT" then
 		-- Leave the game exactly as it was without Wanderer, in case it gets disabled.
+		ns.FinishVolumeFades()
 		ns.RestoreOriginal()
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		ns.inCombat = true
-		if ns.db.enabled and ns.db.combatEnemies then ns.Apply() end
+		-- (enemy names as you come near: their fading with the distance ends with the fight, every enemy's bar
+		-- seen; written now, before the fight locks the game's settings)
+		if ns.db.enabled and (ns.db.combatEnemies or ns.db.enemyNames == "near") then ns.Apply() end
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		ns.inCombat = false
-		if pendingApply or (ns.db.enabled and ns.db.combatEnemies) then ns.Apply() end
+		if pendingApply or (ns.db.enabled and (ns.db.combatEnemies or ns.db.enemyNames == "near")) then ns.Apply() end
 		if pendingProfile then ns.UpdatePlaceProfile() end
 	else -- zone changes
 		UpdateZone()
@@ -1144,7 +1893,7 @@ SlashCmdList.WANDERER = function(msg)
 		for _, name in ipairs(ns.STYLES) do
 			names[#names + 1] = name
 			if name == style then
-				ns.db.label.style = style
+				ns.ChangeEverywhere(function() ns.db.label.style = style end)
 				ns.RefreshAll()
 				ns.Print(L.MSG_STYLE:format(L["STYLE_" .. style:upper()]))
 				return
@@ -1153,18 +1902,19 @@ SlashCmdList.WANDERER = function(msg)
 		ns.Print(L.MSG_STYLE_HELP:format(table.concat(names, ", ")))
 	elseif msg == "bienvenue" or msg == "welcome" then
 		ns.ShowWelcome()
+	elseif msg == "place" or msg == "placer" then
+		ns.PlaceMode()
 	elseif msg == "copy" or msg == "copier" then
 		ns.CopyChat()
-	elseif msg == "messages" or msg == "msg" then
-		ns.ToggleMessages()
+	elseif msg == "messages" then
+		-- (the private messages' window is Wanderer Chat's now: opened there; without it, its page in the settings)
+		if type(_G.WandererChat_ToggleMessages) == "function" then _G.WandererChat_ToggleMessages() else ns.OpenOptions("offer:WandererChat") end
 	elseif msg == "away" or msg == "absent" then
 		ns.GoAway()
 	elseif msg == "photo" then
 		ns.TogglePhotoMode()
 	elseif msg == "nouveautes" or msg == "nouveautés" or msg == "news" then
-		ns.ShowNews()
-	elseif msg == "talents" and ns.DebugTalents then
-		ns.DebugTalents()
+		ns.OpenOptions("news")
 	elseif msg == "todo" or msg == "afaire" or msg == "à faire" then
 		ns.ToggleTodo()
 	elseif msg:match("^ennemis") or msg:match("^enemies") then
@@ -1173,42 +1923,47 @@ SlashCmdList.WANDERER = function(msg)
 		local choice = ({ proche = "near", near = "near", toujours = "always", always = "always", jamais = "never",
 			never = "never", noms = "names", names = "names" })[word or ""]
 		if choice then
-			ns.db.enemyNames = choice
+			-- (as any setting you change: in every profile of this character, its places' too)
+			ns.ChangeEverywhere(function() ns.db.enemyNames = choice end)
 			ns.Apply()
-			if ns.RefreshPlates then ns.RefreshPlates() end
-			if ns.RefreshOptions then ns.RefreshOptions() end
+			ns.RefreshPlates()
+			ns.RefreshOptions()
 		end
-		ns.Print(L.ENEMY_NAMES .. " : " .. L["ENEMY_NAMES_" .. ns.db.enemyNames:upper()] .. " (" .. tostring(ns.profileName) .. ")")
-	elseif (msg == "poids" or msg == "weights" or msg == "pesos" or msg == "pesi" or msg == "gewichte") and ns.ToggleWeights then
+		ns.Print(L.ENEMY_NAMES_SAID:format(L.ENEMY_NAMES, L["ENEMY_NAMES_" .. ns.db.enemyNames:upper()], tostring(ns.profileName)))
+	elseif msg == "poids" or msg == "weights" or msg == "pesos" or msg == "pesi" or msg == "gewichte" then
 		ns.ToggleWeights()
-	elseif (msg == "objet" or msg == "item") and ns.DebugUpgrade then
+	elseif msg == "objet" or msg == "item" then
 		ns.DebugUpgrade()
-	elseif msg == "plates" and ns.DebugPlates then
-		ns.DebugPlates()
 	elseif msg == "clear" or msg == "effacer" then
-		-- The tab shown (the Wanderer tab in diagnostic mode), and what it kept.
+		-- The tab shown (the Wanderer tab in diagnostic mode).
 		local frame = ns.debug and ns.debugFrame or SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME
-		if frame and frame.Clear then
-			frame:Clear()
-			if ns.ForgetChatLog then ns.ForgetChatLog(frame) end
-		end
+		if frame and frame.Clear then frame:Clear() end
+	elseif msg == "plates dump" or msg == "barres dump" then
+		-- (diagnostic: the plates over the heads as Wanderer decides them, over 10 seconds)
+		if ns.DumpPlates then ns.DumpPlates() end
+	elseif msg == "frames dump" or msg == "cadres dump" then
+		-- (diagnostic: the unit frames as the game built them, into the saved data, for a look outside the game)
+		if ns.DumpUnitFrames and ns.DumpUnitFrames() then ns.Print(L.UF_DUMP_DONE) end
 	elseif msg == "debug" then
 		ns.debug = not ns.debug
-		ns.debugFrame = ns.debug and ns.DebugFrame and ns.DebugFrame(true) or nil
+		ns.debugFrame = ns.debug and ns.DebugFrame(true) or nil
 		if ns.debugFrame and FCF_SelectDockFrame then pcall(FCF_SelectDockFrame, ns.debugFrame) end
 		ns.Print(ns.debug and L.DEBUG_ON or L.DEBUG_OFF)
-		if ns.debug and ns.DebugEnvironment then ns.DebugEnvironment() end
+		if ns.debug then ns.DebugEnvironment() end
 		if ns.debug then ns.Print(ns.Util.DebugNames()) end
 	elseif PRESET_ALIASES[msg] then
 		local preset = PRESET_ALIASES[msg]
-		ns.db.enabled = true
+		ns.ChangeEverywhere(function() ns.db.enabled = true end)
 		ns.SetPreset(preset)
 		ns.Print(L.MSG_PRESET:format(L["PRESET_" .. preset:upper()]))
 	else
 		ns.Print(L.SLASH_HELP)
+		for _, extension in ipairs(ns.EXTENSIONS) do
+			if extension.slash then ns.Print(extension.title .. ": " .. extension.slash) end
+		end
 	end
 end
 
 function Wanderer_OnAddonCompartmentClick(_, _, menuButton)
-	if ns.ShowMenu then ns.ShowMenu(menuButton) else ns.OpenOptions() end
+	ns.ShowMenu(menuButton)
 end

@@ -9,8 +9,9 @@ local _, ns = ...
 -- * Interface in combat only: faded whenever you are out of combat, even with
 --   a target.
 --
--- With both, the frames come back instantly in combat, when the mouse goes
--- over one of them or when a window is open. Typing does not bring them back.
+-- With both, the frames come back quickly and softly in combat, when the mouse
+-- goes over one of them, when a window is open or while the names key is held
+-- (a look, no option). Typing does not bring them back.
 
 local CHECK_DELAY = 0.1
 local FRAMES_EVERY = 2 -- seconds between two looks at which frames exist
@@ -133,6 +134,8 @@ end
 local function TargetLevel(settings)
 	-- A conversation scene: the interface steps out of the picture.
 	if ns.sceneActive then return 0 end
+	-- The names key held: everything back for a look, faded again once it is let go.
+	if ns.revealing then return 1 end
 	local faded = (settings.enabled and calmTime >= settings.delay)
 		or (settings.combatOnly and quietTime >= settings.delay)
 	return faded and settings.alpha / 100 or 1
@@ -230,16 +233,13 @@ local function OnUpdate(_, elapsed)
 end
 
 -- Combat and a new target must never wait for the next check: what they
--- bring back comes back at once.
+-- bring back starts coming back at once.
 local function OnEvent(_, event)
 	local settings = ns.db and ns.db.cinema
 	if not Active(settings) then return end
 	afterScene = false
 	calmTime = 0
-	if event == "PLAYER_REGEN_DISABLED" then
-		ns.inCombat = true
-		quietTime = 0
-	end
+	if event == "PLAYER_REGEN_DISABLED" then quietTime = 0 end
 	-- What comes back comes back now, softly (the update does the motion);
 	-- the target and focus portraits are shown or faded at once.
 	frame:Show()
@@ -254,6 +254,21 @@ function ns.RefreshCinema()
 		Reset()
 		frame:Hide()
 	end
+end
+
+-- The fade as one choice: never ("none"), when calm ("calm"), out of a fight ("combat"), written in its two
+-- settings (cinema.enabled, cinema.combatOnly: the ways to play and the profiles by place keep them). The
+-- settings, the welcome and "What you changed" share them; profile: the one read or written (the active one
+-- unless said).
+ns.FADE_CHOICES = { "none", "calm", "combat" }
+function ns.FadeMode(profile)
+	local cinema = (profile or ns.db).cinema or {}
+	return cinema.combatOnly and "combat" or cinema.enabled and "calm" or "none"
+end
+function ns.SetFadeMode(value, profile)
+	local cinema = (profile or ns.db).cinema
+	cinema.enabled, cinema.combatOnly = value ~= "none", value == "combat"
+	ns.RefreshCinema()
 end
 
 function ns.InitCinema()

@@ -1,13 +1,11 @@
 local _, ns = ...
 local L = ns.L
 
--- The reminders of the travel journal: what not to forget on the way. Write
--- a line, Enter notes it; a click ticks it (done ones go greyed to the
--- bottom) and the journal's chronicle keeps it ("Done as planned: ..."); the
--- cross under the mouse removes it, one button clears the done ones. Each
--- character has its own, kept between sessions. Opened by its key, /wanderer
--- todo, the minimap menu or the journal itself. Drawn by the shared engine,
--- under the journal's own heading.
+-- The reminders: what not to forget on the way. Write a line, Enter notes
+-- it; a click ticks it (done ones go greyed to the bottom); the cross under
+-- the mouse removes it, one button clears the done ones. Each character has
+-- its own, kept between sessions. Opened by its key, /wanderer todo, the
+-- options or the minimap menu, under Wanderer's own heading.
 --
 -- A right click on a line: important (a star, on top), up or down, tied to
 -- the place where you stand (back there, a notice says what is left to do;
@@ -18,22 +16,21 @@ local L = ns.L
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
-local OpenMenu
 
 local WIDTH = 300
 local ROW_HEIGHT = 22
 local VISIBLE = 12 -- rows shown at once (until the window is resized: as many as fit); the wheel scrolls the rest
 local MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT = 240, 170, 700, 900
 local MAX_ITEMS = 60
-local CHECK_SIZE = 18
 
 local window, title, input, clearButton, empty
 local rows = {}
 local offset = 0 -- first item shown (scrolling)
+local scrollBar
 local sizing = false -- its corner being dragged
 
 -- The size you gave it (nil: as tall as its lines).
-local function Size() return ns.root and ns.root.todoSize end
+local function Size() return ns.root and ns.Mine().todoSize end
 
 -- What is around the lines: heading, the line to write, the button over it.
 local function Chrome(margin)
@@ -82,16 +79,8 @@ end
 
 -- Where you stand: the map and the point, the place's name.
 local function Here()
-	local map = C_Map and Clean(Safe(C_Map.GetBestMapForUnit, "player"))
-	local position = map and Safe(C_Map.GetPlayerMapPosition, map, "player")
-	local x, y
-	if position and position.GetXY then x, y = Safe(position.GetXY, position) end
-	return { map = map, x = Clean(x), y = Clean(y), zone = Clean(Safe(GetRealZoneText)), sub = Clean(Safe(GetSubZoneText)) }
-end
-
--- The game's own pin on the map, at the place of a line.
-local function ShowWay(place)
-	if place then U.Pin(place.map, place.x, place.y) end
+	local map, x, y = U.HereOnMap()
+	return { map = map, x = x, y = y, zone = Clean(Safe(GetRealZoneText)), sub = Clean(Safe(GetSubZoneText)) }
 end
 
 local function PlaceName(place)
@@ -111,24 +100,29 @@ end
 local Refresh
 
 -- The menu of a line (right click), the game's own menus.
-OpenMenu = function(row)
+local OpenMenu = function(row)
 	local item = row.item
-	local shown = item and U.Menu(row, function(_, root)
+	U.Menu(row, function(_, root)
 		root:CreateButton(item.star and L.TODO_UNSTAR or L.TODO_STAR, function()
 			item.star = not item.star or nil
 			Refresh()
 		end)
-		root:CreateButton(L.TODO_UP, function() Move(item, -1) Refresh() end)
-		root:CreateButton(L.TODO_DOWN, function() Move(item, 1) Refresh() end)
+		root:CreateButton(L.MOVE_UP, function() Move(item, -1) Refresh() end)
+		root:CreateButton(L.MOVE_DOWN, function() Move(item, 1) Refresh() end)
 		root:CreateDivider()
 		if item.place then
-			root:CreateButton(L.TODO_SHOW_WAY, function() ShowWay(item.place) end)
+			-- (with Wanderer Maps: followed by its arrow; else the game's own pin)
+			root:CreateButton(L.GO_THERE, function() U.Go(item.place.map, item.place.x, item.place.y, item.text) end)
 			root:CreateButton(L.TODO_UNPLACE, function() item.place = nil Refresh() end)
 		else
 			root:CreateButton(L.TODO_PLACE, function() item.place = Here() Refresh() end)
 		end
 		local auction = _G.WandererAuction
-		if item.item and type(auction) == "table" and auction.AddToShopping then
+		-- (once on the shopping list, Auction buys it: never offered twice)
+		-- (Auction switched off: no list offered; an older Auction without IsOn taken as on)
+		if item.item and type(auction) == "table" and auction.AddToShopping
+			and (type(auction.IsOn) ~= "function" or auction.IsOn())
+			and not (auction.InShopping and auction.InShopping(item.item)) then
 			root:CreateDivider()
 			root:CreateButton(L.TODO_SHOPPING, function()
 				auction.AddToShopping(item.item, item.count or 1, item.text)
@@ -137,11 +131,6 @@ OpenMenu = function(row)
 		root:CreateDivider()
 		root:CreateButton("|cffff6060" .. L.TODO_REMOVE .. "|r", function() Remove(item) Refresh() end)
 	end)
-	-- No menu in this game: a right click removes the line.
-	if not shown then
-		Remove(item)
-		return Refresh()
-	end
 end
 
 local function Row(index)
@@ -150,39 +139,30 @@ local function Row(index)
 	row = CreateFrame("Button", nil, window)
 	row:SetHeight(ROW_HEIGHT)
 	row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-	row.box = row:CreateTexture(nil, "ARTWORK")
-	row.box:SetSize(CHECK_SIZE, CHECK_SIZE)
-	row.box:SetPoint("LEFT", row, "LEFT", 0, 0)
-	row.box:SetTexture("Interface\\Buttons\\UI-CheckBox-Up")
-	row.check = row:CreateTexture(nil, "OVERLAY")
-	row.check:SetAllPoints(row.box)
-	row.check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
-	row.remove = CreateFrame("Button", nil, row)
-	row.remove:SetSize(14, 14)
-	row.remove:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-	row.remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
-	row.remove:SetHighlightTexture("Interface\\Buttons\\UI-StopButton", "ADD")
-	row.remove:SetScript("OnClick", function()
+	-- The kit's check box, ticked when done (the whole row answers the clicks).
+	row.check = ns.Skin.Check(row, "", function() return row.item and row.item.done end, function() end)
+	row.check:EnableMouse(false)
+	row.check:SetWidth(row.check.box:GetWidth())
+	row.check:SetPoint("LEFT", row, "LEFT", 0, 0)
+	-- (the kit's glyph button: its gold under the mouse, its press, its click)
+	row.remove = ns.Skin.GlyphButton(row, "close", 10, L.TODO_REMOVE, function()
 		Remove(row.item)
 		Refresh()
 	end)
-	row.remove:SetScript("OnEnter", function(self)
-		row.remove:SetAlpha(1)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:AddLine(L.TODO_REMOVE, 1, 1, 1)
-		GameTooltip:Show()
-	end)
-	row.remove:SetScript("OnLeave", function() GameTooltip:Hide() end)
+	row.remove:SetSize(14, 14)
+	row.remove:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+	row.remove:HookScript("OnEnter", function(self) self:SetAlpha(1) end)
 	-- Important: a small star by the box.
 	row.star = row:CreateTexture(nil, "OVERLAY")
 	row.star:SetSize(12, 12)
-	row.star:SetPoint("CENTER", row.box, "TOPRIGHT", -2, -2)
+	row.star:SetPoint("CENTER", row.check.box, "TOPRIGHT", -2, -2)
 	local starred = row.star.SetAtlas and pcall(row.star.SetAtlas, row.star, "PetJournal-FavoritesIcon")
 	if not starred then row.star:SetTexture("Interface\\Common\\FavoritesIcon") end
 	row.star:Hide()
 	row.text = ns.Skin.CreateText(row, "GameTooltipText", 0.95, 0.93, 0.88)
-	row.text:SetPoint("LEFT", row.box, "RIGHT", 6, 0)
-	row.text:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
+	row.text:SetPoint("LEFT", row.check.box, "RIGHT", 6, 0)
+	-- (the "⋯" button's own column, left of the cross: never over the words)
+	row.text:SetPoint("RIGHT", row.remove, "LEFT", -(ns.Skin.ROW_MORE + 6), 0)
 	if row.text.SetWordWrap then row.text:SetWordWrap(false) end
 	row.highlight = row:CreateTexture(nil, "BACKGROUND")
 	row.highlight:SetAllPoints()
@@ -212,6 +192,8 @@ local function Row(index)
 		if not (U.IsMouseOver(self.remove)) then self.remove:Hide() end
 	end)
 	row.remove:Hide()
+	-- (after the row's own hover: its hooks kept)
+	row.more = ns.Skin.RowMore(row, function(self) if self.item then OpenMenu(self) end end, row.remove)
 	rows[index] = row
 	return row
 end
@@ -230,6 +212,12 @@ Refresh = function()
 	local visible = Visible(margin)
 	offset = math.max(0, math.min(offset, #list - visible))
 	local shown = math.min(visible, #list)
+	if scrollBar then
+		scrollBar:ClearAllPoints()
+		scrollBar:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin - 8), -(margin + 30))
+		scrollBar:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 10, 28)
+		scrollBar:Set(#list, visible, offset)
+	end
 	for index = 1, shown do
 		local item = list[index + offset]
 		local row = Row(index)
@@ -243,7 +231,7 @@ Refresh = function()
 		row.text:SetText(words)
 		row.star:SetShown(item.star and not item.done or false)
 		if item.done then row.text:SetTextColor(0.5, 0.5, 0.5) else row.text:SetTextColor(0.95, 0.93, 0.88) end
-		row.check:SetShown(item.done and true or false)
+		row.check:Refresh()
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8 - (index - 1) * ROW_HEIGHT)
 		row:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
@@ -267,7 +255,8 @@ local function Add()
 	local text = strtrim(input:GetText() or "")
 	if text == "" then return end
 	local items = Items()
-	if #items >= MAX_ITEMS then return end
+	-- (full: said, the line stays in the box)
+	if #items >= MAX_ITEMS then return ns.Print(L.TODO_FULL:format(MAX_ITEMS)) end
 	input:SetText("")
 	items[#items + 1] = { text = text, t = time() }
 	-- The new line in view.
@@ -289,7 +278,7 @@ local function CreateWindow()
 	window:SetWidth(Size() and Size()[1] or WIDTH)
 	ns.Skin.Dress(window, { "RIGHT", UIParent, "RIGHT", -260, 80 }, "todoPos")
 	local _, margin
-	_, title, margin = ns.Skin.Header(window, L.ADDON_TITLE, nil, 6)
+	_, title, margin = ns.Skin.Header(window, L.ADDON_TITLE, nil, { margin = 6, settings = "practical" })
 	empty = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
 	empty:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
 	-- Inside the window, over as many lines as it needs.
@@ -316,12 +305,19 @@ local function CreateWindow()
 	clearButton.text:SetPoint("RIGHT")
 	clearButton.text:SetText(L.TODO_CLEAR_DONE)
 	clearButton:SetWidth(U.Measure(clearButton.text, "GetStringWidth", 160) + 8)
-	clearButton:SetScript("OnClick", ClearDone)
+	clearButton:SetScript("OnClick", function()
+		ns.Skin.Play("click")
+		ClearDone()
+	end)
 	clearButton:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 0.82, 0) end)
 	clearButton:SetScript("OnLeave", function(self) self.text:SetTextColor(0.75, 0.68, 0.5) end)
 	window:EnableMouseWheel(true)
 	window:SetScript("OnMouseWheel", function(_, delta)
 		offset = offset - delta
+		Refresh()
+	end)
+	scrollBar = ns.Skin.ScrollBar(window, function(at)
+		offset = math.floor(at + 0.5)
 		Refresh()
 	end)
 	window:HookScript("OnShow", function(self)
@@ -335,7 +331,7 @@ local function CreateWindow()
 		onSizing = function() Refresh() end,
 		onResized = function(width, height)
 			sizing = false
-			ns.root.todoSize = { width, height }
+			ns.Mine().todoSize = { width, height }
 			Refresh()
 		end,
 	})
@@ -349,15 +345,15 @@ local function Arrived()
 	for _, item in ipairs(Items()) do
 		if item.place and not item.done and item.place.zone == zone then here[#here + 1] = item.text end
 	end
-	if here[1] and ns.Toast then ns.Toast(L.TODO_HERE, table.concat(here, "\n"), { duration = 6 }) end
+	if here[1] then ns.Toast(L.TODO_HERE, table.concat(here, "\n"), { duration = 6 }) end
 end
 
 -- At login, something left to do: the reminders open by themselves (silently, once the interface is
--- there), unless you said not to (ns.root.todoAtLogin false).
+-- there), unless you said not to (ns.Mine().todoAtLogin false).
 local function LoggedIn()
-	if not (ns.root and ns.root.todoAtLogin ~= false and ns.db and ns.db.enabled) then return end
+	if not (ns.root and ns.Mine().todoAtLogin ~= false and ns.db and ns.db.enabled) then return end
 	C_Timer.After(3, function()
-		if (ns.TodoPending and ns.TodoPending() or 0) == 0 then return end
+		if ns.TodoPending() == 0 then return end
 		if not window then CreateWindow() end
 		if window:IsShown() then return end
 		window.quiet = true
@@ -412,6 +408,20 @@ function ns.HasTodo(key)
 	return false
 end
 
+-- A line an extension put here, taken away when its reason is gone (the letters sent): true when one was.
+function ns.RemoveTodo(key)
+	if not (ns.root and key) then return false end
+	local items, removed = Items(), false
+	for index = #items, 1, -1 do
+		if items[index].key == key and not items[index].done then
+			table.remove(items, index)
+			removed = true
+		end
+	end
+	if removed then Refresh() end
+	return removed
+end
+
 function ns.ToggleTodo()
 	if not ns.root then return end
 	if not window then CreateWindow() end
@@ -419,7 +429,6 @@ function ns.ToggleTodo()
 end
 
 function Wanderer_ToggleTodo() ns.ToggleTodo() end
-function ns.TodoShown() return window and window:IsShown() or false end
 
 -- What is left to do (the minimap menu shows it).
 function ns.TodoPending()

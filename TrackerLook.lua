@@ -12,9 +12,11 @@ local _, ns = ...
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
 
+-- The tracker's modules, by name (Clean.lua too).
 local MODULES = { "QuestObjectiveTracker", "CampaignQuestObjectiveTracker", "ScenarioObjectiveTracker",
 	"AchievementObjectiveTracker", "BonusObjectiveTracker", "WorldQuestObjectiveTracker",
 	"ProfessionsRecipeTracker", "MonthlyActivitiesObjectiveTracker", "AdventureObjectiveTracker" }
+ns.TRACKER_MODULES = MODULES
 local TITLE = { 0.88, 0.85, 0.77 }
 local OBJECTIVE = { 0.66, 0.62, 0.55 }
 local DONE = { 0.42, 0.4, 0.36 }
@@ -79,12 +81,7 @@ local function Header(header, main)
 		rule = header:CreateTexture(nil, "ARTWORK")
 		rule:SetHeight(1)
 		rule:SetWidth(170)
-		rule:SetColorTexture(1, 1, 1, 1)
-		if CreateColor and rule.SetGradient then
-			rule:SetGradient("HORIZONTAL", CreateColor(C.gold[1], C.gold[2], C.gold[3], 0.55), CreateColor(C.gold[1], C.gold[2], C.gold[3], 0))
-		else
-			rule:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 0.3)
-		end
+		ns.Skin.FadingRule(rule, 0.55)
 		rules[header] = rule
 	end
 	rule:ClearAllPoints()
@@ -92,7 +89,6 @@ local function Header(header, main)
 	rule:Show()
 end
 
-local function Byte(v) return math.floor(v * 255 + 0.5) end
 
 -- A quest's title: Wanderer's beige, its level ("[24]") in the quest log's color.
 local function Title(text)
@@ -102,7 +98,7 @@ local function Title(text)
 	local level, rest = words:match("^%[(%d+)%](.*)$")
 	if level then
 		local r, g, b = ns.World.LevelColor(tonumber(level), true)
-		text:SetText(("|cff%02x%02x%02x[%s]|r%s"):format(Byte(r), Byte(g), Byte(b), level, rest))
+		text:SetText(U.Colorize("[" .. level .. "]", r, g, b) .. rest)
 	end
 end
 
@@ -163,24 +159,17 @@ function ns.RefreshTrackerLook()
 	for button in pairs(folds) do button:SetAlpha(1) end
 	for dash, color in pairs(dashes) do dash:SetTextColor(unpack(color)) end
 	wipe(dashes)
-	-- (the game draws its tracker again, its own colors; the discreet tracker hides its bands again)
-	if ObjectiveTrackerFrame and ObjectiveTrackerFrame.Update then Safe(ObjectiveTrackerFrame.Update, ObjectiveTrackerFrame) end
-	if ns.RefreshClean then ns.RefreshClean() end
+	-- (the game draws its tracker again by itself at its next change: never asked from here, where the client
+	-- would run it tainted and refuse its auras; the discreet tracker hides its bands again)
+	ns.RefreshClean()
 end
 
 function ns.InitTrackerLook()
 	local tracker = ObjectiveTrackerFrame
 	if not tracker then return end
 	-- Dressed again after the game's drawings: once, at the end of the frame, however many of its parts redrew.
-	local pending = false
-	local function Again()
-		if pending or not On() then return end
-		pending = true
-		C_Timer.After(0, function()
-			pending = false
-			DressAll()
-		end)
-	end
+	local dress = U.Debounce(0, DressAll)
+	local function Again() if On() then dress() end end
 	if tracker.Update then hooksecurefunc(tracker, "Update", Again) end
 	for _, name in ipairs(MODULES) do
 		local module = _G[name]

@@ -12,16 +12,10 @@ local U = ns.Util
 
 local WIDTH, HEIGHT = 620, 420
 local MAX_LINES = 300
+local WHEEL_STEP = 40 -- pixels a turn of the wheel scrolls
 
-local window, box
-
--- Plain text: links keep their visible words, colors and icons go.
-local function Plain(text)
-	text = text:gsub("|H.-|h(.-)|h", "%1")
-	text = text:gsub("|T.-|t", ""):gsub("|A.-|a", "")
-	text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-	return text
-end
+local window, box, scroll, bar
+local offset = 0
 
 local function ChatLines(frame)
 	frame = frame or SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME or ChatFrame1
@@ -30,35 +24,49 @@ local function ChatLines(frame)
 	local count = frame:GetNumMessages() or 0
 	for index = math.max(1, count - MAX_LINES + 1), count do
 		local text = U.Safe(frame.GetMessageInfo, frame, index)
-		if type(text) == "string" and not U.IsSecret(text) then lines[#lines + 1] = Plain(text) end
+		if type(text) == "string" and not U.IsSecret(text) then lines[#lines + 1] = U.PlainText(text) end
 	end
 	return lines
 end
 
+-- The lines scrolled to a height (pixels), the kit's bar following.
+local function SetOffset(value)
+	local shown, total = scroll:GetHeight() or 0, box:GetHeight() or 0
+	offset = math.max(0, math.min(math.max(0, total - shown), math.floor((value or 0) + 0.5)))
+	scroll:SetVerticalScroll(offset)
+	bar:Set(total, shown, offset)
+end
+
 local function CreateWindow()
-	window = ns.Skin.CreateWindow("WandererCopy", "DIALOG")
-	ns.Skin.Sounds(window, "IG_CHARACTER_INFO_OPEN", "IG_CHARACTER_INFO_CLOSE")
+	local Skin = ns.Skin
+	window = Skin.CreateWindow("WandererCopy", "DIALOG")
+	Skin.Sounds(window, "IG_CHARACTER_INFO_OPEN", "IG_CHARACTER_INFO_CLOSE")
 	window:SetSize(WIDTH, HEIGHT)
-	ns.Skin.Dress(window)
-	local margin = ns.Skin.Margin() + 6
-	local title = ns.Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
-	title:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
+	Skin.Dress(window)
+	local _, title, margin = Skin.Header(window, L.ADDON_TITLE, L.COPY_TITLE)
 	title:SetPoint("RIGHT", window, "RIGHT", -36, 0)
-	title:SetText(L.COPY_TITLE)
-	local hint = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.65, 0.65, 0.65)
+	local hint = Skin.Text(window, "GameTooltipTextSmall", "muted")
 	hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
 	hint:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	hint:SetText(L.COPY_HINT)
-	local scroll = CreateFrame("ScrollFrame", "WandererCopyScroll", window, "UIPanelScrollFrameTemplate")
+	-- (the kit's scroll bar, as in every Wanderer list)
+	scroll = CreateFrame("ScrollFrame", "WandererCopyScroll", window)
 	scroll:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
-	scroll:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin - 22, margin)
+	scroll:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin - Skin.SCROLL_WIDTH - 4, margin)
+	bar = Skin.ScrollBar(window, SetOffset)
+	bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 4, 0)
+	bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 4, 0)
 	box = CreateFrame("EditBox", "WandererCopyBox", scroll)
 	box:SetMultiLine(true)
 	box:SetAutoFocus(false)
-	box:SetFontObject("ChatFontNormal")
-	box:SetWidth(WIDTH - 2 * margin - 30)
+	box:SetFontObject(Skin.FontFor("ChatFontNormal"))
+	box:SetWidth(WIDTH - 2 * margin - Skin.SCROLL_WIDTH - 4)
 	box:SetScript("OnEscapePressed", function() window:Hide() end)
+	-- (the text's height known once laid out: the bar drawn again)
+	box:SetScript("OnSizeChanged", function() SetOffset(offset) end)
 	scroll:SetScrollChild(box)
+	window:EnableMouseWheel(true)
+	window:SetScript("OnMouseWheel", function(_, delta) SetOffset(offset - delta * WHEEL_STEP) end)
 end
 
 function ns.CopyChat(frame)
@@ -67,6 +75,7 @@ function ns.CopyChat(frame)
 	window:SetScale(ns.Skin.Scale())
 	window:Show()
 	ns.Skin.Get(window):Layout()
+	SetOffset(0)
 	box:SetFocus()
 	box:HighlightText()
 end

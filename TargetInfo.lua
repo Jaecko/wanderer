@@ -14,7 +14,7 @@ local U = ns.Util
 
 local FADE_IN, FADE_OUT = 0.35, 0.8
 local CHECK_EVERY = 0.25
-local SEPARATOR = "|cff8c8c8c  ·  |r"
+local SEPARATOR = U.SEPARATOR
 local UNTAGGED_ICON = "|T" .. ns.UNTAGGED_ICON .. ":12:12:0:0:64:64:5:59:5:59|t "
 local UNTAGGED_COLOR = { 1, 0.6, 0.2 }
 
@@ -26,20 +26,31 @@ local function Hex(color) return U.ColorCode(color[1], color[2], color[3]) end
 -- The pieces of the line, in order of importance.
 local function Pieces()
 	local pieces = {}
-	if ns.IsUntaggedOnYou and ns.IsUntaggedOnYou("target") then
+	if ns.IsUntaggedOnYou("target") then
 		pieces[#pieces + 1] = UNTAGGED_ICON .. Hex(UNTAGGED_COLOR) .. L.UNTAGGED_MARK .. "|r"
 	end
-	if ns.ThreatPiece then
-		local threat, color = ns.ThreatPiece()
-		if threat then pieces[#pieces + 1] = Hex(color) .. threat .. "|r" end
-	end
+	local threat, color = ns.ThreatPiece()
+	if threat then pieces[#pieces + 1] = Hex(color) .. threat .. "|r" end
 	return pieces
 end
 
+-- The target's frame shown: the game's, or the one of a unit frames addon that hides it (ElvUI, Shadowed Unit
+-- Frames, PitBull); the game's portrait on the right asks the line a little to the left. nil: none shown.
+local OTHER_TARGET_FRAMES = { "ElvUF_Target", "SUFUnittarget", "PitBull4_Frames_Target" }
+local function TargetAnchor()
+	local game = _G.TargetFrame
+	-- (seen, not only shown: unit frames addons hide the game's by giving it a hidden parent)
+	if game and game:IsVisible() then return game, -24 end
+	for _, name in ipairs(OTHER_TARGET_FRAMES) do
+		local other = _G[name]
+		if type(other) == "table" and other.IsVisible and other:IsVisible() then return other, 0 end
+	end
+end
+
 local function Update()
-	local target = _G.TargetFrame
+	local target, offset = TargetAnchor()
 	-- A conversation scene: the target frame steps aside, this line with it.
-	local pieces = (target and target:IsShown() and not ns.sceneActive) and Pieces() or {}
+	local pieces = (target and not ns.sceneActive) and Pieces() or {}
 	if not pieces[1] then
 		wanted = 0
 		return
@@ -49,7 +60,7 @@ local function Update()
 	frame:SetSize(U.Measure(text, "GetStringWidth", 120) + margin * 2, U.Measure(text, "GetStringHeight", 12) + margin * 2)
 	frame:ClearAllPoints()
 	-- Centered over the name and the bars (the portrait is on the right).
-	frame:SetPoint("BOTTOM", target, "TOP", -24, -2)
+	frame:SetPoint("BOTTOM", target, "TOP", offset, -2)
 	frame:SetScale(ns.Skin.Scale())
 	skin:Layout()
 	wanted = 1
@@ -81,7 +92,7 @@ end
 function ns.InitTargetInfo()
 	frame, skin = ns.Skin.CreateWindow("WandererTargetInfo", "MEDIUM", nil, true)
 	frame:EnableMouse(false)
-	text = ns.Skin.CreateText(frame, "GameTooltipTextSmall", 0.95, 0.92, 0.85)
+	text = ns.Skin.CreateText(frame, "GameTooltipText", 0.95, 0.92, 0.85)
 	text:SetPoint("CENTER")
 	text:SetJustifyH("CENTER")
 	if text.SetWordWrap then text:SetWordWrap(false) end
@@ -94,7 +105,7 @@ function ns.InitTargetInfo()
 	-- The threat on your target only, and read at the next check (it changes many times a second).
 	local THREAT = { UNIT_THREAT_LIST_UPDATE = true, UNIT_THREAT_SITUATION_UPDATE = true }
 	for event in pairs(THREAT) do
-		if driver.RegisterUnitEvent then driver:RegisterUnitEvent(event, "target") else driver:RegisterEvent(event) end
+		driver:RegisterUnitEvent(event, "target")
 	end
 	driver:SetScript("OnEvent", function(_, event)
 		if THREAT[event] then since = CHECK_EVERY else Update() end

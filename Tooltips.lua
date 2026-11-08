@@ -16,8 +16,9 @@ local Safe, Clean = U.Safe, U.Clean
 
 local skins = {} -- tooltip -> its skin
 
+-- (another addon drawing the tooltips, TipTac or ElvUI's: their look is its own, never dressed twice)
 local function Enabled()
-	return ns.db and ns.db.enabled and ns.db.tooltips.enabled
+	return ns.db and ns.db.enabled and ns.db.tooltips.enabled and not (ns.Yields and ns.Yields("tooltip")) or false
 end
 
 local function IsUsable(tooltip)
@@ -70,7 +71,7 @@ local function Describe(data)
 	end
 end
 
-local QualityColor = ns.Util.QualityColor
+local QualityColor = U.QualityColor
 
 local OnCleared
 
@@ -80,7 +81,7 @@ local function Track(tooltip)
 	skins[tooltip] = ns.Skin.Attach(tooltip)
 	-- (a tooltip shows over windows and their words: never so see-through that both mix)
 	skins[tooltip].minOpacity = ns.Skin.TOOLTIP_MIN_OPACITY
-	if ns.WatchTooltip then ns.WatchTooltip(tooltip) end
+	ns.WatchTooltip(tooltip)
 	tooltip:HookScript("OnShow", StyleTooltip)
 	tooltip:HookScript("OnHide", OnCleared)
 	if tooltip.HasScript and tooltip:HasScript("OnTooltipCleared") then
@@ -157,13 +158,13 @@ local function UpdateTooltipPower()
 	local unit = GameTooltip:IsShown() and select(2, Safe(GameTooltip.GetUnit, GameTooltip))
 	local health = _G.GameTooltipStatusBar
 	local on = unit and ns.db and ns.db.enabled and ns.db.label.showPower and health and health:IsShown()
-	powerBar:SetShown(on and ns.Util.FillPowerBar(powerBar, unit) or false)
+	powerBar:SetShown(on and U.FillPowerBar(powerBar, unit) or false)
 end
 
 local function MakeTooltipPower()
 	local health = _G.GameTooltipStatusBar
 	if not (GameTooltip and health) then return end
-	powerBar = ns.Util.NewBar(GameTooltip, 3, "WandererTooltipPower")
+	powerBar = U.NewBar(GameTooltip, 3, "WandererTooltipPower")
 	powerBar:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, -1)
 	powerBar:SetPoint("TOPRIGHT", health, "BOTTOMRIGHT", 0, -1)
 	local since = 0

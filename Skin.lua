@@ -2,8 +2,7 @@ local _, ns = ...
 
 -- The one rendering engine of every Wanderer window: the mouseover label and the
 -- game tooltips. It draws the background and border of the chosen style, puts
--- a badge on the top edge (icon or marker), colors and animates the highlights, and shows the red screen
--- edges of the threat alert. Windows only say what to show.
+-- a badge on the top edge (icon or marker), colors and animates the highlights. Windows only say what to show.
 --
 -- A style is drawn in one of three ways ("kind"):
 --   game     the game's own tooltip frame (its NineSlice)
@@ -16,8 +15,6 @@ ns.Skin = Skin
 local BORDER, HIGHLIGHT_BORDER, ALERT_BORDER = 1, 2, 3
 local BADGE_SIZE = 26
 local BADGE_GAP = 6 -- transparent space between a badge and the cut border
-local VIGNETTE_TEXTURE = "Interface\\FullScreenTextures\\LowHealth"
-Skin.BADGE_SIZE = BADGE_SIZE
 
 local U = ns.Util
 
@@ -126,6 +123,47 @@ end
 -- Fonts of the game's tooltips, also used by the label: changing them changes
 -- every window at once.
 Skin.FONT_OBJECTS = { "GameTooltipHeaderText", "GameTooltipText", "GameTooltipTextSmall" }
+-- Wanderer's own font objects, one per step of the ladder (xs 10, s 12, m 14, l 16, xl 20 at the game's
+-- sizes), made from the game's and set again with the font chosen: every window's words go through them.
+Skin.FONT = { xs = "WandererFontXS", s = "WandererFontS", m = "WandererFontM", l = "WandererFontL", xl = "WandererFontXL" }
+local FONT_SOURCES = { xs = "GameTooltipTextSmall", s = "GameTooltipText", m = "GameTooltipHeaderText", l = "GameFontNormalLarge", xl = "GameFontNormalHuge" }
+-- The game's font objects the windows used to name, each to its step.
+local FONT_STEPS = {
+	GameTooltipTextSmall = "xs", GameFontNormalSmall = "xs", GameFontHighlightSmall = "xs", GameFontDisableSmall = "xs",
+	GameTooltipText = "s", GameFontNormal = "s", GameFontHighlight = "s", ChatFontNormal = "s", GameFontDisable = "s",
+	GameTooltipHeaderText = "m", GameFontNormalMed2 = "m",
+	GameFontNormalLarge = "l", GameFontHighlightLarge = "l",
+	GameFontNormalHuge = "xl", GameFontHighlightHuge = "xl",
+}
+local fontsMade = false
+local function MakeFonts()
+	if fontsMade or not CreateFont then return end
+	fontsMade = true
+	for key, name in pairs(Skin.FONT) do
+		if not _G[name] then
+			local object = CreateFont(name)
+			local source = _G[FONT_SOURCES[key]]
+			if source and object.CopyFontObject then object:CopyFontObject(source) end
+		end
+	end
+end
+-- The font object to draw a text with: Wanderer's own for a game name it knows, else the one named.
+function Skin.FontFor(template)
+	MakeFonts()
+	local step = FONT_STEPS[template]
+	return step and _G[Skin.FONT[step]] or template
+end
+-- The height of a line of words (a text, or a font object): its size and a little air, for rows that must hold
+-- a line at any size of words.
+function Skin.LineHeight(text)
+	local object = type(text) == "string" and _G[text] or text
+	local size
+	if type(object) == "table" and object.GetFont then
+		local ok, _, got = pcall(object.GetFont, object)
+		size = ok and tonumber(got) or nil
+	end
+	return math.ceil((size or 11) + 3)
+end
 ns.FONTS = {
 	{ key = "default" },
 	{ key = "friz", path = "Fonts\\FRIZQT__.TTF" },
@@ -163,28 +201,14 @@ function Skin.ApplyFont()
 		local object, original = Original(name)
 		if original and original[1] then object:SetFont(path or original[1], original[2], original[3]) end
 	end
-end
-
--- Red screen edges, shared by every window --------------------------------------
-
-local vignette
-local alertingSkins = {}
-
-local function UpdateVignette(skin, on)
-	alertingSkins[skin] = on or nil
-	if not vignette then
-		vignette = CreateFrame("Frame", "WandererVignette", UIParent)
-		vignette:SetAllPoints(UIParent)
-		vignette:SetFrameStrata("BACKGROUND")
-		vignette:EnableMouse(false)
-		if vignette.SetIgnoreParentAlpha then vignette:SetIgnoreParentAlpha(true) end
-		local edges = vignette:CreateTexture(nil, "BACKGROUND")
-		edges:SetAllPoints()
-		edges:SetTexture(VIGNETTE_TEXTURE)
-		edges:SetBlendMode("ADD")
-		edges:SetVertexColor(1, 0.1, 0.1)
+	-- Wanderer's own objects: the font chosen, at the game's sizes times the size chosen for the windows.
+	MakeFonts()
+	local scale = ns.db.label.textScale or 1
+	for key, name in pairs(Skin.FONT) do
+		local object = _G[name]
+		local _, original = Original(FONT_SOURCES[key])
+		if object and original and original[1] then object:SetFont(path or original[1], original[2] * scale, original[3]) end
 	end
-	vignette:SetShown(next(alertingSkins) ~= nil)
 end
 
 -- Skin of one window ----------------------------------------------------------------
@@ -238,26 +262,18 @@ function Skin.Attach(owner)
 	return s
 end
 
--- A Wanderer window: the game's tooltip frame (for the "Game interface" style)
--- dressed by the engine. Returns the frame and its skin.
 -- A window that opens and closes with the game's own sounds (SOUNDKIT names),
 -- like the game's windows. window.quiet: this time, silently (it opened by
 -- itself: a message, a notice).
 function Skin.Sounds(window, open, close)
-	local function Play(key)
-		U.PlaySound(key)
-	end
-	window:HookScript("OnShow", function(self) if not self.quiet then Play(open) end end)
+	window.wandererSounds = true -- (its cross then plays no second sound)
+	window:HookScript("OnShow", function(self) if not self.quiet then U.PlaySound(open) end end)
 	window:HookScript("OnHide", function(self)
-		if not self.quiet then Play(close) end
+		if not self.quiet then U.PlaySound(close) end
 		self.quiet = nil
 	end)
 end
 
--- What every Wanderer window does: moved by dragging it (its place kept in
--- ns.root[save] when given, else at point), closed by its cross and by
--- Escape. The cross closes directly (or calls onClose), never through the
--- game's panel manager, locked during a fight. Returns the cross.
 -- The lines of a sample label (the live preview and the style cards):
 -- locale key, size, color.
 Skin.SAMPLE_LINES = {
@@ -285,7 +301,7 @@ function Skin.PickColor(r, g, b, onPick)
 	picker:Show()
 end
 
--- The small golden heading over a window ("TRAVEL JOURNAL"), placed by its owner.
+-- The small golden heading over a window ("REMINDERS"), placed by its owner.
 function Skin.CreateKicker(parent, text)
 	local kicker = Skin.CreateText(parent, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
 	if text then kicker:SetText(U.Upper(text)) end
@@ -321,7 +337,7 @@ end
 
 -- Placed freely by you (Shift): never moved.
 local function Free(window)
-	local saved = window.wandererSave and ns.root and ns.root[window.wandererSave]
+	local saved = window.wandererSave and ns.root and ns.Spots()[window.wandererSave]
 	return type(saved) == "table" and saved[4] == true
 end
 
@@ -428,6 +444,10 @@ local function Keep(window, save)
 end
 Skin.StepAside, Skin.Hold = StepAside, Hold -- (tests)
 
+-- What every Wanderer window does: moved by dragging it (its place kept in
+-- this character's spot "save" when given, else at point), closed by its cross and by
+-- Escape. The cross closes directly (or calls onClose), never through the
+-- game's panel manager, locked during a fight. Returns the cross.
 function Skin.Dress(window, point, save, onClose)
 	window:EnableMouse(true)
 	window:SetMovable(true)
@@ -443,10 +463,10 @@ function Skin.Dress(window, point, save, onClose)
 		if save and not free then Hold(self) end
 		if save and ns.root then
 			local anchor, _, _, x, y = self:GetPoint(1)
-			ns.root[save] = { anchor, x, y, free or nil }
+			ns.Spots()[save] = { anchor, x, y, free or nil }
 		end
 	end)
-	local saved = save and ns.root and ns.root[save]
+	local saved = save and ns.root and ns.Spots()[save]
 	window:ClearAllPoints()
 	if saved then
 		window:SetPoint(saved[1], UIParent, saved[1], saved[2], saved[3])
@@ -465,20 +485,30 @@ end
 function Skin.CreateInput(parent, name, maxLetters, opts)
 	local input = CreateFrame("EditBox", name, parent)
 	input:SetHeight(24)
-	input:SetFontObject("ChatFontNormal")
+	input:SetFontObject(Skin.FontFor("ChatFontNormal"))
 	input:SetAutoFocus(false)
 	input:SetMaxLetters(maxLetters or 255)
 	input:SetTextInsets(8, 8, 0, 0)
 	input.background = input:CreateTexture(nil, "BACKGROUND")
 	input.background:SetAllPoints()
 	input.background:SetColorTexture(0, 0, 0, 0.35)
+	input.edges = Skin.Edges(input, 1, 0.82, 0, 0.12)
+	input:HookScript("OnEditFocusGained", function(self)
+		self.edges.Color(1, 0.82, 0, 0.55)
+		self.background:SetColorTexture(0, 0, 0, 0.45)
+	end)
+	input:HookScript("OnEditFocusLost", function(self)
+		self.edges.Color(1, 0.82, 0, 0.12)
+		self.background:SetColorTexture(0, 0, 0, 0.35)
+	end)
 	if not opts then return input end
 	if opts.hint then
-		input.hint = Skin.CreateText(input, "GameTooltipTextSmall", 0.5, 0.5, 0.5)
+		local muted = Skin.COLORS.muted
+		input.hint = Skin.CreateText(input, "GameTooltipTextSmall", muted[1], muted[2], muted[3])
 		input.hint:SetPoint("LEFT", input, "LEFT", 8, 0)
 		input.hint:SetText(opts.hint)
-		input:SetScript("OnEditFocusGained", function(self) self.hint:Hide() end)
-		input:SetScript("OnEditFocusLost", function(self) self.hint:SetShown((self:GetText() or "") == "") end)
+		input:HookScript("OnEditFocusGained", function(self) self.hint:Hide() end)
+		input:HookScript("OnEditFocusLost", function(self) self.hint:SetShown((self:GetText() or "") == "") end)
 	end
 	input:SetScript("OnTextChanged", function(self, typed)
 		if self.hint then self.hint:SetShown((self:GetText() or "") == "" and not self:HasFocus()) end
@@ -522,7 +552,12 @@ function Skin.Front(window)
 		Back(front)
 		front = window
 	end
-	pcall(window.SetFrameStrata, window, STRATA[ORDER.MEDIUM + 1])
+	-- A game window stays on the layer the game gave it, raised within it: moved to another layer, the game
+	-- numbers its parts again and some fall under the rest (the professions' rank bar went behind its page).
+	-- Wanderer's own windows go one layer up, over the game's.
+	if (U.Clean(U.Safe(window.GetName, window)) or ""):find("^Wanderer") then
+		pcall(window.SetFrameStrata, window, STRATA[ORDER.MEDIUM + 1])
+	end
 	pcall(window.SetToplevel, window, true)
 	pcall(window.Raise, window)
 end
@@ -531,19 +566,26 @@ end
 function Skin.Managed(window) return originalStrata[window] ~= nil end
 function Skin.InFront() return front end
 
+-- A Wanderer window: the game's tooltip frame (for the "Game interface" style)
+-- dressed by the engine. Returns the frame and its skin.
 -- Every window of Wanderer and of its extensions, now and to come, is made here: strata "MEDIUM" (or "HIGH")
 -- makes it a window like the game's, in front when opened or clicked (Skin.Front), never hidden by the map;
 -- "DIALOG" and above stay over everything. A window beside another (parent: that window) follows it, layer
 -- and all, in front with it.
 -- hud: a piece of the screen, not a window (the target's line): never brought in front.
-function Skin.CreateWindow(name, strata, parent, hud)
+-- kind: "Button" for a dressed button of a window (clicked only when pressed and released on it); "Frame" else.
+function Skin.CreateWindow(name, strata, parent, hud, kind)
 	local own = (parent == nil or parent == UIParent) and not hud
 	parent = parent or UIParent
-	local ok, created = pcall(CreateFrame, "Frame", name, parent, "TooltipBackdropTemplate")
-	local window = ok and created or CreateFrame("Frame", name, parent)
+	kind = kind or "Frame"
+	local ok, created = pcall(CreateFrame, kind, name, parent, "TooltipBackdropTemplate")
+	local window = ok and created or CreateFrame(kind, name, parent)
 	local plain = strata == "MEDIUM" or strata == "HIGH"
 	if strata and not (plain and not own) then window:SetFrameStrata(plain and "MEDIUM" or strata) end
-	if own and plain then window:HookScript("OnShow", Skin.Front) end
+	if own and plain then
+		window:HookScript("OnShow", Skin.Front)
+		window:HookScript("OnShow", Skin.FadeIn)
+	end
 	window:SetSize(1, 1)
 	window:Hide()
 	-- Stays readable when the cinematic mode fades the interface.
@@ -584,10 +626,18 @@ end
 
 -- A line of text in the tooltips' fonts, left aligned, with their shadow.
 function Skin.CreateText(owner, template, r, g, b)
+	template = template or "GameTooltipText"
+	-- (made from the game's own template, then given Wanderer's font object: the game wants a name there)
 	local text = owner:CreateFontString(nil, "OVERLAY", template)
+	local font = Skin.FontFor(template)
+	if font ~= template and text.SetFontObject then text:SetFontObject(font) end
 	text:SetShadowOffset(1, -1)
 	text:SetShadowColor(0, 0, 0, 0.9)
-	if r then text:SetTextColor(r, g, b) end
+	if r then
+		text:SetTextColor(r, g, b)
+	elseif FONT_STEPS[template] and _G[template] and _G[template].GetTextColor then
+		text:SetTextColor(_G[template]:GetTextColor())
+	end
 	text:SetJustifyH("LEFT")
 	return text
 end
@@ -606,6 +656,8 @@ function Skin.CreateLink(parent, text, onClick, tooltip)
 	end
 	link:SetLabel(text)
 	link:SetScript("OnClick", onClick)
+	link:SetScript("OnMouseDown", function(self) self.text:SetPoint("CENTER", 1, -1) end)
+	link:SetScript("OnMouseUp", function(self) self.text:SetPoint("CENTER", 0, 0) end)
 	link:SetScript("OnEnter", function(self)
 		self.text:SetTextColor(LINK_HOVER[1], LINK_HOVER[2], LINK_HOVER[3])
 		if tooltip then
@@ -619,6 +671,28 @@ function Skin.CreateLink(parent, text, onClick, tooltip)
 		if tooltip then GameTooltip:Hide() end
 	end)
 	return link
+end
+
+-- A window shown: it comes in a breath (0.15 s), unless it says otherwise (window.noFadeIn). One driver
+-- for all of them, asleep when none is coming.
+local FADE_IN_TIME = 0.15
+local coming, driver = {}, nil
+local function DriveFades(_, elapsed)
+	local any = false
+	for window, t in pairs(coming) do
+		t = t + elapsed
+		local share = math.min(1, t / FADE_IN_TIME)
+		window:SetAlpha(1 - (1 - share) * (1 - share))
+		if share >= 1 then coming[window] = nil else coming[window] = t any = true end
+	end
+	if not any then driver:SetScript("OnUpdate", nil) end
+end
+function Skin.FadeIn(window)
+	if window.noFadeIn then return end
+	if not driver then driver = CreateFrame("Frame") end
+	window:SetAlpha(0)
+	coming[window] = 0
+	driver:SetScript("OnUpdate", DriveFades)
 end
 
 -- Moves a window's opacity toward target: fadeIn and fadeOut are the seconds
@@ -703,6 +777,8 @@ end
 -- only faded.
 function SkinMixin:ShowDecoration()
 	local kind = self:Kind()
+	-- On parchment (the scene, the reader): the paper alone, none of the style's drawing.
+	if self.parchment then kind = "paper" end
 	local lines = kind == "lines"
 	self.background:SetShown(lines)
 	self.lines.topLeft:SetShown(lines)
@@ -724,6 +800,14 @@ function SkinMixin:ShowDecoration()
 		self.nineSlice:SetAlpha(game and 1 or 0)
 		self.nineSlice:SetShown(game)
 	end
+end
+
+-- Drawn on parchment instead of the style (Skin.Parchment, Kit.lua): the style's own drawing hidden.
+function SkinMixin:SetParchment(on)
+	on = on and true or false
+	if self.parchment == on then return end
+	self.parchment = on
+	self:ApplyStyle()
 end
 
 -- What is really drawn, for /wanderer debug.
@@ -817,7 +901,6 @@ function SkinMixin:SetHighlight(mode, r, g, b)
 	self.color = def and (r and { r, g, b } or def.color) or nil
 	self:SetBorderSize(def and def.border or BORDER)
 	self:ApplyStyle()
-	UpdateVignette(self, def and def.alert and ns.db.label.threatVignette)
 end
 
 function SkinMixin:GetHighlight()
@@ -825,16 +908,15 @@ function SkinMixin:GetHighlight()
 end
 
 -- Called on every frame by the window: pulsing highlights and the alert.
-function SkinMixin:Animate(alpha)
+function SkinMixin:Animate()
 	local def = self.def
 	if not (def and def.pulse and self.color) then return end
 	local pulse = 0.5 + 0.5 * math.sin(GetTime() * def.pulse)
 	local c = self.color
 	if def.alert then
-		-- Fast red flashing border, background and screen edges.
+		-- Fast red flashing border and background.
 		self:SetBorderColor(c[1], c[2], c[3], 0.4 + 0.6 * pulse)
 		self:SetBackground(0.45 * pulse, 0, 0, math.max(ns.db.label.bgOpacity / 100, 0.6))
-		if vignette then vignette:SetAlpha((0.25 + 0.5 * pulse) * (alpha or 1)) end
 	else
 		self:SetBorderColor(c[1], c[2], c[3], 0.6 + 0.4 * pulse)
 	end

@@ -4,12 +4,19 @@ local _, ns = ...
 -- be moved (option): the title bar drags a window anywhere, and it opens
 -- there every time. Nothing else changes: they look as the game draws them,
 -- nothing is added. The full screen map stays where the game puts it, and
--- windows without the game's title bar are left alone. A window already
+-- windows without the game's title bar are not dragged. A window already
 -- open stays where it is when another opens or closes (the game would push
--- it aside, under the one you moved): every window, with a title bar or not, known by name or not. Switched off, every window goes back
--- where the game puts it. Every window is on the map's layer (Skin.Front): the one opened or clicked last
--- in front, the map as much as the others (Skin.Front), whatever the game names them: a window opened as
--- it pleases the game is found as it appears, a click on any of them brings it in front.
+-- it aside), with a title bar or not, known by name or not. Switched off,
+-- the bags go back where the game puts them at once, the other windows when
+-- they open next.
+--
+-- Every window shares the map's layer (Skin.Front), the option on or off:
+-- the one opened or clicked last is in front, the map like the others,
+-- whatever the game names them (a window is found as it appears). The
+-- game's placing is only heard once the option is on.
+--
+-- Another addon that places and sizes the map itself (Compat.lua, "mapSize")
+-- keeps it: the map is then neither dragged nor placed here.
 
 local U = ns.Util
 local Safe = U.Safe
@@ -32,14 +39,28 @@ local function On()
 	return ns.db and ns.db.enabled and ns.db.world.moveFrames and true or false
 end
 
+-- Where you put them, this character's.
 local function Points()
-	ns.db.world.framePoints = ns.db.world.framePoints or {}
-	return ns.db.world.framePoints
+	local root = ns.root or ns.db
+	local mine = ns.root and ns.Mine() or root
+	if not mine.framePoints then
+		mine.framePoints = {}
+		-- (kept in the profile before: this character's own only, the others' left to them)
+		if ns.db and ns.db.world and type(ns.db.world.framePoints) == "table" then
+			for name, point in pairs(ns.db.world.framePoints) do mine.framePoints[name] = mine.framePoints[name] or point end
+			ns.db.world.framePoints = nil
+		end
+	end
+	return mine.framePoints
 end
 
 -- The full screen map stays the game's.
+local function MapLeftToOther(window)
+	return window == _G.WorldMapFrame and ns.Yields("mapSize") ~= nil
+end
+
 local function Movable(window)
-	if not On() or U.IsOffScreen(window) then return false end
+	if not On() or U.IsOffScreen(window) or MapLeftToOther(window) then return false end
 	if window.IsMaximized and Safe(window.IsMaximized, window) then return false end
 	-- Never tried where the game forbids it.
 	return not (InCombatLockdown() and window.IsProtected and Safe(window.IsProtected, window))
@@ -85,14 +106,15 @@ end
 
 local function Remember(window)
 	local point, _, _, x, y = window:GetPoint(1)
-	if point and x and y then Points()[window:GetName()] = { point, math.floor(x + 0.5), math.floor(y + 0.5) } end
+	local name = window:GetName()
+	if name and point and x and y then Points()[name] = { point, math.floor(x + 0.5), math.floor(y + 0.5) } end
 end
 
 -- A window followed: kept where it stands while it is open (the game would push it aside when another
 -- opens), every one of them; dragged by its title bar when it has the game's (else it stays where the game
 -- opens it).
 local function Take(window)
-	if taken[window] or not (window.HookScript and window.GetNumPoints) then return end
+	if taken[window] or not (window.HookScript and window.GetNumPoints) or MapLeftToOther(window) then return end
 	taken[window] = true
 	window:HookScript("OnShow", function() Place(window) end)
 	-- Closed: it opens next time where the game (or you) put it.
@@ -183,7 +205,8 @@ local function LayerAll()
 				window:HookScript("OnShow", function()
 					Beside(true)
 					if watch then watch:Cancel() end
-					watch = C_Timer.NewTicker and C_Timer.NewTicker(1, function() Beside() end) or nil
+					-- (every 2 s, never in a fight: the windows opened by the game are caught by its own hooks)
+					watch = C_Timer.NewTicker(2, function() if not InCombatLockdown() then Beside() end end)
 				end)
 				window:HookScript("OnHide", function()
 					if watch then watch:Cancel() end
@@ -195,10 +218,12 @@ local function LayerAll()
 end
 
 local waiting = false -- turned off during a fight: done after it
+local Install
 
 function ns.RefreshGameFrames()
 	waiting = false
 	if On() then
+		Install()
 		TakeAll()
 		PlaceAll()
 	elseif InCombatLockdown() then
@@ -207,6 +232,33 @@ function ns.RefreshGameFrames()
 		-- Back where the game puts them: the windows when they open next, the bags now.
 		if UpdateContainerFrameAnchors then pcall(UpdateContainerFrameAnchors) end
 	end
+end
+
+-- Any window the game opens as a panel (not only those of the list): in front, and while the option is on,
+-- followed too, kept where it stands (heard before the placing below: its place is known when the next one
+-- opens).
+local function Listen()
+	if ShowUIPanel then
+		hooksecurefunc("ShowUIPanel", function(window)
+			if type(window) ~= "table" then return end
+			if On() then Take(window) end
+			ns.Skin.Front(window)
+		end)
+	end
+	LayerAll()
+end
+
+-- The game's placing heard (only once the option is on: nothing hooked before).
+local installed = false
+function Install()
+	if installed then return end
+	installed = true
+	-- The game places its windows (and the bags) when one opens or closes (its placing is its own: what
+	-- opens and closes them is what can be heard).
+	for _, name in ipairs({ "ShowUIPanel", "HideUIPanel", "UpdateUIPanelPositions" }) do
+		if _G[name] then hooksecurefunc(name, PlaceAll) end
+	end
+	if UpdateContainerFrameAnchors then hooksecurefunc("UpdateContainerFrameAnchors", PlaceAll) end
 end
 
 function ns.InitGameFrames()
@@ -228,21 +280,6 @@ function ns.InitGameFrames()
 		LayerAll()
 		if On() then TakeAll() end
 	end)
-	-- Any window the game opens as a panel (not only those of the list): followed too, kept where it stands
-	-- (heard before the placing below: its place is known when the next one opens), and in front.
-	if ShowUIPanel then
-		hooksecurefunc("ShowUIPanel", function(window)
-			if type(window) ~= "table" then return end
-			if On() then Take(window) end
-			ns.Skin.Front(window)
-		end)
-	end
-	-- The game places its windows (and the bags) when one opens or closes (its placing is its own: what
-	-- opens and closes them is what can be heard).
-	for _, name in ipairs({ "ShowUIPanel", "HideUIPanel", "UpdateUIPanelPositions" }) do
-		if _G[name] then hooksecurefunc(name, PlaceAll) end
-	end
-	LayerAll()
-	if UpdateContainerFrameAnchors then hooksecurefunc("UpdateContainerFrameAnchors", PlaceAll) end
+	Listen()
 	ns.RefreshGameFrames()
 end

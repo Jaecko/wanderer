@@ -38,7 +38,6 @@ local ALERT_SOUND_DELAY = 60 -- seconds before the same player can trigger the s
 local HEAD_OFFSET = 4
 local HOLD_GRACE = 0.4 -- seconds the label waits after a click before leaving
 local MAX_QUEST_LINES = 3
-local IsInnkeeper, HearthLine -- (below, with the tooltip reading)
 -- What the label says: your choices, or in a fight (option) only what matters
 -- for it: level and difficulty, rank, health and power, the spell cast, who
 -- it looks at, a monster not yet yours, your quest objectives. A Shift look
@@ -154,11 +153,8 @@ local professions = {} -- list of { name, icon, rank, skillLine }
 local function RefreshProfessions()
 	wipe(professions)
 	-- Primary professions, archaeology, fishing and cooking (missing ones are nil).
-	for _, index in pairs({ Safe(GetProfessions) }) do
-		local name, icon, rank, _, _, _, skillLine = Safe(GetProfessionInfo, index)
-		if Clean(name) then
-			professions[#professions + 1] = { name = name, icon = icon, rank = Clean(rank) or 0, skillLine = Clean(skillLine) }
-		end
+	for _, known in ipairs(U.Professions()) do
+		professions[#professions + 1] = { name = known.name, icon = known.icon, rank = known.rank, skillLine = known.line }
 	end
 end
 
@@ -264,13 +260,10 @@ ns.DetectQuests = DetectQuests -- (tests)
 -- their progress is taken from your quest log (never protected) meanwhile.
 local remembered = {} -- creature id -> objectives last read
 
-local function CreatureId(guid)
-	return type(guid) == "string" and guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)") or nil
-end
 
 -- protected: some of the tooltip's lines could not be read.
 local function RememberedQuests(guid, quests, protected)
-	local key = CreatureId(guid)
+	local key = U.NpcID(guid)
 	if not key then return quests end
 	if not protected then
 		remembered[key] = quests and quests[1] and quests or nil
@@ -289,6 +282,26 @@ local function RememberedQuests(guid, quests, protected)
 		end
 	end
 	return now
+end
+
+-- The items your quests ask for that this creature drops (the game says nothing of them here): their
+-- objectives' lines added after the tooltip's own, once each. (a new list: the remembered one stays as read)
+local function WithDrops(guid, quests)
+	local drops = ns.QuestDrops and ns.QuestDrops(guid)
+	if not drops then return quests end
+	local list, seen = {}, {}
+	for _, quest in ipairs(quests or {}) do
+		list[#list + 1] = quest
+		seen[ns.ObjectiveName(quest.text)] = true
+	end
+	for _, objective in ipairs(drops) do
+		local name = ns.ObjectiveName(objective.text)
+		if not seen[name] then
+			seen[name] = true
+			list[#list + 1] = { text = objective.text, complete = objective.complete }
+		end
+	end
+	return list
 end
 
 -- NPC function such as "<Blacksmith>": the second line, when it is not the
@@ -313,7 +326,7 @@ local HEARTH_ICON = "Interface\\Icons\\INV_Misc_Rune_01"
 local INNKEEPER_WORDS = { "innkeeper", "aubergiste", "gastwirt", "tabern", "posader", "locandier", "estalajadeir",
 	"таверн", "여관", "旅店" }
 
-IsInnkeeper = function(lines)
+local function IsInnkeeper(lines)
 	local role = lines[2] and lines[2].text
 	if not role then return false end
 	role = role:lower()
@@ -323,7 +336,7 @@ IsInnkeeper = function(lines)
 	return false
 end
 
-HearthLine = function()
+local function HearthLine()
 	local home = Clean(Safe(GetBindLocation))
 	local here = home and (home == Clean(Safe(GetSubZoneText)) or home == Clean(Safe(GetRealZoneText)))
 	local text = here and L.HEARTH_HERE or (home and L.HEARTH_ELSEWHERE:format(home) or L.HEARTH_NONE)
@@ -350,16 +363,17 @@ local Inspect = ns.Inspect
 
 -- Colors & text lines ----------------------------------------------------------
 
+-- A class's color, as a text code without its "|c" ("ffrrggbb"; white when unknown).
 local function ClassColorCode(classFile)
-	local color = classFile and RAID_CLASS_COLORS[classFile]
-	return color and color.colorStr or "ffffffff"
+	local r, g, b = U.ClassColor(classFile)
+	return r and U.ColorCode(r, g, b):sub(3) or "ffffffff"
 end
 
 local function GetUnitColor(unit, isPlayer)
 	if isPlayer then
 		local _, classFile = Safe(UnitClass, unit)
-		local color = Clean(classFile) and RAID_CLASS_COLORS[classFile]
-		if color then return color.r, color.g, color.b end
+		local r, g, b = U.ClassColor(Clean(classFile))
+		if r then return r, g, b end
 	end
 	if Clean(Safe(UnitIsTapDenied, unit)) then return unpack(REACTION_COLORS.tapped) end
 	local reaction = Clean(Safe(UnitReaction, unit, "player"))
@@ -518,8 +532,6 @@ local function Over(unitFrame)
 end
 
 -- Your own portrait: the label shows you there, the closer look included.
-local ColorLevelLine -- (below)
-
 local function OverOwnPortrait()
 	local db = ns.db
 	return db and db.label.ownPortrait and Over(PlayerFrame) and Clean(Safe(UnitIsUnit, UNIT, "player")) and true or false
@@ -602,7 +614,7 @@ local function UpdateTargetLine()
 	local guid = Safe(UnitGUID, TARGET)
 	if IsSecret(guid) or guid ~= target.guid then
 		target.guid = not IsSecret(guid) and guid or nil
-		Safe(SetPortraitTexture, target.portrait, TARGET)
+		ns.SetPortrait(target.portrait, TARGET, "label")
 	end
 	-- Health: status bars accept protected values.
 	local health, maximum = Safe(UnitHealth, TARGET), Safe(UnitHealthMax, TARGET)
@@ -653,27 +665,28 @@ local function PlayAlertSound(guid)
 		if now - at >= ALERT_SOUND_DELAY then lastAlert[known] = nil end
 	end
 	lastAlert[guid] = now
-	U.PlaySound("RAID_WARNING", "Master")
+	-- (the effects' channel: its slider, never above the rest)
+	U.PlaySound("RAID_WARNING", "SFX")
 end
 
 -- Layout & look ----------------------------------------------------------------
 
--- Laid out like the game's tooltips: left aligned, same margins and room
--- for the badge (ns.Skin metrics), so every window looks the same.
 local remeasure -- (a second measure, on the next frame, is coming)
 local laidText -- the texts of the last layout (a second measure only when they change)
-local function Layout()
-	local margin = ns.Skin.Margin()
-	-- Measured at their own width; bounded again once the label is sized.
+local laidParts = {} -- (the texts gathered for that comparison: one table, filled again each layout)
+local targetParts -- the target block's line, portrait and words (shown or hidden together)
+
+-- The name and the lines under it, measured at their own width (bounded again once the label is sized):
+-- width, height, and the rank icon's room before the name.
+local function MeasureLines()
 	nameText:SetWidth(0)
 	cast.text:SetWidth(0)
 	for _, line in ipairs(LINES) do
 		line:SetWidth(0)
 		line:SetShown(line.forceShow or Clean(line:GetText()) ~= nil)
 	end
-	local nameWidth = TextWidth(nameText, FALLBACK_WIDTH)
 	local iconSpace = rankIcon:IsShown() and (RANK_ICON_SIZE + 4) or 0
-	local width = nameWidth + iconSpace
+	local width = TextWidth(nameText, FALLBACK_WIDTH) + iconSpace
 	local height = math.max(Measure(nameText, "GetStringHeight", FALLBACK_HEIGHT), iconSpace > 0 and RANK_ICON_SIZE or 0)
 	for _, line in ipairs(LINES) do
 		if line:IsShown() then
@@ -681,12 +694,17 @@ local function Layout()
 			height = height + LINE_GAP + Measure(line, "GetStringHeight", 10)
 		end
 	end
-	-- The target block, under a thin line.
+	return width, height, iconSpace
+end
+
+-- The target block, under a thin line: which of its parts show, and the label's width and height with it.
+local function MeasureTarget(width, height)
 	local block = targetText.forceShow and true or false
 	local info = block and Clean(target.info:GetText()) ~= nil
 	local bar = block and target.bar.wanted or false
 	local power = bar and target.power.wanted or false
-	for _, part in ipairs({ target.line, target.portrait, targetText }) do part:SetShown(block) end
+	targetParts = targetParts or { target.line, target.portrait, targetText }
+	for _, part in ipairs(targetParts) do part:SetShown(block) end
 	target.portrait.ring:SetShown(block and target.portrait.ringShown or false)
 	target.info:SetShown(info)
 	target.bar:SetShown(bar)
@@ -703,30 +721,13 @@ local function Layout()
 			+ (castHeight > 0 and TARGET_GAP + castHeight or 0)
 		height = height + TARGET_GAP * 2 + 1 + math.max(TARGET_PORTRAIT, textHeight)
 	end
-	-- Same margins as the tooltips, on every side; room at the top only for a badge.
-	if healthBar:IsShown() then
-		height = height + LINE_GAP * 2 + HEALTH_HEIGHT
-	end
-	if powerBar:IsShown() then
-		height = height + 1 + POWER_HEIGHT
-	end
-	local castWidth, castHeight = cast:Size(TextWidth)
-	if castHeight > 0 then
-		width = math.max(width, castWidth)
-		height = height + LINE_GAP * 2 + castHeight
-	end
-	-- The portrait on the left; everything else in a column beside it.
-	local portrait = unitPortrait.wanted and true or false
-	unitPortrait:SetShown(portrait)
-	unitPortrait.ring:SetShown(portrait and unitPortrait.ringShown or false)
-	local portraitSpace = portrait and (PORTRAIT_SIZE + PORTRAIT_GAP) or 0
-	width = width + portraitSpace
-	height = math.max(height, portrait and PORTRAIT_SIZE or 0)
-	local insetTop, insetBottom = skin:Insets()
-	local top, bottom = margin + insetTop, margin + insetBottom
-	width = math.max(width, skin:MinWidth())
+	return block, info, bar, power, width, height
+end
+
+-- The column beside the portrait: the name, its lines, the unit's own health, power and cast, each under the
+-- one before. Returns the last one placed and the offset the next one takes from it.
+local function PlaceColumn(column, portraitSpace, iconSpace, top, margin, castHeight)
 	-- Never past the frame: a text drawn wider than measured is cut, not spilled.
-	local column = width - portraitSpace
 	nameText:SetWidth(math.max(1, column - iconSpace))
 	for _, line in ipairs(LINES) do
 		if line:IsShown() then line:SetWidth(math.max(1, column)) end
@@ -762,47 +763,89 @@ local function Layout()
 		cast.text:SetWidth(math.max(1, column - (cast.icon.wanted and ns.Casts.ICON_SPACE or 0)))
 		previous, offset = cast:Place(previous, offset, LINE_GAP * 2), 0
 	end
-	if block then
-		target.line:ClearAllPoints()
-		target.line:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", offset, -TARGET_GAP)
-		target.line:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
-		target.portrait:ClearAllPoints()
-		target.portrait:SetPoint("TOPLEFT", target.line, "BOTTOMLEFT", 0, -TARGET_GAP)
-		targetText:ClearAllPoints()
-		targetText:SetPoint("TOPLEFT", target.portrait, "TOPRIGHT", TARGET_GAP, 0)
-		target.info:ClearAllPoints()
-		target.info:SetPoint("TOPLEFT", targetText, "BOTTOMLEFT", 0, -LINE_GAP)
-		target.bar:ClearAllPoints()
-		target.bar:SetPoint("TOPLEFT", info and target.info or targetText, "BOTTOMLEFT", 0, -TARGET_GAP)
-		target.bar:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
-		target.power:ClearAllPoints()
-		target.power:SetPoint("TOPLEFT", target.bar, "BOTTOMLEFT", 0, -1)
-		target.power:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
-		if targetCast.active then
-			targetCast:Place(power and target.power or (bar and target.bar or (info and target.info or targetText)), 0, TARGET_GAP)
-		end
-	end
+	return previous, offset
+end
+
+-- The target block placed under the column (its parts as MeasureTarget chose them).
+local function PlaceTarget(previous, offset, block, info, bar, power, margin)
 	if not block then
 		targetCast.active = false
 		targetCast:Size(TextWidth)
+		return
 	end
+	target.line:ClearAllPoints()
+	target.line:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", offset, -TARGET_GAP)
+	target.line:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
+	target.portrait:ClearAllPoints()
+	target.portrait:SetPoint("TOPLEFT", target.line, "BOTTOMLEFT", 0, -TARGET_GAP)
+	targetText:ClearAllPoints()
+	targetText:SetPoint("TOPLEFT", target.portrait, "TOPRIGHT", TARGET_GAP, 0)
+	target.info:ClearAllPoints()
+	target.info:SetPoint("TOPLEFT", targetText, "BOTTOMLEFT", 0, -LINE_GAP)
+	target.bar:ClearAllPoints()
+	target.bar:SetPoint("TOPLEFT", info and target.info or targetText, "BOTTOMLEFT", 0, -TARGET_GAP)
+	target.bar:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
+	target.power:ClearAllPoints()
+	target.power:SetPoint("TOPLEFT", target.bar, "BOTTOMLEFT", 0, -1)
+	target.power:SetPoint("RIGHT", frame, "RIGHT", -margin, 0)
+	if targetCast.active then
+		targetCast:Place(power and target.power or (bar and target.bar or (info and target.info or targetText)), 0, TARGET_GAP)
+	end
+end
+
+-- (a line just shown or changed may be measured short by the game until it is drawn: measured again on the
+-- next frame, so nothing spills out)
+local Layout
+local function RemeasureNextFrame()
+	wipe(laidParts)
+	laidParts[1], laidParts[2] = tostring(Clean(nameText:GetText())), tostring(Clean(cast.text:GetText()))
+	laidParts[3] = tostring(Clean(targetText:GetText()))
+	for _, line in ipairs(LINES) do laidParts[#laidParts + 1] = tostring(Clean(line:GetText())) end
+	local texts = table.concat(laidParts, "\n")
+	if texts == laidText or remeasure then return end
+	laidText = texts
+	remeasure = true
+	C_Timer.After(0, function()
+		remeasure = false
+		-- (hidden meanwhile: measured again the next time it shows)
+		if frame:IsShown() then Layout() else laidText = nil end
+	end)
+end
+
+-- Laid out like the game's tooltips: left aligned, same margins and room for the badge (ns.Skin metrics), so
+-- every window looks the same.
+function Layout()
+	local margin = ns.Skin.Margin()
+	local width, height, iconSpace = MeasureLines()
+	local block, info, bar, power
+	block, info, bar, power, width, height = MeasureTarget(width, height)
+	-- Same margins as the tooltips, on every side; room at the top only for a badge.
+	if healthBar:IsShown() then
+		height = height + LINE_GAP * 2 + HEALTH_HEIGHT
+	end
+	if powerBar:IsShown() then
+		height = height + 1 + POWER_HEIGHT
+	end
+	local castWidth, castHeight = cast:Size(TextWidth)
+	if castHeight > 0 then
+		width = math.max(width, castWidth)
+		height = height + LINE_GAP * 2 + castHeight
+	end
+	-- The portrait on the left; everything else in a column beside it.
+	local portrait = unitPortrait.wanted and true or false
+	unitPortrait:SetShown(portrait)
+	unitPortrait.ring:SetShown(portrait and unitPortrait.ringShown or false)
+	local portraitSpace = portrait and (PORTRAIT_SIZE + PORTRAIT_GAP) or 0
+	width = width + portraitSpace
+	height = math.max(height, portrait and PORTRAIT_SIZE or 0)
+	local insetTop, insetBottom = skin:Insets()
+	local top, bottom = margin + insetTop, margin + insetBottom
+	width = math.max(width, skin:MinWidth())
+	local previous, offset = PlaceColumn(width - portraitSpace, portraitSpace, iconSpace, top, margin, castHeight)
+	PlaceTarget(previous, offset, block, info, bar, power, margin)
 	frame:SetSize(width + margin * 2, height + top + bottom)
 	skin:Layout()
-	-- (a line just shown or changed may be measured short by the game until it
-	-- is drawn: measured again on the next frame, so nothing spills out)
-	local texts = { tostring(Clean(nameText:GetText())), tostring(Clean(cast.text:GetText())),
-		tostring(Clean(targetText:GetText())) }
-	for _, line in ipairs(LINES) do texts[#texts + 1] = tostring(Clean(line:GetText())) end
-	texts = table.concat(texts, "\n")
-	if texts ~= laidText and not remeasure then
-		laidText = texts
-		remeasure = true
-		C_Timer.After(0, function()
-			remeasure = false
-			-- (hidden meanwhile: measured again the next time it shows)
-			if frame:IsShown() then Layout() else laidText = nil end
-		end)
-	end
+	RemeasureNextFrame()
 end
 
 local function PickHighlight(a)
@@ -848,7 +891,7 @@ local function AnalyzeUnit()
 		if db.showQuests then
 			local protected = false
 			for _, line in ipairs(a.lines) do if line.secret then protected = true end end
-			a.quests = RememberedQuests(guid, a.quests, protected)
+			a.quests = WithDrops(guid, RememberedQuests(guid, a.quests, protected))
 		end
 		a.role = db.showNPCRole and DetectRole(clean) or nil
 		a.innkeeper = IsInnkeeper(clean)
@@ -905,7 +948,7 @@ local function RefreshDynamic()
 	local a = current
 	a.threat = IsThreat(a.isPlayer)
 	-- At the top: a player who can attack you, or a monster not yours yet.
-	local untagged = not a.isPlayer and ns.IsUntaggedOnYou and ns.IsUntaggedOnYou(UNIT)
+	local untagged = not a.isPlayer and ns.IsUntaggedOnYou(UNIT)
 	alertText:SetText(a.threat and ("|cffff3030" .. L.THREAT_LINE .. "|r")
 		or untagged and ("|cffff9933" .. L.UNTAGGED_STATUS .. "|r") or "")
 	detailText:SetText(BuildDetailLine(a))
@@ -941,13 +984,13 @@ local function UpdateContent(full)
 		end
 		local title = rp and ns.db.rp.showTitle and Clean(Safe(rp.GetFullTitle, rp))
 		if title then
-			titleText:SetText("|cffffd100« " .. title .. " »|r")
+			titleText:SetText("|cffffd100" .. L.RP_TITLE_QUOTED:format(title) .. "|r")
 		elseif current.role then
 			titleText:SetText("|cffd0c090" .. current.role .. "|r")
 		end
 		identityText:SetText(BuildIdentityLine(current))
 		if Content().showPortrait then
-			Safe(SetPortraitTexture, unitPortrait, UNIT)
+			ns.SetPortrait(unitPortrait, UNIT, "label")
 			unitPortrait.wanted = true
 		end
 		local rank = Content().showClassification and current.rank
@@ -972,13 +1015,10 @@ local function IsInteractTarget(name, guid)
 	return softName ~= nil and softName == name
 end
 
--- World objects: doors, chests, quest objects, herbs, but also decorations.
--- "Interact" is said only when the game offers the object to the interact
--- key; the other lines become the details.
 -- The bobber, while the line is in the water: what happens, the time left,
 -- the catches of the session. Returns false when there is nothing to tell.
 local function RenderFishing()
-	local words = ns.FishingWords and ns.FishingWords()
+	local words = ns.FishingWords()
 	if not words then return false end
 	local status = ns.FishingStatus()
 	cast.text:SetText("|cffffd100" .. words .. "|r")
@@ -998,11 +1038,14 @@ end
 
 -- The line still in the water after the bobber was hovered.
 local function FishingLocked()
-	if not (fishLock and objectMode and ns.FishingWords) then return false end
+	if not (fishLock and objectMode) then return false end
 	local _, active = ns.FishingWords()
 	return active and true or false
 end
 
+-- World objects: doors, chests, quest objects, herbs, but also decorations.
+-- "Interact" is said only when the game offers the object to the interact
+-- key; the other lines become the details.
 local function UpdateObjectContent(data)
 	local db = Content()
 	local lines = U.TooltipLines(data and data.lines)
@@ -1039,7 +1082,7 @@ local function UpdateObjectContent(data)
 end
 
 -- The game tooltip's level line of an enemy, in the color of its difficulty.
-ColorLevelLine = function(tooltip, unit)
+local function ColorLevelLine(tooltip, unit)
 	if not Clean(Safe(UnitCanAttack, "player", unit)) then return end
 	local level = Clean(Safe(UnitLevel, unit))
 	if not level then return end
@@ -1070,14 +1113,14 @@ local function DebugReport(anchor)
 	-- Where the label is, where it is asked to be, and what the game says of the nameplate.
 	local _, plate = U.NameplateFor(UNIT)
 	local plates = C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}
-	ns.Print(("|cffffd100%s|r %s  (%s: %s [%s, nameplate %s, %d], %s: %s)"):format(
+	ns.Print(("|cffffd100%s|r %s  (%s: %s [%s, %s, %d], %s: %s)"):format(
 		a.kind == "object" and L.DEBUG_OBJECT or L.DEBUG_UNIT, DebugText(a.name),
 		L.DEBUG_ANCHOR, anchor or "-", ns.db.label.anchor, plate, type(plates) == "table" and #plates or 0,
 		L.DEBUG_ZONE, DebugText(ns.zone)))
 	local texts = {}
 	for i, line in ipairs(a.lines or {}) do texts[#texts + 1] = i .. ") " .. (line.text or L.DEBUG_SECRET) end
 	if #texts > 0 then ns.Print("  " .. L.DEBUG_LINES .. " " .. table.concat(texts, "  |  ")) end
-	local action = a.action and ((a.action.prof and a.action.prof.name or a.action.text) .. (a.action.possible and " (ok)" or " (x)"))
+	local action = a.action and ((a.action.prof and a.action.prof.name or a.action.text) .. (" (" .. (a.action.possible and L.DEBUG_YES or L.DEBUG_NO) .. ")"))
 	local quests = {}
 	for _, q in ipairs(a.quests or {}) do quests[#quests + 1] = q.text end
 	ns.Print(("  %s %s | %s %s (%s) | %s %s | %s %s | %s %s"):format(
@@ -1091,25 +1134,25 @@ local function DebugReport(anchor)
 		ns.Print(("  %s %s (%s) | %s %s"):format(L.DETAILS_TALENTS, #trees > 0 and table.concat(trees, ", ") or "-",
 			DebugText(Safe(GetNumTalentTabs, true)), L.DETAILS_ITEM_LEVEL, DebugText(entry and entry.itemLevel)))
 	end
-	ns.Print(("  %s %s | %s %s"):format(L.DEBUG_THREAT, a.threat and "!!" or "-",
+	ns.Print(("  %s %s | %s %s"):format(L.DEBUG_THREAT, a.threat and L.DEBUG_YES or "-",
 		L.DEBUG_HIGHLIGHT, DebugText(a.highlight)))
-	-- Other tooltip windows on screen (e.g. a bubble that should not be there).
+	-- Other tooltip windows on screen (a bubble that should not be there).
 	local others = {}
-	for _, other in ipairs(ns.VisibleTooltips and ns.VisibleTooltips() or {}) do
+	for _, other in ipairs(ns.VisibleTooltips()) do
 		others[#others + 1] = (Clean(Safe(other.GetName, other)) or "?") .. (ns.IsTooltipHidden(other) and (" (" .. L.DEBUG_HIDDEN .. ")") or "")
 	end
 	ns.Print("  " .. L.DEBUG_OTHER_TOOLTIPS .. " " .. (#others > 0 and table.concat(others, ", ") or "-"))
 end
 
 function ns.DebugEnvironment()
-	local function has(v) return v and "|cff66ff66ok|r" or ("|cffff6060" .. L.DEBUG_MISSING .. "|r") end
+	local function has(v) return v and ("|cff66ff66" .. L.DEBUG_YES .. "|r") or ("|cffff6060" .. L.DEBUG_MISSING .. "|r") end
 	ns.Print(("%s %s | %s %s | %s %s"):format(L.DEBUG_ZONE, DebugText(ns.zone), L.DEBUG_COMBAT, ns.inCombat and L.DEBUG_YES or L.DEBUG_NO,
 		L.DEBUG_PROFILE, DebugText(ns.profileName)))
 	local names = {}
 	for _, prof in ipairs(professions) do names[#names + 1] = ("%s %d (%s)"):format(prof.name, prof.rank, DebugText(prof.skillLine)) end
 	ns.Print(L.DEBUG_PROFESSIONS .. " " .. (#names > 0 and table.concat(names, ", ") or "-"))
-	ns.Print(("API : C_TooltipInfo %s, C_NamePlate %s, NotifyInspect %s, CanLootUnit %s, issecretvalue %s, Total RP 3 %s"):format(
-		has(C_TooltipInfo and C_TooltipInfo.GetUnit), has(C_NamePlate and C_NamePlate.GetNamePlateForUnit), has(NotifyInspect),
+	ns.Print(("%s C_TooltipInfo %s, C_NamePlate %s, NotifyInspect %s, CanLootUnit %s, issecretvalue %s, Total RP 3 %s"):format(
+		L.DEBUG_API, has(C_TooltipInfo and C_TooltipInfo.GetUnit), has(C_NamePlate and C_NamePlate.GetNamePlateForUnit), has(NotifyInspect),
 		has(CanLootUnit), has(issecretvalue),
 		has(AddOn_TotalRP3 and AddOn_TotalRP3.Player)))
 	-- Style asked versus what each window really draws.
@@ -1127,9 +1170,10 @@ end
 -- Display ------------------------------------------------------------------
 
 -- Clicking or turning the camera makes the game forget what is hovered.
--- A click on a character (the game loses who is hovered for its length): a button held with the mouse still.
--- A button held while the camera turns (the mouse moving, or the game turning the view) is no click: the
--- game then hands its nameplates over to others, the label must not stay.
+-- A click on a character (the game loses who is hovered for its length): a
+-- button held with the mouse still. A button held while the camera turns (the
+-- mouse moving, or the game turning the view) is no click: the game then hands
+-- its nameplates over to others, the label must not stay.
 local CLICK_SLACK = 6 -- pixels the mouse may move during a click
 local pressX, pressY
 local function IsClicking()
@@ -1157,19 +1201,39 @@ local function WorldCursorObject()
 	return Clean(first.leftText) or true, true
 end
 
+-- (asked several times a frame: the world cursor read once a frame)
+local hoveredAt, hovered
 local function IsObjectStillHovered()
-	if Clean(Safe(UnitExists, UNIT)) or not IsOverWorld() then return false end
-	local name, supported = WorldCursorObject()
-	if not supported then return GameTooltip:IsShown() end
-	return name ~= nil
+	local now = GetTime()
+	if hoveredAt == now then return hovered end
+	hoveredAt = now
+	if Clean(Safe(UnitExists, UNIT)) or not IsOverWorld() then
+		hovered = false
+	else
+		local name, supported = WorldCursorObject()
+		if supported then hovered = name ~= nil else hovered = GameTooltip:IsShown() end
+	end
+	return hovered
 end
 
--- Returns show, held: held means the hovered thing is momentarily missing
--- (click, camera) and the label keeps its content and place.
+-- A hovered player with a Total RP 3 profile: TRP3's own card describes them (option).
+-- (the profile asked once a second per player: this is read on every frame)
+local rpGuid, rpAt, rpTakes = nil, 0, false
+local function CardLeftToTRP3()
+	local db = ns.db
+	if not (db.rp.leaveCard and UNIT == "mouseover" and AddOn_TotalRP3) then return false end
+	local guid = Clean(Safe(UnitGUID, UNIT))
+	if not guid or not Clean(Safe(UnitIsPlayer, UNIT)) then return false end
+	local now = GetTime()
+	if guid ~= rpGuid or now - rpAt > 1 then rpGuid, rpAt, rpTakes = guid, now, GetRPPlayer() ~= nil end
+	return rpTakes
+end
+
 -- The settings allow the label right now (enabled, not hidden in combat).
 local function LabelAllowed()
 	local db = ns.db
 	if not (db and db.enabled and db.label.enabled) or ns.sceneActive then return false end
+	if CardLeftToTRP3() then return false end
 	return not (db.label.hideInCombat and ns.inCombat)
 end
 
@@ -1199,6 +1263,8 @@ end
 
 function ns.LabelUnit() return UNIT end
 
+-- Returns show, held: held means the hovered thing is momentarily missing
+-- (click, camera) and the label keeps its content and place.
 local function ShouldShow()
 	local db = ns.db
 	if not LabelAllowed() then return false end
@@ -1235,8 +1301,6 @@ local anchoredGUID -- the character that plate carried then
 local plateSeen = 0 -- when the plate of the one described was there last
 local PLATE_GRACE = 0.3 -- seconds a missing plate is waited for
 
--- Returns "head" or "cursor", the place actually used. An anchor to a
--- nameplate follows it by itself: it is only set again when the plate changes.
 -- The game hands its nameplates over to other characters (the camera turns,
 -- someone leaves the screen): a plate still carrying the one described?
 local function StillTheirs(plate)
@@ -1252,6 +1316,8 @@ local function Vanish()
 	anchoredPlate, anchoredGUID = nil, nil
 end
 
+-- Returns "head" or "cursor", the place actually used. An anchor to a
+-- nameplate follows it by itself: it is only set again when the plate changes.
 local function Position()
 	if FishingLocked() and not IsObjectStillHovered() then
 		-- The bobber's own plate when the game gives one (soft interact), else where it was.
@@ -1282,7 +1348,7 @@ local function Position()
 	if plate then
 		-- An invisible plate takes no room: the label stands right on the head,
 		-- unless the game writes the name there itself (then just over it).
-		local low = ns.IsPlateQuiet and ns.IsPlateQuiet(plate) and not (ns.GameShowsName and ns.GameShowsName(UNIT)) or false
+		local low = ns.IsPlateQuiet(plate) and not ns.GameShowsName(UNIT) or false
 		if plate ~= anchoredPlate or low ~= anchoredLow then
 			frame:ClearAllPoints()
 			frame:SetPoint("BOTTOM", plate, low and "BOTTOM" or "TOP", 0, HEAD_OFFSET)
@@ -1360,7 +1426,9 @@ local function UnitFrameTooltip(tooltip)
 	return db.hideTargetTooltip and Over(TargetFrame) or false
 end
 
-local function UpdateTooltipVisibility(tooltip)
+local decided = setmetatable({}, { __mode = "k" }) -- tooltip -> hidden or not, as last decided
+
+local function TooltipWanted(tooltip)
 	local name = tooltip.GetName and Clean(Safe(tooltip.GetName, tooltip))
 	-- A fight with the label hidden (option): no tooltip over characters either.
 	local db = ns.db
@@ -1368,15 +1436,39 @@ local function UpdateTooltipVisibility(tooltip)
 	local quietFight = db and db.label.hideInCombat and ns.inCombat
 	local hide = not KEPT_TOOLTIPS[name or ""]
 		and (ReplacesGameTooltip() and (LabelHandlesWorld() or quietFight) or UnitFrameTooltip(tooltip))
-	SetTooltipHidden(tooltip, hide or false)
+	return hide and true or false
+end
+
+local function UpdateTooltipVisibility(tooltip)
+	local hide = TooltipWanted(tooltip)
+	decided[tooltip] = hide
+	SetTooltipHidden(tooltip, hide)
+end
+
+-- Another addon drawing the tooltips (TipTac, ElvUI: Compat.lua "tooltip") fades them itself: their
+-- opacity is then written only when the decision changes, never fought over on every frame.
+local tooltipsLeft = false
+
+local function OnTooltipShow(tooltip)
+	tooltipsLeft = ns.Yields("tooltip") ~= nil
+	UpdateTooltipVisibility(tooltip)
+end
+
+local function OnTooltipUpdate(tooltip)
+	if not tooltipsLeft then return UpdateTooltipVisibility(tooltip) end
+	local hide = TooltipWanted(tooltip)
+	if hide ~= decided[tooltip] then UpdateTooltipVisibility(tooltip) end
 end
 
 -- Any game tooltip (watched by Tooltips.lua): checked when it shows and on
 -- every frame before drawing, so the game cannot bring it back.
 function ns.WatchTooltip(tooltip)
-	tooltip:HookScript("OnShow", UpdateTooltipVisibility)
-	tooltip:HookScript("OnUpdate", UpdateTooltipVisibility)
-	tooltip:HookScript("OnHide", function(self) SetTooltipHidden(self, false) end)
+	tooltip:HookScript("OnShow", OnTooltipShow)
+	tooltip:HookScript("OnUpdate", OnTooltipUpdate)
+	tooltip:HookScript("OnHide", function(self)
+		decided[self] = nil
+		SetTooltipHidden(self, false)
+	end)
 end
 
 local function Show()
@@ -1384,8 +1476,8 @@ local function Show()
 	sinceRefresh, sinceScan = 0, 0
 	frame:Show()
 	local anchor = Position()
-	-- The small name of a group member steps aside at once.
-	if ns.RefreshPlates then ns.RefreshPlates() end
+	-- The small name of a group member steps aside at once (only the label's plate looked at, when it has one).
+	ns.RefreshPlates(anchoredPlate)
 	DebugReport(anchor)
 end
 
@@ -1415,7 +1507,7 @@ local function OnUpdate(self, elapsed)
 		if ns.db.label.stickyTarget then C_Timer.After(0.1, ShowSticky) end
 		return
 	end
-	skin:Animate(alpha)
+	skin:Animate()
 	sinceRefresh = sinceRefresh + elapsed
 	sinceScan = sinceScan + elapsed
 	if held then
@@ -1477,8 +1569,9 @@ function ns.LabelPlate()
 	return IsLabelActive() and anchoredPlate or nil
 end
 
-local function OnEvent(_, event, guid)
+local function OnEvent(_, event, ...)
 	if event == "INSPECT_READY" then
+		local guid = ...
 		if not Inspect.OnReady(guid, UNIT) then return end
 		if targetAlpha > 0 and not objectMode then UpdateContent(true) end
 		return
@@ -1498,7 +1591,8 @@ local function OnEvent(_, event, guid)
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
 		-- Your target back on screen: the label comes back on it.
-		if StickyTarget() and Clean(Safe(UnitIsUnit, guid, "target")) and not IsLabelActive() then ShowSticky() end
+		local unit = ...
+		if StickyTarget() and Clean(Safe(UnitIsUnit, unit, "target")) and not IsLabelActive() then ShowSticky() end
 		return
 	end
 	if event == "PLAYER_TARGET_CHANGED" then
@@ -1573,8 +1667,8 @@ function ns.InitLabel()
 	identityText = CreateLine("GameTooltipText", 1, 1, 1)
 	actionText = CreateLine("GameTooltipText", 1, 1, 1)
 	questText = CreateLine("GameTooltipText", 1, 1, 1)
-	detailText = CreateLine("GameTooltipTextSmall", 0.8, 0.8, 0.8)
-	moreText = CreateLine("GameTooltipTextSmall", 0.8, 0.8, 0.8)
+	detailText = CreateLine("GameTooltipText", 0.8, 0.8, 0.8)
+	moreText = CreateLine("GameTooltipText", 0.8, 0.8, 0.8)
 	-- The quest objectives come right after the level and the status; the
 	-- closer look (Shift) right under the level.
 	LINES = { alertText, titleText, questStatusText, identityText, actionText, detailText, moreText, questText }
@@ -1594,12 +1688,7 @@ function ns.InitLabel()
 	target.portrait = ns.Skin.RoundPortrait(frame, TARGET_PORTRAIT)
 	targetText = CreateLine("GameTooltipTextSmall", 0.8, 0.8, 0.8)
 	target.info = CreateLine("GameTooltipTextSmall", 0.65, 0.65, 0.65)
-	target.bar = CreateFrame("StatusBar", nil, frame)
-	target.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-	target.bar:SetHeight(TARGET_BAR_HEIGHT)
-	local targetBackground = target.bar:CreateTexture(nil, "BACKGROUND")
-	targetBackground:SetAllPoints()
-	targetBackground:SetColorTexture(0, 0, 0, 0.6)
+	target.bar = U.NewBar(frame, TARGET_BAR_HEIGHT)
 	target.power = U.NewBar(frame, TARGET_POWER_HEIGHT)
 	for _, part in ipairs({ target.line, target.portrait, target.portrait.ring, targetText, target.info, target.bar }) do part:Hide() end
 

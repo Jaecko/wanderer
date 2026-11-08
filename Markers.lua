@@ -46,6 +46,13 @@ end
 local function MarkedUnit()
 	local guid = Clean(Safe(UnitGUID, "mouseover"))
 	if not guid then
+		-- (where the game hides the GUIDs, dungeons: the hovered one still, never your target in its place; with
+		-- no plate, nobody: "mouseover" would be whoever is under the cursor once the symbol is picked)
+		if Clean(Safe(UnitExists, "mouseover")) then
+			if Clean(Safe(UnitIsUnit, "mouseover", "target")) then return "target" end
+			local plate = U.NameplateFor("mouseover")
+			return plate and U.PlateUnit(plate) or nil
+		end
 		if Clean(Safe(UnitExists, "target")) then return "target", Clean(Safe(UnitGUID, "target")) end
 		return
 	end
@@ -111,7 +118,7 @@ local function Close(apply)
 	if apply and chosen and unit then
 		-- The same character still (a unit can change hands): its symbol, or none.
 		local guid = Clean(Safe(UnitGUID, unit))
-		if not unitGUID or guid == unitGUID then
+		if (unitGUID and guid == unitGUID) or (not unitGUID and Clean(Safe(UnitExists, unit))) then
 			Safe(SetRaidTarget, unit, chosen == 9 and 0 or chosen)
 		end
 	end

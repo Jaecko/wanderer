@@ -15,7 +15,6 @@ local MIN_DURATION = 300 -- seconds: shorter ones are not blessings to keep up
 local MAX_AURAS = 40
 
 local watched = {} -- "guid:name" -> { name, icon, who, guid, self }
-local since = 0
 
 local function On()
 	return ns.db and ns.db.enabled and ns.db.buffs.remind
@@ -47,13 +46,30 @@ local function Aura(unit, index)
 	end
 end
 
+-- Whether a unit carries a buff of that name, whoever cast it (another player's same blessing: nothing to recast).
+local function Carries(unit, name)
+	for index = 1, MAX_AURAS do
+		local aura = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex and Safe(C_UnitAuras.GetAuraDataByIndex, unit, index, "HELPFUL")
+		local found
+		if type(aura) == "table" then
+			found = Clean(aura.name)
+		elseif not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) and UnitBuff then
+			found = Clean((Safe(UnitBuff, unit, index)))
+		end
+		if found == nil and type(aura) ~= "table" then return false end
+		if found == name then return true end
+	end
+	return false
+end
+
 local function Scan()
 	if not On() then return wipe(watched) end
 	if ns.inCombat or InCombatLockdown() then return end
 	local seen, present = {}, {}
 	for _, unit in ipairs(Units()) do
-		local guid = Clean(Safe(UnitGUID, unit))
-		local alive = guid and Clean(Safe(UnitIsConnected, unit)) ~= false and not Clean(Safe(UnitIsDeadOrGhost, unit))
+		-- (who it is: its GUID; where the game hides it, instances, its token)
+		local guid = Clean(Safe(UnitGUID, unit)) or ("unit:" .. unit)
+		local alive = Clean(Safe(UnitIsConnected, unit)) ~= false and not Clean(Safe(UnitIsDeadOrGhost, unit))
 		if alive then
 			present[guid] = true
 			for index = 1, MAX_AURAS do
@@ -62,7 +78,7 @@ local function Scan()
 				if duration and duration >= MIN_DURATION then
 					local key = guid .. ":" .. name -- (its ranks share its name)
 					seen[key] = true
-					watched[key] = { name = name, icon = icon, guid = guid,
+					watched[key] = { name = name, icon = icon, guid = guid, unit = unit,
 						who = Clean(Safe(UnitName, unit)) or "?", self = unit == "player" }
 				end
 			end
@@ -73,7 +89,7 @@ local function Scan()
 	for key, entry in pairs(watched) do
 		if not seen[key] then
 			watched[key] = nil
-			if present[entry.guid] then
+			if present[entry.guid] and not Carries(entry.unit, entry.name) then
 				if not faded[entry.name] then
 					faded[entry.name] = { icon = entry.icon, who = {} }
 					order[#order + 1] = entry.name
@@ -86,22 +102,20 @@ local function Scan()
 	for _, name in ipairs(order) do
 		local spell = faded[name]
 		local icon = spell.icon and ("|T%s:16:16:0:0|t "):format(spell.icon) or ""
-		if ns.Toast then ns.Toast(L.BUFF_FADED, icon .. L.BUFF_FADED_TEXT:format(name, table.concat(spell.who, ", "))) end
+		ns.Toast(L.BUFF_FADED, icon .. L.BUFF_FADED_TEXT:format(name, table.concat(spell.who, ", ")))
 	end
 end
 ns.ScanBuffs = Scan -- (tests)
 
 function ns.InitBuffs()
 	local frame = CreateFrame("Frame")
-	frame:SetScript("OnUpdate", function(_, elapsed)
-		since = since + elapsed
-		if since < CHECK_EVERY then return end
-		since = 0
-		-- (the reminder off: nothing looked at)
-		if not On() then
-			if next(watched) then watched = {} end
-			return
+	-- (a token given to someone else: what was watched under it belonged to the one before)
+	pcall(frame.RegisterEvent, frame, "GROUP_ROSTER_UPDATE")
+	frame:SetScript("OnEvent", function()
+		for key, entry in pairs(watched) do
+			if entry.guid:find("^unit:") then watched[key] = nil end
 		end
-		Scan()
 	end)
+	-- (a look every few seconds, not a script run on every frame: off, it ends at once)
+	C_Timer.NewTicker(CHECK_EVERY, Scan)
 end

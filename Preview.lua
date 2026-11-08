@@ -1,8 +1,8 @@
 local _, ns = ...
 local L = ns.L
 
--- Live preview: while the options show the label's pages, a sample label
--- stands beside the options window and follows every change at once (style,
+-- Live preview: while the settings show the label's pages, a sample label
+-- stands beside the settings window and follows every change at once (style,
 -- font, opacity, spacing, size). Shown only where there is room for it.
 
 local U = ns.Util
@@ -12,31 +12,18 @@ local GAP = 16
 local BASE_WIDTH = 230
 local LINES = ns.Skin.SAMPLE_LINES
 
-local holder, preview, skin, kicker
+local holder, preview, skin, kicker, watcher, unitFrames
 local texts = {}
 local since, signature = 0, nil
 
--- The page the options window shows, whatever this version of the game calls it.
-local function CurrentCategory()
-	local panel = SettingsPanel
-	if not panel then return end
-	if panel.GetCurrentCategory then
-		local ok, current = pcall(panel.GetCurrentCategory, panel)
-		if ok and current then return current end
-	end
-	local list = panel.GetCategoryList and panel:GetCategoryList()
-	if list and list.GetCurrentCategory then
-		local ok, current = pcall(list.GetCurrentCategory, list)
-		if ok then return current end
-	end
-end
-
--- Beside the options window: on the right, else on the left; nil without room.
-local function Place(width)
-	local panel = SettingsPanel
+-- Beside the settings window (panel): on the right, else on the left; false without room.
+local function Place(panel, width)
 	local right, left, top = panel:GetRight(), panel:GetLeft(), panel:GetTop()
 	local screen = UIParent:GetRight() or 0
 	if not (right and left and top) then return false end
+	-- (the window drawn at its own scale: its sides on the screen's)
+	local ratio = (panel:GetEffectiveScale() or 1) / (UIParent:GetEffectiveScale() or 1)
+	right, left = right * ratio, left * ratio
 	holder:ClearAllPoints()
 	if right + GAP + width <= screen then
 		holder:SetPoint("TOPLEFT", panel, "TOPRIGHT", GAP, -40)
@@ -77,23 +64,37 @@ local function Signature()
 		tostring(db.scale) }, "|")
 end
 
+-- The unit frames' page: their samples instead of the label (UnitFrames.lua draws them with the same engine).
+local function DrawUnitFrames()
+	if not unitFrames then
+		unitFrames = ns.UnitFramesPreview(holder)
+		unitFrames:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -6)
+	end
+	unitFrames:Draw()
+	holder:SetSize(math.max(unitFrames:GetWidth(), BASE_WIDTH), unitFrames:GetHeight() + 20)
+end
+
 local function OnUpdate(_, elapsed)
 	since = since + elapsed
 	if since < CHECK_EVERY then return end
 	since = 0
-	local wanted = ns.db and SettingsPanel and SettingsPanel:IsShown()
-		and ns.PREVIEW_CATEGORIES[CurrentCategory() or false]
-	if not wanted then
+	local host = ns.db and ns.SettingsPreviewHost and ns.SettingsPreviewHost()
+	-- (a question asked: the preview, above every window, steps aside for it)
+	if not host or ns.Skin.Asking() then
 		holder:Hide()
 		signature = nil
 		return
 	end
-	local now = Signature()
+	local kind = ns.SettingsPreviewKind and ns.SettingsPreviewKind() or "label"
+	local units = kind == "unitframes" and ns.UnitFramesPreview ~= nil
+	local now = units and ("units|" .. (unitFrames and unitFrames:Signature() or "")) or Signature()
 	if now ~= signature then
 		signature = now
-		Draw()
+		preview:SetShown(not units)
+		if unitFrames then unitFrames:SetShown(units) end
+		if units then DrawUnitFrames() else Draw() end
 	end
-	holder:SetShown(Place(holder:GetWidth()))
+	holder:SetShown(Place(host, holder:GetWidth()))
 end
 
 function ns.InitPreview()
@@ -115,12 +116,15 @@ function ns.InitPreview()
 		previous = text
 	end
 	preview:Show()
-	-- Watches only while the options window is open.
-	local watcher = CreateFrame("Frame", nil, UIParent)
+	-- Watches only while the settings window is open (SettingsWindow.lua).
+	watcher = CreateFrame("Frame", nil, UIParent)
 	watcher:SetScript("OnUpdate", OnUpdate)
 	watcher:Hide()
-	if SettingsPanel and SettingsPanel.HookScript then
-		SettingsPanel:HookScript("OnShow", function() since = CHECK_EVERY watcher:Show() end)
-		SettingsPanel:HookScript("OnHide", function() watcher:Hide() holder:Hide() signature = nil end)
-	end
+end
+
+function ns.WatchPreview(on)
+	if not watcher then return end
+	since, signature = CHECK_EVERY, nil
+	watcher:SetShown(on and true or false)
+	if not on then holder:Hide() end
 end

@@ -80,7 +80,9 @@ local function OnThreat(unit)
 	if not (db and db.enabled and db.threat.alert) then return end
 	local _, instance = InGroupContent()
 	if not instance or not Holder() then return end
+	-- (who it is: its GUID; where the game hides it, dungeons, its nameplate while shown)
 	local guid = Clean(Safe(UnitGUID, unit))
+	if not guid and type(unit) == "string" and unit:match("^nameplate%d+$") then guid = "plate:" .. unit end
 	if not guid then return end
 	local tanking = Situation(unit)
 	if tanking == nil then return end
@@ -108,7 +110,11 @@ function ns.InitThreat()
 	alert = CreateFrame("Frame", "WandererThreatAlert", UIParent)
 	alert:SetFrameStrata("HIGH")
 	alert:SetSize(400, 30)
-	alert:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
+	-- (placed where you put it: Place.lua)
+	ns.Placeable({ key = "threat", label = function() return L.PLACING_THREAT end, frame = alert,
+		default = { "CENTER", "CENTER", 0, 160 },
+		enabled = function() return ns.db and ns.db.enabled and ns.db.threat.alert and true or false end })
+	ns.PlaceApply("threat", alert)
 	alert:SetAlpha(0)
 	alert:Hide()
 	if alert.SetIgnoreParentAlpha then alert:SetIgnoreParentAlpha(true) end
@@ -121,9 +127,14 @@ function ns.InitThreat()
 	driver:SetScript("OnUpdate", OnUpdate)
 	driver:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
 	driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+	pcall(driver.RegisterEvent, driver, "NAME_PLATE_UNIT_REMOVED")
 	driver:SetScript("OnEvent", function(_, event, unit)
 		if event == "PLAYER_REGEN_ENABLED" then
 			wipe(holding)
+		elseif event == "NAME_PLATE_UNIT_REMOVED" then
+			-- (its token goes to the next one shown)
+			unit = Clean(unit)
+			if unit then holding["plate:" .. unit] = nil end
 		elseif unit then
 			OnThreat(unit)
 		end

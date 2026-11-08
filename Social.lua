@@ -4,7 +4,9 @@ local L = ns.L
 -- Requests from other players, answered for you:
 -- * duels and pet battle duels declined, except from your friends;
 -- * group invitations from your friends and guild accepted;
--- * resurrections and summons accepted, never during a fight.
+-- * resurrections and summons accepted, never during a fight;
+-- * a whisper made of one chosen word brings its sender into your group,
+--   when you lead it or have none.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -32,7 +34,47 @@ local function Fighting()
 	return InCombatLockdown() or (IsEncounterInProgress and Clean(Safe(IsEncounterInProgress))) and true or false
 end
 
+local INVITE_AGAIN = 2 -- seconds between two invitations on the word
+local lastInvite = 0
+
+local function Trim(text)
+	return strtrim(type(text) == "string" and text or ""):lower()
+end
+
+local function CanInvite()
+	if not Clean(Safe(IsInGroup)) then return true end
+	return Clean(Safe(UnitIsGroupLeader, "player")) or Clean(Safe(UnitIsGroupAssistant, "player")) or false
+end
+
+-- Who whispered, by the whole name: the chat gives only a first name on WoW Forever (several players may
+-- share it), the game's record of that player (by its identity) gives the rest.
+local function WholeName(sender, guid)
+	sender = Clean(sender)
+	if type(sender) ~= "string" or sender == "" then return nil end
+	guid = Clean(guid)
+	local recorded = guid and GetPlayerInfoByGUID and Clean(select(6, Safe(GetPlayerInfoByGUID, guid)))
+	local first = sender:match("^[^%-]+") or sender
+	if type(recorded) ~= "string" or #recorded <= #first or recorded:sub(1, #first) ~= first then return sender end
+	local realm = sender:match("%-(.+)$")
+	if realm and not recorded:find(realm, 1, true) then return recorded .. "-" .. realm end
+	return recorded
+end
+ns.WholeName = WholeName
+
 local HANDLERS = {
+	CHAT_MSG_WHISPER = function(db, text, sender, ...)
+		if not db.inviteOnWord then return end
+		local word = Trim(db.inviteWord)
+		if word == "" or Trim(Clean(text)) ~= word or not CanInvite() then return end
+		if GetTime() - lastInvite < INVITE_AGAIN then return end
+		local invite = C_PartyInfo and C_PartyInfo.InviteUnit or InviteUnit
+		-- (the sender's identity: the twelfth value of a whisper)
+		local name = WholeName(sender, (select(10, ...)))
+		if invite and name then
+			lastInvite = GetTime()
+			Safe(invite, name)
+		end
+	end,
 	DUEL_REQUESTED = function(db, name)
 		if not db.declineDuels or IsFriendName(name) then return end
 		Safe(CancelDuel)
@@ -53,7 +95,10 @@ local HANDLERS = {
 		HidePopup("PARTY_INVITE")
 	end,
 	RESURRECT_REQUEST = function(db)
-		if not db.acceptResurrect or Fighting() then return end
+		if not db.acceptResurrect or Fighting() or U.IsSkipping() then return end
+		-- (in a raid, the choice stays the player's, as the game leaves it: the raid may want you to wait)
+		local _, kind = Safe(IsInInstance)
+		if Clean(Safe(IsInRaid)) or Clean(kind) == "raid" then return end
 		Safe(AcceptResurrect)
 		for _, popup in ipairs(RESURRECT_POPUPS) do HidePopup(popup) end
 	end,

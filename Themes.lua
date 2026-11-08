@@ -38,12 +38,11 @@ function ns.CurrentTheme()
 end
 
 -- Grid of cards ----------------------------------------------------------------------
--- Shared by the options page and the welcome screen: every grid stays in sync.
+-- Shared by the settings window and the welcome screen: every grid stays in sync.
 
 local GAP = 12
 local PREVIEW_INSET = 8
 local MIN_FONT_SIZE = 7
-local CHECK_TEXTURE = "Interface\\Buttons\\UI-CheckBox-Check"
 
 local grids = {}
 local GridMixin = {}
@@ -148,7 +147,7 @@ local function CreateCard(grid, index, theme)
 	card.check = card:CreateTexture(nil, "OVERLAY")
 	card.check:SetSize(20, 20)
 	card.check:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 6)
-	card.check:SetTexture(CHECK_TEXTURE)
+	ns.Skin.GlyphOn(card.check, "check")
 	-- The name stays between the left edge and the check mark.
 	card.title = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	card.title:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 10, 10)
@@ -157,10 +156,11 @@ local function CreateCard(grid, index, theme)
 	if card.title.SetWordWrap then card.title:SetWordWrap(false) end
 	card.title:SetText(L["STYLE_" .. theme.key:upper()])
 	card:SetScript("OnClick", function()
-		ns.ApplyTheme(theme.key)
+		-- (as any setting you change: in every profile of this character, its places' too)
+		ns.ChangeEverywhere(function() ns.ApplyTheme(theme.key) end)
 		if not grid.quiet then ns.Print(L.MSG_THEME:format(L["STYLE_" .. theme.key:upper()])) end
 		RefreshGrids()
-		ns.Util.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
+		ns.Skin.Play("click")
 	end)
 	card:SetScript("OnEnter", function(self)
 		self.hover:Show()
@@ -186,41 +186,4 @@ function ns.CreateThemeGrid(parent, options)
 	for index, theme in ipairs(ns.THEMES) do CreateCard(grid, index, theme) end
 	grids[#grids + 1] = grid
 	return grid
-end
-
--- Options page -----------------------------------------------------------------------
-
-local PAGE_MARGIN = 16
-
--- Registers the page under the options' home page (first of the folded pages).
-function ns.RegisterThemesPage(parentCategory)
-	if not (Settings and Settings.RegisterCanvasLayoutSubcategory) then return end
-	local page = CreateFrame("Frame")
-	page.title = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightHuge")
-	page.title:SetPoint("TOPLEFT", page, "TOPLEFT", PAGE_MARGIN, -PAGE_MARGIN)
-	page.title:SetText(L.PAGE_THEMES)
-	page.description = page:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	page.description:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, -8)
-	page.description:SetPoint("RIGHT", page, "RIGHT", -PAGE_MARGIN, 0)
-	page.description:SetJustifyH("LEFT")
-	page.description:SetText(L.THEMES_DESC)
-	page.custom = page:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-	page.custom:SetJustifyH("LEFT")
-	page.custom:SetText(L.THEMES_CUSTOM)
-	local grid = ns.CreateThemeGrid(page, {
-		onRefresh = function(currentKey) page.custom:SetShown(currentKey == nil) end,
-	})
-	page.custom:SetPoint("TOPLEFT", page.description, "BOTTOMLEFT", 0, -16 - grid:Height() - 12)
-	page.custom:SetPoint("RIGHT", page, "RIGHT", -PAGE_MARGIN, 0)
-	local function Layout()
-		local width = page:GetWidth()
-		if width and width > 0 then grid:Layout(page.description, width - 2 * PAGE_MARGIN, 16) end
-	end
-	page:SetScript("OnSizeChanged", Layout)
-	page:SetScript("OnShow", function()
-		Layout()
-		grid:Refresh()
-	end)
-	Settings.RegisterCanvasLayoutSubcategory(parentCategory, page, L.PAGE_THEMES)
-	grid:Refresh()
 end

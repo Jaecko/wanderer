@@ -13,7 +13,8 @@ local watched = setmetatable({}, { __mode = "k" }) -- frames already hooked
 
 local function Look()
 	local db = ns.db
-	if not (db and db.enabled and db.meter) then return "game" end
+	-- (another addon dressing the meter: the game's look under it)
+	if not (db and db.enabled and db.meter) or ns.Yields("meterLook") then return "game" end
 	return db.meter.look == "text" and "text" or "game"
 end
 
@@ -54,20 +55,18 @@ local function StyleEntry(entry)
 		end
 		entries[entry] = saved
 	end
-	local path = ns.Skin and ns.Skin.FontPath(ns.db.label.font)
+	local path = ns.Skin.FontPath(ns.db.label.font)
 	local _, size, flags = bar.Name:GetFont()
 	if path and size then bar.Name:SetFont(path, size, flags) end
-	do
-		for _, region in ipairs(regions) do region:SetAlpha(0) end
-		if entry.Icon then entry.Icon:Hide() end
-		for _, text in ipairs({ bar.Name, bar.Value }) do
-			text:SetShadowOffset(1, -1)
-			text:SetShadowColor(0, 0, 0, 1)
-		end
-		-- No bar: the name carries its color (the class's, as the bar had it).
-		local color = entry.statusBarColor
-		if color and color.GetRGB then bar.Name:SetTextColor(color:GetRGB()) end
+	for _, region in ipairs(regions) do region:SetAlpha(0) end
+	if entry.Icon then entry.Icon:Hide() end
+	for _, text in ipairs({ bar.Name, bar.Value }) do
+		text:SetShadowOffset(1, -1)
+		text:SetShadowColor(0, 0, 0, 1)
 	end
+	-- No bar: the name carries its color (the class's, as the bar had it).
+	local color = entry.statusBarColor
+	if color and color.GetRGB then bar.Name:SetTextColor(color:GetRGB()) end
 end
 
 local function WatchEntry(entry)
@@ -135,21 +134,30 @@ end
 
 -- Text only: the controls show under the mouse, and fade away after.
 local fader
-local function Fade(_, elapsed)
-	local text = Look() == "text"
-	EachWindow(function(window)
-		local target = (not text or window:IsMouseOver()) and 1 or 0
-		for _, control in ipairs(Controls(window)) do
-			local alpha = control:GetAlpha()
-			if alpha ~= target then
-				local step = FADE_SPEED * elapsed
-				control:SetAlpha(target > alpha and math.min(target, alpha + step) or math.max(target, alpha - step))
-			end
+local fadeText, fadeElapsed, fading, idle = false, 0, false, 0
+local IDLE_CHECK = 0.1 -- seconds between two looks at the mouse, nothing fading
+local function FadeWindow(window)
+	local target = (not fadeText or window:IsMouseOver()) and 1 or 0
+	window.wandererControls = window.wandererControls or Controls(window)
+	for _, control in ipairs(window.wandererControls) do
+		local alpha = control:GetAlpha()
+		if alpha ~= target then
+			fading = true
+			local step = FADE_SPEED * fadeElapsed
+			control:SetAlpha(target > alpha and math.min(target, alpha + step) or math.max(target, alpha - step))
 		end
-	end)
+	end
+end
+local function Fade(_, elapsed)
+	-- (each frame while something fades; else a look at the mouse now and then)
+	idle = idle + elapsed
+	if not fading and idle < IDLE_CHECK then return end
+	local text = Look() == "text"
+	fadeText, fadeElapsed, fading = text, fading and elapsed or idle, false
+	idle = 0
+	EachWindow(FadeWindow)
 	if not text then fader:SetScript("OnUpdate", nil) end
 end
-
 local function UpdateFader()
 	if not fader then fader = CreateFrame("Frame") end
 	fader:SetScript("OnUpdate", Look() == "text" and Fade or nil)

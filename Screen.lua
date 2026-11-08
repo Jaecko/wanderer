@@ -2,7 +2,8 @@ local _, ns = ...
 
 -- What shows on the screen while playing:
 -- * the red messages repeated in fights ("Not enough rage", "Out of range",
---   "No target"...) are filtered; the useful ones (bags full, quests...) stay;
+--   "No target"...) are filtered when asked; the useful ones (bags full,
+--   quests...) stay. Another addon hiding them (Leatrix Plus): left to it;
 -- * the talking heads (NPCs speaking in a frame) can be closed at once.
 -- (The action camera is driven by Core, as a managed console variable.)
 
@@ -41,7 +42,13 @@ relay:SetScript("OnEvent", function(_, event, errorType, message, ...)
 		end
 		return
 	end
-	if gameHandler then gameHandler(UIErrorsFrame, event, errorType, message, ...) end
+	-- (called apart: a fault of the game's own handler never spreads to Wanderer, nor the other way)
+	if not gameHandler then return end
+	if securecallfunction then
+		securecallfunction(gameHandler, UIErrorsFrame, event, errorType, message, ...)
+	else
+		gameHandler(UIErrorsFrame, event, errorType, message, ...)
+	end
 end)
 
 local function SetFiltering(on)
@@ -73,7 +80,8 @@ end
 
 function ns.RefreshScreen()
 	local db = ns.db
-	SetFiltering(db.enabled and db.world.filterErrors and true or false)
+	local other = ns.Yields and ns.Yields("errors")
+	SetFiltering(db.enabled and db.world.filterErrors and not other and true or false)
 	HookTalkingHead()
 end
 
@@ -82,9 +90,12 @@ function ns.InitScreen()
 		local text = _G[name]
 		if type(text) == "string" then filtered[text] = true end
 	end
-	-- The talking heads' window is loaded by the game later.
+	-- The talking heads' window is loaded by the game later (watched until it is hooked).
 	local loader = CreateFrame("Frame")
 	loader:RegisterEvent("ADDON_LOADED")
-	loader:SetScript("OnEvent", HookTalkingHead)
+	loader:SetScript("OnEvent", function(self)
+		HookTalkingHead()
+		if talkingHooked then self:UnregisterEvent("ADDON_LOADED") end
+	end)
 	ns.RefreshScreen()
 end

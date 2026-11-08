@@ -4,7 +4,8 @@ local U = ns.Util
 
 -- Wanderer's bar (option): a quiet line against the top left of the screen, in Wanderer's own hand: words
 -- in small capitals on a dark band fading out to the right, a thin golden rule under it. A word turns gold
--- with a fine line under it when the mouse is on it; a count in gold beside it (reminders left). The menu,
+-- with a fine line under it when the mouse is on it, a small card under it saying what waits there (the
+-- launcher's summary); a count in gold beside it (reminders left, an extension's count). Wanderer's card,
 -- the reminders, the extensions' windows, and the other addons' icons (those around the minimap, gathered)
 -- in a list under "Other addons", only when there are some. Faint until the mouse comes near.
 
@@ -16,26 +17,35 @@ local REST, NEAR = 0.6, 1
 local bar
 local items, dots = {}, {}
 local pulsing = {} -- words whose extension says something waits there
-local C -- Wanderer's colors (Kit.lua, loaded after)
+local C -- Wanderer's colors (Kit.lua's, read once the bar is made)
 
 -- What the bar offers, as things stand: { key, label, hint, run, right }.
 local function Entries()
 	local list = {
 		{ key = "menu", label = "Wanderer", hint = L.BAR_MENU_HINT, gold = true,
 			run = function(self) ns.ShowMenu(self) end, right = function() ns.OpenOptions() end },
-		{ key = "todo", label = L.TODO_TITLE, run = function() ns.ToggleTodo() end },
+		{ key = "todo", label = L.TODO_TITLE, run = function() ns.ToggleTodo() end,
+			summary = function()
+				local lines = {}
+				for _, item in ipairs(ns.TodoItems()) do
+					if not item.done and #lines < 3 and type(item.text) == "string" then lines[#lines + 1] = { text = item.text } end
+				end
+				return lines
+			end },
 	}
 	-- The extensions' windows (not the shopping list: it stays in the menu).
 	for _, extension in ipairs(ns.EXTENSIONS or {}) do
-		local launcher = extension.launcher
-		if type(launcher) == "table" and launcher.label and launcher.open and extension.key ~= "auction" then
+		local launcher = ns.LauncherOf(extension)
+		if launcher and extension.key ~= "auction" then
 			-- (launcher.attention(): true when something waits there, the word then pulses)
+			-- (count: a number beside the word; summary: what its hover card says)
 			list[#list + 1] = { key = "ext:" .. extension.key, label = launcher.label, run = function() launcher.open() end,
-				attention = type(launcher.attention) == "function" and launcher.attention or nil }
+				attention = launcher.attention, count = function() return ns.LauncherCount(launcher) end,
+				summary = function() return ns.LauncherSummary(launcher) end }
 		end
 	end
 	-- The other addons' icons, in their drawer under the word; none: no word.
-	if ns.CountIcons and ns.CountIcons() > 0 then
+	if ns.CountIcons() > 0 then
 		list[#list + 1] = { key = "others", label = L.BAR_OTHERS, arrow = true,
 			run = function(self) ns.ToggleIconDrawer(self, true) end }
 	end
@@ -51,17 +61,67 @@ local function Color(item, hovered)
 	item.line:SetShown(hovered and true or false)
 end
 
+-- The small card under a word: its name in gold, what waits there (up to 3 lines), what a click does.
+local hoverCard
+local HOVER_WIDTH = 240
+local function ShowHover(item)
+	local entry = item.entry
+	local lines = {}
+	if entry.summary then
+		local ok, made = pcall(entry.summary)
+		for _, line in ipairs(ok and type(made) == "table" and made or {}) do
+			if type(line) == "table" and type(line.text) == "string" and #lines < 3 then lines[#lines + 1] = line end
+		end
+	end
+	local Skin = ns.Skin
+	if not hoverCard then
+		hoverCard = Skin.CreateWindow("WandererBarHover", "DIALOG")
+		hoverCard:EnableMouse(false)
+		hoverCard.title = Skin.CreateText(hoverCard, "GameTooltipHeaderText", C.gold[1], C.gold[2], C.gold[3])
+		hoverCard.lines = {}
+		hoverCard.hint = Skin.Text(hoverCard, "GameTooltipTextSmall", "muted")
+	end
+	local card, m = hoverCard, 10
+	card:SetScale(Skin.Scale())
+	card.title:SetText(entry.key == "menu" and L.ADDON_TITLE or entry.label)
+	card.title:ClearAllPoints()
+	card.title:SetPoint("TOPLEFT", card, "TOPLEFT", m, -m)
+	local y = m + U.Measure(card.title, "GetStringHeight", 14) + 4
+	for index, line in ipairs(lines) do
+		local text = card.lines[index] or Skin.Text(card, "GameTooltipText", "text")
+		card.lines[index] = text
+		text:SetWidth(HOVER_WIDTH - m * 2)
+		text:SetText(Skin.Colorize(line.text, line.role or "text"))
+		text:ClearAllPoints()
+		text:SetPoint("TOPLEFT", card, "TOPLEFT", m, -y)
+		text:Show()
+		y = y + U.Measure(text, "GetStringHeight", 14) + 3
+	end
+	for index = #lines + 1, #card.lines do card.lines[index]:Hide() end
+	card.hint:SetWidth(HOVER_WIDTH - m * 2)
+	card.hint:SetText(entry.hint or L.BAR_CLICK_OPEN)
+	card.hint:ClearAllPoints()
+	card.hint:SetPoint("TOPLEFT", card, "TOPLEFT", m, -(y + 3))
+	y = y + 3 + U.Measure(card.hint, "GetStringHeight", 12)
+	card:SetSize(HOVER_WIDTH, y + m)
+	card:ClearAllPoints()
+	card:SetPoint("TOPLEFT", item, "BOTTOMLEFT", -4, -4)
+	Skin.Get(card):Layout()
+	card:Show()
+end
+
+local function HideHover()
+	if hoverCard then hoverCard:Hide() end
+end
+
 local function Enter(self)
 	Near(true)
 	Color(self, true)
-	if not self.entry.hint then return end
-	GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT", 0, -4)
-	GameTooltip:AddLine(self.entry.hint, 1, 0.82, 0)
-	GameTooltip:Show()
+	ShowHover(self)
 end
 
 local function Leave(self)
-	GameTooltip:Hide()
+	HideHover()
 	Color(self, false)
 	if not next(pulsing) then Near(false) end
 end
@@ -73,9 +133,9 @@ local function Item(index)
 	item = CreateFrame("Button", nil, bar)
 	item:SetHeight(HEIGHT)
 	item:RegisterForClicks("AnyUp")
-	item.text = item:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	item.text = ns.Skin.CreateText(item, "GameFontNormalSmall")
 	item.text:SetPoint("LEFT", item, "LEFT", 0, 0)
-	item.count = item:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	item.count = ns.Skin.CreateText(item, "GameFontNormalSmall")
 	item.count:SetPoint("LEFT", item.text, "RIGHT", 4, 0)
 	item.count:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
 	item.line = item:CreateTexture(nil, "OVERLAY")
@@ -84,15 +144,13 @@ local function Item(index)
 	item.line:SetPoint("TOPLEFT", item.text, "BOTTOMLEFT", 0, -3)
 	item.line:SetPoint("TOPRIGHT", item.text, "BOTTOMRIGHT", 0, -3)
 	-- (a list: a small arrow after its word)
-	item.arrow = item:CreateTexture(nil, "OVERLAY")
-	item.arrow:SetSize(12, 12)
-	item.arrow:SetPoint("LEFT", item.text, "RIGHT", 3, -1)
-	item.arrow:SetTexture("Interface\\Buttons\\Arrow-Down-Up")
+	item.arrow = ns.Skin.Glyph(item, "down", 9, "OVERLAY")
+	item.arrow:SetPoint("LEFT", item.text, "RIGHT", 4, 0)
 	item.arrow:Hide()
 	item.line:Hide()
 	item:SetScript("OnClick", function(self, mouse)
-		GameTooltip:Hide()
-		PlaySound(SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION or 857)
+		HideHover()
+		ns.Skin.Play("confirm")
 		if mouse == "RightButton" and self.entry.right then return self.entry.right(self) end
 		self.entry.run(self)
 	end)
@@ -113,10 +171,20 @@ local function Dot(index)
 end
 
 -- Each word as wide as its text and its count; the band as long as them all.
+local CREST = 16
 local function Layout()
-	local x = PAD
+	-- (the crest, once: Wanderer's sign at the head of the line, as on the minimap)
+	if not bar.crest then
+		bar.crest = bar:CreateTexture(nil, "ARTWORK")
+		bar.crest:SetSize(CREST, CREST)
+		bar.crest:SetPoint("LEFT", bar, "LEFT", PAD - 2, 0)
+		bar.crest:SetTexture("Interface\\Icons\\INV_Misc_Spyglass_03")
+		if not ns.Skin.RoundMask(bar, bar.crest) then bar.crest:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+		bar.crest:SetAlpha(0.9)
+	end
+	local x = PAD + CREST + 6
 	local shown = 0
-	for index, item in ipairs(items) do
+	for _, item in ipairs(items) do
 		if item:IsShown() then
 			shown = shown + 1
 			if shown > 1 then
@@ -135,7 +203,6 @@ local function Layout()
 			item:SetPoint("LEFT", bar, "LEFT", x, 0)
 			x = x + width
 		end
-		item.index = index
 	end
 	for index = math.max(shown, 1), #dots do dots[index]:Hide() end
 	bar:SetWidth(x + PAD * 3)
@@ -148,7 +215,7 @@ local function Pulse(_, elapsed)
 	pulse, step = pulse + elapsed, step + elapsed
 	if step < 0.05 then return end
 	step = 0
-	local glow = 0.55 + 0.45 * math.sin(pulse * 4)
+	local glow = 0.65 + 0.3 * math.sin(pulse * 3)
 	for item in pairs(pulsing) do
 		item.text:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
 		item.text:SetAlpha(glow)
@@ -181,7 +248,7 @@ local function Marks()
 	for _, item in ipairs(items) do
 		if item:IsShown() then
 			local key = item.entry.key
-			local count = key == "todo" and ns.TodoPending and ns.TodoPending() or 0
+			local count = key == "todo" and ns.TodoPending() or (item.entry.count and item.entry.count()) or 0
 			local text = count > 0 and tostring(count) or ""
 			if item.count:GetText() ~= text then
 				item.count:SetText(text)
@@ -214,39 +281,33 @@ end
 function ns.SetBarShown(shown)
 	ns.db.world.bar = shown and true or false
 	ns.RefreshMinimapButton()
-	if ns.RefreshIcons then ns.RefreshIcons() end
+	ns.RefreshIcons()
 end
 
 -- The bar is on the screen (then it takes the minimap button's place).
 function ns.BarActive() return ns.db.enabled and ns.db.world.bar and true or false end
-
-function ns.IsBarShown() return ns.db.world.bar and true or false end
 
 function ns.InitBar()
 	C = ns.Skin.COLORS
 	bar = CreateFrame("Frame", "WandererBar", UIParent)
 	bar:SetHeight(HEIGHT)
 	bar:SetFrameStrata("MEDIUM")
-	-- (against the top of the screen, from its left edge)
-	bar:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+	-- (against the top of the screen, from its left edge; or where you put it: Place.lua)
+	ns.Placeable({ key = "bar", label = function() return L.BAR_SHOW end, frame = bar, size = { 420, HEIGHT },
+		default = { "TOPLEFT", "TOPLEFT", 0, 0 }, enabled = function() return ns.BarActive() end })
+	ns.PlaceApply("bar", bar)
 	-- The band: dark, fading out to the right; a thin golden rule under it, fading the same way.
 	local ground = bar:CreateTexture(nil, "BACKGROUND")
 	ground:SetAllPoints()
-	ground:SetColorTexture(1, 1, 1, 1)
+	ns.Skin.FadingRule(ground, 0.78, false, { 0.03, 0.03, 0.04 })
 	local rule = bar:CreateTexture(nil, "BORDER")
 	rule:SetPoint("BOTTOMLEFT")
 	rule:SetPoint("BOTTOMRIGHT")
 	rule:SetHeight(1)
-	rule:SetColorTexture(1, 1, 1, 1)
-	if CreateColor and ground.SetGradient then
-		ground:SetGradient("HORIZONTAL", CreateColor(0.03, 0.03, 0.04, 0.78), CreateColor(0.03, 0.03, 0.04, 0))
-		rule:SetGradient("HORIZONTAL", CreateColor(C.gold[1], C.gold[2], C.gold[3], 0.5), CreateColor(C.gold[1], C.gold[2], C.gold[3], 0))
-	else
-		ground:SetColorTexture(0.03, 0.03, 0.04, 0.6)
-		rule:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 0.25)
-	end
+	ns.Skin.FadingRule(rule, 0.5)
 	Near(false)
 	-- (the extensions register as they load: the bar made once they are all there, its counts kept fresh)
 	C_Timer.After(1, ns.RefreshBar)
-	if C_Timer.NewTicker then C_Timer.NewTicker(2, function() if bar:IsShown() then Marks() end end) end
+	-- (never in a fight: the counts wait for its end)
+	C_Timer.NewTicker(2, function() if bar:IsShown() and not InCombatLockdown() then Marks() end end)
 end

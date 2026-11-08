@@ -16,6 +16,7 @@ local COIN_TEXTURE = "Interface\\MoneyFrame\\UI-GoldIcon"
 -- Pages answered by themselves: the scene does not show them. Only the
 -- latest page of each kind counts (a page shown again starts unanswered).
 local answered = {} -- event -> true when its latest page was answered
+local trivialSeen = {} -- questID -> true: offered grey in a gossip or greeting window
 
 function ns.WasAnswered(event)
 	return answered[event] == true
@@ -24,24 +25,35 @@ end
 local function Settings()
 	local db = ns.db
 	if not (db and db.enabled) or U.IsSkipping() then return end
-	return db.quest
+	-- (another addon accepting quests or passing dialogues: left to it, whatever was set here)
+	local auto = ns.Yields and ns.Yields("questAuto")
+	local skip = ns.Yields and ns.Yields("skipGossip")
+	if not (auto or skip) then return db.quest end
+	return setmetatable({ autoAccept = not auto and db.quest.autoAccept, autoTurnIn = not auto and db.quest.autoTurnIn,
+		skipGossip = not skip and db.quest.skipGossip }, { __index = db.quest })
 end
 
 -- Gossip window: finished quests first, then new ones, then a single choice.
 local function OnGossip(db)
 	if db.autoTurnIn then
 		for _, quest in ipairs(Safe(Gossip.GetActiveQuests) or {}) do
-			if quest.isComplete then Safe(Gossip.SelectActiveQuest, quest.questID) return true end
+			-- (repeatable turn-ins, cloth donations and the like, stay for the player: no loop through a stack)
+			if quest.isComplete and not quest.repeatable then Safe(Gossip.SelectActiveQuest, quest.questID) return true end
 		end
 	end
 	local available = Safe(Gossip.GetAvailableQuests) or {}
+	for _, quest in ipairs(available) do
+		if quest.isTrivial and quest.questID then trivialSeen[quest.questID] = true end
+	end
 	if db.autoAccept then
 		for _, quest in ipairs(available) do
-			-- Grey (trivial) quests stay for the player to decide.
-			if not quest.isTrivial then Safe(Gossip.SelectAvailableQuest, quest.questID) return true end
+			-- Grey (trivial) and repeatable quests stay for the player to decide.
+			if not quest.isTrivial and not quest.repeatable then Safe(Gossip.SelectAvailableQuest, quest.questID) return true end
 		end
 	end
-	if db.skipGossip and not available[1] and not (Safe(Gossip.GetActiveQuests) or {})[1] then
+	-- (never in an instance: a single "I am ready" there starts an escort or an encounter)
+	if db.skipGossip and not available[1] and not (Safe(Gossip.GetActiveQuests) or {})[1]
+		and not Clean(Safe(IsInInstance)) then
 		local options = Safe(Gossip.GetOptions) or {}
 		local option = options[1]
 		-- Only a plain choice: no spell, no cost, nothing to confirm.
@@ -58,15 +70,34 @@ local function OnGreeting(db)
 	if db.autoTurnIn then
 		for index = 1, (Clean(Safe(GetNumActiveQuests)) or 0) do
 			local _, complete = Safe(GetActiveTitle, index)
-			if complete then Safe(SelectActiveQuest, index) return true end
+			-- (repeatable turn-ins stay for the player, as in the gossip window)
+			local id = GetActiveQuestID and Clean(Safe(GetActiveQuestID, index))
+			local repeatable = id and C_QuestLog and C_QuestLog.IsRepeatableQuest and Clean(Safe(C_QuestLog.IsRepeatableQuest, id))
+			if Clean(complete) and not repeatable then Safe(SelectActiveQuest, index) return true end
 		end
 	end
-	if db.autoAccept then
-		for index = 1, (Clean(Safe(GetNumAvailableQuests)) or 0) do
-			local isTrivial = Safe(GetAvailableQuestInfo, index)
-			if not isTrivial then Safe(SelectAvailableQuest, index) return true end
-		end
+	for index = 1, (Clean(Safe(GetNumAvailableQuests)) or 0) do
+		local isTrivial, _, isRepeatable, _, questID = Safe(GetAvailableQuestInfo, index)
+		questID = Clean(questID)
+		if isTrivial and questID then trivialSeen[questID] = true end
+		if db.autoAccept and not isTrivial and not Clean(isRepeatable) then Safe(SelectAvailableQuest, index) return true end
 	end
+end
+
+-- The quest shown is a grey one: the game says it when it can, else the
+-- gossip or greeting window offered it grey (a quest opened by clicking it there).
+local function IsTrivialDetail()
+	local questID = Clean(Safe(GetQuestID))
+	if not questID or questID == 0 then return false end
+	if C_QuestLog and C_QuestLog.IsQuestTrivial and Clean(Safe(C_QuestLog.IsQuestTrivial, questID)) then return true end
+	return trivialSeen[questID] == true
+end
+
+local function IsRepeatableDetail()
+	local questID = Clean(Safe(GetQuestID))
+	local isRepeatable = C_QuestLog and C_QuestLog.IsRepeatableQuest
+	if not (questID and questID ~= 0 and isRepeatable) then return false end
+	return Clean(Safe(isRepeatable, questID)) == true
 end
 
 -- Coin on the reward that sells for the most.
@@ -78,14 +109,20 @@ end
 local function MarkBestReward()
 	ClearMarks()
 	local count = Clean(Safe(GetNumQuestChoices)) or 0
-	if count < 2 or not QuestInfo_GetRewardButton or not QuestInfoFrame then return end
+	local rewards = QuestInfoFrame and rawget(QuestInfoFrame, "rewardsFrame")
+	if count < 2 or type(rewards) ~= "table" then return end
 	local best, bestPrice = nil, 0
 	for index = 1, count do
-		local price = U.SellPrice(Safe(GetQuestItemLink, "choice", index)) or 0
+		-- (the whole reward: its price times how many it gives)
+		local _, _, many = Safe(GetQuestItemInfo, "choice", index)
+		local price = (U.SellPrice(Safe(GetQuestItemLink, "choice", index)) or 0) * (Clean(many) or 1)
 		if price > bestPrice then best, bestPrice = index, price end
 	end
-	local rewardButton = best and Safe(QuestInfo_GetRewardButton, QuestInfoFrame.rewardsFrame, best)
-	if not rewardButton then return end
+	-- (the game's own button, read where the game keeps it: never made by Wanderer, which would leave its mark on
+	-- it and on the tooltips it opens, the money in them refused)
+	local buttons = rawget(rewards, "RewardButtons")
+	local rewardButton = best and type(buttons) == "table" and buttons[best]
+	if type(rewardButton) ~= "table" or not rewardButton.CreateTexture or not rewardButton:IsShown() then return end
 	local coin = marked[rewardButton]
 	if not coin then
 		coin = rewardButton:CreateTexture(nil, "OVERLAY", nil, 7)
@@ -114,13 +151,15 @@ local function OnEvent(_, event)
 	elseif event == "QUEST_DETAIL" and db.autoAccept then
 		if Clean(Safe(QuestGetAutoAccept)) then
 			Safe(AcknowledgeAutoAcceptQuest)
-		else
+			acted = true
+		elseif not IsTrivialDetail() then
+			-- Grey (trivial) quests stay for the player to decide, as in the gossip window.
 			Safe(AcceptQuest)
+			acted = true
 		end
-		acted = true
 	elseif event == "QUEST_PROGRESS" and db.autoTurnIn then
-		-- A quest asking for gold stays for the player to decide.
-		if Clean(Safe(IsQuestCompletable)) and (Clean(Safe(GetQuestMoneyToGet)) or 0) == 0 then
+		-- A quest asking for gold, or a repeatable one (it would spend a whole stack), stays for the player.
+		if Clean(Safe(IsQuestCompletable)) and (Clean(Safe(GetQuestMoneyToGet)) or 0) == 0 and not IsRepeatableDetail() then
 			Safe(CompleteQuest)
 			acted = true
 		end

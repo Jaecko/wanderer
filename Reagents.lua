@@ -83,10 +83,7 @@ end
 -- The professions this character has now (kept for the others to know); one unlearned is forgotten.
 local function ReadProfessions()
 	local current = {}
-	for _, index in pairs({ Safe(GetProfessions) }) do
-		local name = Clean(Safe(GetProfessionInfo, index))
-		if name then current[name] = true end
-	end
+	for _, known in ipairs(U.Professions()) do current[known.name] = true end
 	if not next(current) then return end
 	local mine = Mine()
 	mine.professions = current
@@ -152,21 +149,21 @@ function ns.InitReagents()
 		C_Timer.After(LEARN_DELAY, function() if mine == token then Learn() end end)
 	end)
 	if not (TooltipDataProcessor and Enum and Enum.TooltipDataType and Enum.TooltipDataType.Item) then return end
-	-- The line, once per tooltip: true when it was added.
+	-- The line, once per tooltip: true when it was added (the tooltips that have it: kept here, never written
+	-- on the game's own frames).
+	local added = setmetatable({}, { __mode = "k" })
 	local function AddReagentLine(tooltip, data)
-		if tooltip.wandererReagent or not Settings() or InCombatLockdown() then return false end
-		-- The comparison tooltips beside show what you wear: nothing there.
-		local name = tooltip.GetName and Clean(Safe(tooltip.GetName, tooltip)) or ""
-		if name:find("^ShoppingTooltip") or name:find("^ItemRefShoppingTooltip") then return false end
+		if added[tooltip] or not Settings() or InCombatLockdown() then return false end
+		if U.IsComparisonTooltip(tooltip) then return false end
 		local line = ns.ReagentLine(type(data) == "table" and Clean(data.id))
 		if not line then return false end
-		tooltip.wandererReagent = true
+		added[tooltip] = true
 		tooltip:AddLine(line, 0.62, 0.74, 0.86, true)
 		return true
 	end
 	-- A new item shown: its line not added yet.
 	if TooltipDataProcessor.AddTooltipPreCall then
-		TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Item, function(tooltip) tooltip.wandererReagent = nil end)
+		TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Item, function(tooltip) added[tooltip] = nil end)
 	end
 	-- Just before the price: under the game's "Crafting Reagent" line.
 	local types = Enum.TooltipDataLineType
@@ -176,10 +173,11 @@ function ns.InitReagents()
 			AddReagentLine(tooltip, info and info.tooltipData)
 		end)
 	end
-	-- Nothing to sell it for: at the end.
-	TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
-		if AddReagentLine(tooltip, data) then tooltip:Show() end
-		tooltip.wandererReagent = nil
+	-- Nothing to sell it for: at the end (with the other lines added to item tooltips: shown again once).
+	U.OnItemTooltip(function(tooltip, _, data)
+		local did = AddReagentLine(tooltip, data)
+		added[tooltip] = nil
+		return did
 	end)
 end
 

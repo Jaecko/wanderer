@@ -1,5 +1,7 @@
 local _, ns = ...
 local L = ns.L
+local U = ns.Util
+local Safe, Clean = U.Safe, U.Clean
 
 -- Addon icons: the other addons' buttons around the minimap go into one
 -- drawer, in Wanderer's look, opened from Wanderer's menu. The buttons
@@ -37,7 +39,7 @@ local function Candidates()
 	for _, holder in ipairs({ Minimap, _G.MinimapBackdrop, MinimapCluster }) do
 		if holder and holder.GetChildren then
 			for _, child in ipairs({ holder:GetChildren() }) do
-				local name = child.GetName and ns.Util.Clean(ns.Util.Safe(child.GetName, child))
+				local name = child.GetName and Clean(Safe(child.GetName, child))
 				if name and not saved[child] and not Kept(name) and child.IsObjectType and child:IsObjectType("Button")
 					and child:IsShown() and not child:IsProtected() then
 					list[#list + 1] = child
@@ -49,7 +51,7 @@ local function Candidates()
 end
 
 local function Layout()
-	table.sort(order, function(a, b) return (ns.Util.Clean(a:GetName()) or "") < (ns.Util.Clean(b:GetName()) or "") end)
+	table.sort(order, function(a, b) return (Clean(a:GetName()) or "") < (Clean(b:GetName()) or "") end)
 	local margin = ns.Skin.Margin() + 6
 	for index, button in ipairs(order) do
 		local column, row = (index - 1) % COLUMNS, math.floor((index - 1) / COLUMNS)
@@ -89,7 +91,8 @@ end
 
 -- The icons are gathered: asked in the options, or Wanderer's bar shown (its "Other addons" list).
 function ns.IconsGathered()
-	return ns.db.enabled and (ns.db.world.gatherIcons or (ns.BarActive and ns.BarActive())) or false
+	-- (another addon gathering them: left to it)
+	return ns.db.enabled and (ns.db.world.gatherIcons or ns.BarActive()) and not ns.Yields("minimapButtons") or false
 end
 
 -- Looks for new buttons (and keeps the drawer in order).
@@ -99,7 +102,7 @@ function ns.GatherIcons()
 	local before = #order
 	for _, button in ipairs(Candidates()) do Gather(button) end
 	Layout()
-	if #order ~= before and ns.RefreshBar then ns.RefreshBar() end
+	if #order ~= before then ns.RefreshBar() end
 end
 
 function ns.CountIcons() return #order end
@@ -129,7 +132,7 @@ function ns.RefreshIcons()
 		for button in pairs(saved) do Release(button) end
 		wipe(order)
 		drawer:Hide()
-		if ns.RefreshBar then ns.RefreshBar() end
+		ns.RefreshBar()
 	end
 end
 
@@ -147,7 +150,7 @@ function ns.InitIcons()
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererIconDrawer") end
 	-- Closes by itself once the mouse has left it a moment.
 	drawer:SetScript("OnUpdate", function(self, elapsed)
-		if ns.Util.IsMouseOver(self) then
+		if U.IsMouseOver(self) then
 			outside = 0
 		else
 			outside = outside + elapsed

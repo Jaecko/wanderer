@@ -3,14 +3,24 @@ local L = ns.L
 
 -- Conversations as quiet scenes. When you talk to a character, the
 -- interface fades away and its words appear in a panel at the bottom of the
--- screen, drawn in your predefined style, page by page. Choices, quests and
--- their rewards stay in the same panel. (The camera: Camera.lua.)
+-- screen, drawn in your predefined style (or, if asked, on parchment), page
+-- by page. Choices, quests and their rewards stay in the same panel. (The
+-- camera: Camera.lua.)
 --
 -- Buttons at the bottom of the panel continue, accept or close; the same
 -- with the keys during a scene: Space continues (and accepts), 1 to 9 choose,
--- Escape closes; a click on the text continues. They are borrowed only during the
+-- Escape (or a right click) closes, the mouse wheel (or a click on its hint)
+-- goes back to what was said before, never a movement key; a click on the
+-- text continues. A reward is
+-- chosen in two steps: picked (1 to 9, a click, Tab for the next), then taken
+-- with Space. A turn-in that costs gold is never paid by a hurried Space: a
+-- click, or Space after a short moment. The keys are borrowed only during the
 -- scene and never in a fight. Holding Shift while talking, or a fight, opens
--- the game's own window instead.
+-- the game's own window instead. Another addon that shows conversations
+-- (DialogueUI): the scenes step aside entirely.
+--
+-- The panel is placed with Wanderer's placing mode, its background's opacity
+-- chosen; the choices already read show dimmed, never hidden.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -20,28 +30,24 @@ local Gossip = C_GossipInfo or {}
 -- Look and motion
 local PANEL_WIDTH_SHARE, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH = 0.5, 760, 460
 local PANEL_BOTTOM = 110 -- above the bottom of the screen
-local PANEL_MAX_HEIGHT_SHARE = 0.55
+
 local RISE = 14 -- pixels the panel rises while it appears
 local APPEAR, DISAPPEAR, PAGE_FADE = 0.7, 0.5, 0.4
 local GAP, SMALL_GAP = 12, 6
 local CHOICE_HEIGHT, REWARD_ICON = 24, 30
 local BEST_TEXTURE = "Interface\\MoneyFrame\\UI-GoldIcon"
 local UP_TEXTURE, DOWN_TEXTURE = "Interface\\Buttons\\Arrow-Up-Up", "Interface\\Buttons\\Arrow-Down-Up"
--- Where an item goes: the equipment slots it would replace.
-local SLOTS = {
-	INVTYPE_HEAD = { 1 }, INVTYPE_NECK = { 2 }, INVTYPE_SHOULDER = { 3 }, INVTYPE_BODY = { 4 },
-	INVTYPE_CHEST = { 5 }, INVTYPE_ROBE = { 5 }, INVTYPE_WAIST = { 6 }, INVTYPE_LEGS = { 7 },
-	INVTYPE_FEET = { 8 }, INVTYPE_WRIST = { 9 }, INVTYPE_HAND = { 10 }, INVTYPE_FINGER = { 11, 12 },
-	INVTYPE_TRINKET = { 13, 14 }, INVTYPE_CLOAK = { 15 }, INVTYPE_WEAPON = { 16 }, INVTYPE_2HWEAPON = { 16 },
-	INVTYPE_WEAPONMAINHAND = { 16 }, INVTYPE_SHIELD = { 17 }, INVTYPE_WEAPONOFFHAND = { 17 },
-	INVTYPE_HOLDABLE = { 17 }, INVTYPE_RANGED = { 18, 16 }, INVTYPE_RANGEDRIGHT = { 18, 16 },
-}
-local UNUSABLE = { 1, 0.32, 0.32 }
+-- An object (a wanted poster, a board, a book) speaks: a written note in the round frame, never the game's
+-- black disc. An item that begins a quest: its own icon.
+local OBJECT_ICON = "Interface\\Icons\\INV_Misc_Note_01"
 local BUTTON_HEIGHT, BUTTON_PADDING = 26, 14
 local PORTRAIT_SIZE = 52
 local RING_TEXTURE = "Interface\\Buttons\\WHITE8X8"
 local MAX_CHOICES = 9
 local PAGE_CHARS = 260 -- about two or three sentences
+local NAME_ON_BUTTON = 28 -- letters of a reward's name on the button that takes it
+-- A turn-in that costs gold: Space works only after this many seconds (longer for a large share of your money).
+local LOCK_SHORT, LOCK_LONG, LOCK_SHARE = 1, 3, 0.1
 
 -- Events the game's windows listen to, that Wanderer takes when scenes are on.
 -- The game's dialogues are opened by a manager (CustomGossipFrameManager),
@@ -50,6 +56,8 @@ local SHOW_EVENTS = {
 	GOSSIP_SHOW = { "CustomGossipFrameManager", "GossipFrame" }, QUEST_GREETING = { "QuestFrame" },
 	QUEST_DETAIL = { "QuestFrame" }, QUEST_PROGRESS = { "QuestFrame" }, QUEST_COMPLETE = { "QuestFrame" },
 }
+-- Pages of a quest itself (Spoken can read them again from here).
+local QUEST_PAGES = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
 
 local QUEST_ICONS = {
 	available = { atlas = "QuestNormal", texture = "Interface\\GossipFrame\\AvailableQuestIcon" },
@@ -57,16 +65,80 @@ local QUEST_ICONS = {
 	active = { atlas = "QuestActive", texture = "Interface\\GossipFrame\\IncompleteQuestIcon" },
 }
 
-local panel, skin, portrait, portraitRing, nameText, titleText, rule, bodyText, rewardsLabel, moneyText, keysText
+-- Colors on the dark look and on parchment, by role.
+local DARK = {
+	text = { 0.95, 0.92, 0.85 }, name = { 1, 0.82, 0 }, title = { 0.9, 0.8, 0.55 }, label = { 0.75, 0.68, 0.5 },
+	muted = { 0.62, 0.6, 0.54 }, keys = { 0.7, 0.7, 0.7 }, price = { 0.7, 0.7, 0.7 }, accent = { 1, 0.82, 0 },
+	unusable = { 1, 0.32, 0.32 }, done = { 0.4, 0.87, 0.4 }, open = { 0.93, 0.93, 0.93 },
+	rule = { 1, 0.82, 0, 0.25 }, hover = { 1, 0.82, 0, 0.07 }, picked = { 1, 0.82, 0, 0.14 }, mark = { 1, 0.82, 0, 0.9 },
+	ring = { 1, 0.82, 0, 0.55 },
+}
+local PAPER = {
+	text = { 0.2, 0.13, 0.07 }, name = { 0.42, 0.15, 0.05 }, title = { 0.34, 0.22, 0.1 }, label = { 0.38, 0.28, 0.15 },
+	muted = { 0.45, 0.37, 0.27 }, keys = { 0.42, 0.35, 0.26 }, price = { 0.36, 0.28, 0.18 }, accent = { 0.5, 0.27, 0.03 },
+	unusable = { 0.62, 0.12, 0.08 }, done = { 0.1, 0.4, 0.12 }, open = { 0.2, 0.13, 0.07 },
+	rule = { 0.35, 0.22, 0.08, 0.35 }, hover = { 0.35, 0.2, 0.05, 0.08 }, picked = { 0.45, 0.26, 0.05, 0.16 },
+	mark = { 0.45, 0.26, 0.05, 0.85 }, ring = { 0.3, 0.19, 0.07, 0.75 },
+}
+
+local panel, skin, portrait, portraitRing, nameText, titleText, rule, saidText, bodyText, rewardsLabel, moneyText, keysText
+local replayLink, keysLink
+local PlacePanel
 local choiceRows, rewardItems, actionButtons = {}, {}, {}
 local scene -- { kind, name, title, pages, page, choices, rewards, money, action, ... }
-local taken = false
-local takenFrames = {} -- event: the game's frames that stopped listening to it
-local relaying = false
+local said -- your words just chosen, shown over the character's answer
+local taker -- the game's windows kept from the show events while scenes are on (Util.EventTaker)
 local appear, target = 0, 0 -- panel's appearance: current and wanted (0 to 1)
 local pageAlpha = 1
 local sceneToken = 0
 local planned -- the event of the scene planned for the next frame
+local paper = false -- drawn on parchment
+
+-- Another addon showing conversations or books ----------------------------------------
+
+-- DialogueUI (or Immersion) shows the conversations: Wanderer's scenes, their keys, the music lowered and
+-- the camera never start. what: "scenes" or "books". The compatibility rules decide when they exist.
+local REPLACERS = { scenes = { "DialogueUI", "Immersion" }, books = { "DialogueUI" } }
+function ns.StepsAside(what)
+	if ns.Yields then return ns.Yields(what) and true or false end
+	local loaded = C_AddOns and C_AddOns.IsAddOnLoaded
+	for _, name in ipairs(REPLACERS[what] or {}) do
+		if loaded and Clean(Safe(loaded, name)) then return true end
+	end
+	return false
+end
+function ns.SceneYielded() return ns.StepsAside("scenes") end
+
+-- Spoken voices the conversations: its voice plays as usual, its words read again from the scene's quest.
+function ns.SpokenLoaded() return rawget(_G, "Spoken") ~= nil end
+local function SpokenReread()
+	local read = SlashCmdList and SlashCmdList.SPOKENQUESTSREAD
+	return ns.SpokenLoaded() and type(read) == "function" and read or nil
+end
+
+-- Colors ------------------------------------------------------------------------------
+
+-- The parchment look of the scenes, and of the reader with them.
+local function Paper()
+	local db = ns.db
+	return db and db.scene and db.scene.parchment == true or false
+end
+ns.ScenePaper = Paper
+local function C(role) return (paper and PAPER or DARK)[role] end
+local function Hex(role)
+	local c = C(role)
+	return U.ColorCode(c[1], c[2], c[3])
+end
+local function Paint(text, role)
+	local c = C(role)
+	text:SetTextColor(c[1], c[2], c[3])
+	text:SetShadowColor(0, 0, 0, paper and 0 or 0.9)
+end
+-- A color of the game (a quest's level) as ink on parchment: darker.
+local function Tone(r, g, b)
+	if paper then return r * 0.55, g * 0.55, b * 0.55 end
+	return r, g, b
+end
 
 -- Game's windows ---------------------------------------------------------------------
 
@@ -91,79 +163,52 @@ local function IsGameWindow(frame)
 	return false
 end
 
--- Every frame of those windows that listens to the event: depending on the
--- version of the game, a part of the window may listen instead of the window.
-local function Listeners(event)
-	local list = {}
-	if GetFramesRegisteredForEvent then
-		for _, frame in ipairs({ GetFramesRegisteredForEvent(event) }) do
-			if type(frame) == "table" and IsGameWindow(frame) then list[#list + 1] = frame end
-		end
-	end
-	local owner = Owner(event)
-	if owner and not list[1] and (not owner.IsEventRegistered or owner:IsEventRegistered(event)) then
-		list[1] = owner
-	end
-	return list
+do
+	local events = {}
+	for event in pairs(SHOW_EVENTS) do events[#events + 1] = event end
+	taker = U.EventTaker(events, Owner, IsGameWindow)
 end
-
 -- Quests the game takes care of without any window (as its own quest window
--- does): offered by an item, accepted on entering a place, from the
--- adventure map. They go straight to the game.
-local function GameHandlesAlone(event, startItem)
+-- does): accepted on entering a place, from the adventure map. They go
+-- straight to the game. (A quest begun by an item has its scene, the item's
+-- picture in the round frame.)
+local function GameHandlesAlone(event)
 	if event ~= "QUEST_DETAIL" then return false end
 	if QuestIsFromAdventureMap and Clean(Safe(QuestIsFromAdventureMap)) then return true end
-	startItem = Clean(startItem)
-	if startItem and startItem ~= 0 then return true end
 	return Clean(Safe(QuestGetAutoAccept)) and QuestIsFromAreaTrigger and Clean(Safe(QuestIsFromAreaTrigger)) and true or false
 end
 
 -- Scenes on: Wanderer listens instead of the game's windows; off: given back.
-local function SetTaken(take)
-	if take == taken then return end
-	for event in pairs(SHOW_EVENTS) do
-		if take then
-			takenFrames[event] = Listeners(event)
-			for _, frame in ipairs(takenFrames[event]) do frame:UnregisterEvent(event) end
-		else
-			for _, frame in ipairs(takenFrames[event] or {}) do frame:RegisterEvent(event) end
-			takenFrames[event] = nil
-		end
-	end
-	taken = take
-end
+local function SetTaken(take) taker:Take(take) end
 
 -- The game's own window shows the conversation (Shift, fight...).
-local function Relay(event, ...)
-	local frames = takenFrames[event]
-	if not (frames and frames[1]) then frames = { Owner(event) } end
-	relaying = true
-	for _, frame in ipairs(frames) do
-		local handler = frame.GetScript and frame:GetScript("OnEvent")
-		if handler then pcall(handler, frame, event, ...) end
-	end
-	relaying = false
-end
+local function Relay(event, ...) taker:Relay(event, ...) end
 
 -- Text -------------------------------------------------------------------------------
 
 -- Pages of whole sentences, about PAGE_CHARS long. A sentence is a run of
 -- words with its ending marks; line breaks separate sentences too. Only
 -- plain ASCII marks are used: accented letters are never cut.
+local function Sentences(text)
+	local list = {}
+	for sentence in text:gmatch("[^%.!%?\n]+[%.!%?]*") do
+		sentence = strtrim(sentence)
+		if sentence ~= "" then list[#list + 1] = sentence end
+	end
+	return list
+end
+
 local function Pages(text)
 	if U.IsSecret(text) then return { text } end
 	text = Clean(text)
 	if not text then return { "" } end
 	local pages, current = {}, ""
-	for sentence in text:gmatch("[^%.!%?\n]+[%.!%?]*") do
-		sentence = strtrim(sentence)
-		if sentence ~= "" then
-			if current ~= "" and #current + #sentence > PAGE_CHARS then
-				pages[#pages + 1] = current
-				current = sentence
-			else
-				current = current == "" and sentence or (current .. " " .. sentence)
-			end
+	for _, sentence in ipairs(Sentences(text)) do
+		if current ~= "" and #current + #sentence > PAGE_CHARS then
+			pages[#pages + 1] = current
+			current = sentence
+		else
+			current = current == "" and sentence or (current .. " " .. sentence)
 		end
 	end
 	if current ~= "" then pages[#pages + 1] = current end
@@ -171,45 +216,132 @@ local function Pages(text)
 	return pages
 end
 
+-- A page Spoken reads aloud: the sentence being read in the text's color, the others quieter.
+-- A page that is not plain sentences (a link, a color, one cut otherwise) stays as it is.
+local function Voiced(text, current)
+	if type(text) ~= "string" or U.IsSecret(text) or text:find("|", 1, true) then return text end
+	local sentences = Sentences(text)
+	if not sentences[current] or table.concat(sentences, " ") ~= text then return text end
+	local quiet = Hex("muted")
+	for index, sentence in ipairs(sentences) do
+		if index ~= current then sentences[index] = quiet .. sentence .. "|r" end
+	end
+	return table.concat(sentences, " ")
+end
+
+-- At most a number of letters (never a letter cut in two), "..." after.
+local function Short(text, most)
+	if type(text) ~= "string" or U.IsSecret(text) then return "" end
+	local count, cut = 0, nil
+	for position in text:gmatch("()[%z\1-\127\194-\244][\128-\191]*") do
+		count = count + 1
+		if count > most then cut = position break end
+	end
+	return cut and (text:sub(1, cut - 1) .. "...") or text
+end
+
 local function IsLastPage() return scene and scene.page >= #scene.pages end
+
+-- Choices already read -----------------------------------------------------------------
+
+-- The dialogue options chosen and the quests offered that this character already opened: shown dimmed the
+-- next time, never hidden, at their place. Forgotten after a few months, a few thousand at most.
+local SEEN_DAYS, SEEN_MOST = 120, 4000
+local SEEN_ALPHA = 0.55
+
+local function SeenList()
+	local root = ns.root
+	if not root then return {} end
+	local mine = ns.Mine()
+	mine.seenChoices = type(mine.seenChoices) == "table" and mine.seenChoices or {}
+	-- (until 1.3, one list for the whole account: given once to the character playing then, and gone)
+	if type(root.seenChoices) == "table" then
+		for key, day in pairs(root.seenChoices) do
+			if mine.seenChoices[key] == nil then mine.seenChoices[key] = day end
+		end
+	end
+	root.seenChoices = nil
+	return mine.seenChoices
+end
+
+local function Today() return math.floor((time and time() or 0) / 86400) end
+
+function ns.ChoiceSeen(key) return key ~= nil and SeenList()[key] ~= nil end
+local function MarkSeen(key)
+	if key then SeenList()[key] = Today() end
+end
+
+-- The old ones forgotten (at each login): too old, or the oldest beyond the most kept.
+local function ForgetOldSeen()
+	local list, today, count = SeenList(), Today(), 0
+	for key, day in pairs(list) do
+		if type(day) ~= "number" or today - day > SEEN_DAYS then list[key] = nil else count = count + 1 end
+	end
+	if count <= SEEN_MOST then return end
+	local keys = {}
+	for key in pairs(list) do keys[#keys + 1] = key end
+	table.sort(keys, function(a, b) return list[a] < list[b] end)
+	for index = 1, count - SEEN_MOST do list[keys[index]] = nil end
+end
+
+-- The character's number in its GUID (a dialogue option is known with the one who offers it).
+local function NpcID(guid)
+	return type(guid) == "string" and guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)") or nil
+end
 
 -- Content ----------------------------------------------------------------------------
 
--- Choices of the conversation: { label, icon, atlas, action }.
-local function GossipChoices()
-	local choices = {}
+-- A quest in the choices, its title colored by its level as the quest log does.
+local function QuestChoice(title, questID, level, trivial, icon, action)
+	return { label = title and (title .. (ns.QuestChoiceTag(questID) or "")), level = Clean(level),
+		trivial = trivial and true or false, atlas = icon.atlas, icon = icon.texture, action = action }
+end
+
+-- Choices of the conversation: { label, icon, atlas, action, level, trivial, said, seen }. The quests your
+-- level makes grey come last. seen: its key in the choices already read (offered quests and options).
+local function GossipChoices(guid)
+	local choices, grey = {}, {}
+	local npc = NpcID(guid)
 	for _, quest in ipairs(Safe(Gossip.GetActiveQuests) or {}) do
-		local icon = quest.isComplete and QUEST_ICONS.complete or QUEST_ICONS.active
-		choices[#choices + 1] = { label = quest.title and (quest.title .. (ns.QuestChoiceTag and ns.QuestChoiceTag(quest.questID) or "")),
-			atlas = icon.atlas, icon = icon.texture,
-			action = function() Safe(Gossip.SelectActiveQuest, quest.questID) end }
+		choices[#choices + 1] = QuestChoice(quest.title, quest.questID, quest.questLevel, false,
+			quest.isComplete and QUEST_ICONS.complete or QUEST_ICONS.active,
+			function() Safe(Gossip.SelectActiveQuest, quest.questID) end)
 	end
 	for _, quest in ipairs(Safe(Gossip.GetAvailableQuests) or {}) do
-		choices[#choices + 1] = { label = quest.title and (quest.title .. (ns.QuestChoiceTag and ns.QuestChoiceTag(quest.questID) or "")),
-			atlas = QUEST_ICONS.available.atlas, icon = QUEST_ICONS.available.texture,
-			action = function() Safe(Gossip.SelectAvailableQuest, quest.questID) end }
+		local trivial = Clean(quest.isTrivial) and true or false
+		local list = trivial and grey or choices
+		local choice = QuestChoice(quest.title, quest.questID, quest.questLevel, trivial, QUEST_ICONS.available,
+			function() Safe(Gossip.SelectAvailableQuest, quest.questID) end)
+		local id = Clean(quest.questID)
+		choice.seen = type(id) == "number" and ("q" .. id) or nil
+		list[#list + 1] = choice
 	end
 	local options = Safe(Gossip.GetOptions) or {}
 	table.sort(options, function(a, b) return (a.orderIndex or 0) < (b.orderIndex or 0) end)
 	for _, option in ipairs(options) do
-		choices[#choices + 1] = { label = option.name, icon = option.icon,
+		local id = Clean(option.gossipOptionID)
+		choices[#choices + 1] = { label = option.name, icon = option.icon, said = true,
+			seen = npc and type(id) == "number" and ("o" .. npc .. ":" .. id) or nil,
 			action = function() Safe(Gossip.SelectOption, option.gossipOptionID) end }
 	end
+	for _, choice in ipairs(grey) do choices[#choices + 1] = choice end
 	return choices
 end
 
 local function GreetingChoices()
-	local choices = {}
+	local choices, grey = {}, {}
 	for index = 1, (Clean(Safe(GetNumActiveQuests)) or 0) do
 		local title, complete = Safe(GetActiveTitle, index)
-		local icon = complete and QUEST_ICONS.complete or QUEST_ICONS.active
-		choices[#choices + 1] = { label = title, atlas = icon.atlas, icon = icon.texture,
-			action = function() Safe(SelectActiveQuest, index) end }
+		choices[#choices + 1] = QuestChoice(title, nil, Safe(GetActiveLevel, index), false,
+			complete and QUEST_ICONS.complete or QUEST_ICONS.active, function() Safe(SelectActiveQuest, index) end)
 	end
 	for index = 1, (Clean(Safe(GetNumAvailableQuests)) or 0) do
-		choices[#choices + 1] = { label = Safe(GetAvailableTitle, index), atlas = QUEST_ICONS.available.atlas,
-			icon = QUEST_ICONS.available.texture, action = function() Safe(SelectAvailableQuest, index) end }
+		local trivial = Clean((Safe(GetAvailableQuestInfo, index))) and true or false
+		local list = trivial and grey or choices
+		list[#list + 1] = QuestChoice(Safe(GetAvailableTitle, index), nil, Safe(GetAvailableLevel, index), trivial,
+			QUEST_ICONS.available, function() Safe(SelectAvailableQuest, index) end)
 	end
+	for _, choice in ipairs(grey) do choices[#choices + 1] = choice end
 	return choices
 end
 
@@ -245,26 +377,20 @@ local function Rewards(required)
 	return rewards
 end
 
-local function ItemInfo(link)
-	return Safe(C_Item and C_Item.GetItemInfo or GetItemInfo, link)
-end
-
-local function ItemLevel(link)
-	local level = C_Item and C_Item.GetDetailedItemLevelInfo and Clean(Safe(C_Item.GetDetailedItemLevelInfo, link))
-	return level or Clean(select(4, ItemInfo(link)))
-end
-
 -- Item level of the reward against what is worn in its place (the weakest of
--- two rings or trinkets): positive is better. Nil when it does not compare.
+-- two rings or trinkets; a weapon: what it would replace in the main hand): positive is better. Nil when it
+-- does not compare.
+local PAIRS = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true }
 local function Compare(reward, link)
 	if reward.unusable or not link then return end
-	local slots = SLOTS[Clean(select(9, ItemInfo(link))) or ""]
-	local level = slots and ItemLevel(link)
+	local kind = U.ItemEquipKind(link)
+	local slots = kind and U.EQUIP_SLOTS[kind]
+	local level = slots and U.ItemLevel(link)
 	if not level then return end
 	local worn
-	for _, slot in ipairs(slots) do
-		local wornLink = Clean(Safe(GetInventoryItemLink, "player", slot))
-		local wornLevel = wornLink and ItemLevel(wornLink) or 0
+	for index = 1, PAIRS[kind] and #slots or 1 do
+		local wornLink = Clean(Safe(GetInventoryItemLink, "player", slots[index]))
+		local wornLevel = wornLink and U.ItemLevel(wornLink) or 0
 		worn = worn and math.min(worn, wornLevel) or wornLevel
 	end
 	return level - (worn or 0)
@@ -282,14 +408,15 @@ local function Prices(rewards)
 		reward.compare = Compare(reward, itemLink)
 		if reward.kind == "choice" then
 			choices = choices + 1
-			local link = Safe(GetQuestItemLink, "choice", reward.index)
-			local price = U.SellPrice(link)
-			if link and not price then
+			local price = U.SellPrice(itemLink)
+			if itemLink and not price then
 				missing = true
-				U.LoadItem(link)
+				U.LoadItem(itemLink)
 			end
 			reward.price = price
-			if price and price > bestPrice then best, bestPrice = reward, price end
+			-- (the most gold for the whole reward: five potions against one sword)
+			local worth = price and price * (reward.count or 1)
+			if worth and worth > bestPrice then best, bestPrice = reward, worth end
 		end
 	end
 	if choices < 2 then
@@ -315,32 +442,50 @@ local function Objectives()
 	local questID = Clean(Safe(GetQuestID))
 	local list = questID and C_QuestLog and C_QuestLog.GetQuestObjectives and Safe(C_QuestLog.GetQuestObjectives, questID)
 	if type(list) ~= "table" or not list[1] then return end
-	local lines = { "|cffffd100" .. L.SCENE_OBJECTIVES .. "|r" }
+	local lines = { Hex("accent") .. L.SCENE_OBJECTIVES .. "|r" }
 	for _, objective in ipairs(list) do
 		local text = Clean(objective.text)
 		if text then
-			lines[#lines + 1] = (Clean(objective.finished) and "|cff66dd66" or "|cffeeeeee") .. "-  " .. text .. "|r"
+			lines[#lines + 1] = Hex(Clean(objective.finished) and "done" or "open") .. "-  " .. text .. "|r"
 		end
 	end
 	return lines[2] and table.concat(lines, "\n") or nil
 end
 
-local function Build(event)
+-- What speaks is an object (a poster, a board) or an item, not a character.
+local function IsThing(guid)
+	return type(guid) == "string" and (guid:find("^GameObject") ~= nil or guid:find("^Item") ~= nil)
+end
+
+local function Build(event, startItem)
+	paper = Paper()
 	local unit = Clean(Safe(UnitExists, "questnpc")) and "questnpc" or (Clean(Safe(UnitExists, "npc")) and "npc" or nil)
 	local s = { kind = event, unit = unit, name = unit and Safe(UnitName, unit), page = 1, choices = {}, rewards = {} }
+	s.guid = unit and Clean(Safe(UnitGUID, unit)) or nil
+	if type(s.guid) ~= "string" then s.guid = nil end
+	if IsThing(s.guid) then s.icon = OBJECT_ICON end
 	if event == "GOSSIP_SHOW" then
 		s.pages = Pages(Safe(Gossip.GetText))
-		s.choices = GossipChoices()
+		s.choices = GossipChoices(s.guid)
 	elseif event == "QUEST_GREETING" then
 		s.pages = Pages(Safe(GetGreetingText))
 		s.choices = GreetingChoices()
 	elseif event == "QUEST_DETAIL" then
+		-- A quest begun by an item: the item in the round frame, its name above the words.
+		startItem = Clean(startItem)
+		if type(startItem) == "number" and startItem > 0 then
+			s.item = startItem
+			s.icon = U.ItemIcon(startItem) or OBJECT_ICON
+			s.itemKnown = U.ItemName(startItem) ~= nil
+			s.name = U.ItemName(startItem) or s.name
+			if not s.itemKnown then U.LoadItem(startItem) end
+		end
 		s.title = Safe(GetTitleText)
 		-- Elite, a group advised: said under the title, before you say yes.
-		s.tag = ns.QuestSceneTag and ns.QuestSceneTag(Clean(Safe(GetQuestID)))
+		s.tag = ns.QuestSceneTag(Clean(Safe(GetQuestID)))
 		s.pages = Pages(Safe(GetQuestText))
 		local objectives = Clean(Safe(GetObjectiveText))
-		if objectives then s.pages[#s.pages + 1] = "|cffffd100" .. L.SCENE_OBJECTIVES .. "|r " .. objectives end
+		if objectives then s.pages[#s.pages + 1] = Hex("accent") .. L.SCENE_OBJECTIVES .. "|r " .. objectives end
 		s.rewards, s.money = Rewards(false), RewardMoney(false)
 		s.waitingPrices = Prices(s.rewards)
 		s.action = L.SCENE_ACCEPT
@@ -352,6 +497,7 @@ local function Build(event)
 		if objectives then s.pages[#s.pages + 1] = objectives end
 		s.rewards, s.money = Rewards(true), RewardMoney(true)
 		s.completable = Clean(Safe(IsQuestCompletable)) and true or false
+		s.cost = Clean(Safe(GetQuestMoneyToGet)) or 0
 		s.action = s.completable and L.SCENE_CONTINUE or nil
 	elseif event == "QUEST_COMPLETE" then
 		s.title = Safe(GetTitleText)
@@ -364,13 +510,11 @@ local function Build(event)
 	return s
 end
 
--- The game's own sounds, as its dialogue and quest windows play them (they
--- are kept closed while the scene shows): open, close, a choice, a refusal.
-local function GameSound(key)
-	U.PlaySound(key)
-end
-
 -- Actions ----------------------------------------------------------------------------
+
+-- The game's own sounds play as its dialogue and quest windows play them
+-- (they are kept closed while the scene shows): open, close, a choice, a
+-- refusal.
 
 local function CloseConversation()
 	if scene and scene.kind == "GOSSIP_SHOW" then
@@ -382,9 +526,52 @@ end
 
 local Render
 
--- Space or a click: next page, then the main action of the scene.
-local function Continue()
+-- A choice made: your words (a plain choice, not a quest) are kept for the answer's page.
+local function Pick(choice)
+	U.PlaySound("IG_QUEST_LIST_SELECT")
+	local label = choice.said and Clean(choice.label)
+	said = type(label) == "string" and U.PlainText(label) or nil
+	MarkSeen(choice.seen)
+	choice.action()
+end
+
+-- A turn-in that costs gold, still too fresh for Space.
+local function Locked()
+	return scene ~= nil and scene.lockUntil ~= nil and GetTime() < scene.lockUntil
+end
+local function LockTime(cost)
+	local money = Clean(Safe(GetMoney)) or 0
+	return (money <= 0 or cost > money * LOCK_SHARE) and LOCK_LONG or LOCK_SHORT
+end
+
+-- A reward picked (not taken yet): its line lit, the others dimmed, its tooltip shown.
+local ShowRewardTip
+local function Select(number)
+	if not (scene and number and number >= 1 and number <= (scene.choiceCount or 0)) then return end
+	scene.selected = number
+	U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON")
+	Render()
+	for _, item in ipairs(rewardItems) do
+		if item:IsShown() and item.number == number then ShowRewardTip(item) end
+	end
+end
+
+-- Tab: the next reward picked.
+local function Cycle()
+	if not (scene and scene.kind == "QUEST_COMPLETE" and (scene.choiceCount or 0) > 1 and IsLastPage()) then return end
+	Select((scene.selected or 0) % scene.choiceCount + 1)
+end
+
+-- Space or a click: next page, then the main action of the scene. deliberate:
+-- the button itself was clicked (a turn-in that costs gold is paid at once).
+local function Continue(deliberate)
 	if not scene then return end
+	-- Looking back: to what is said now.
+	if scene.back then
+		scene.back = false
+		pageAlpha = 0
+		return Render()
+	end
 	if not IsLastPage() then
 		scene.page = scene.page + 1
 		pageAlpha = 0
@@ -394,54 +581,90 @@ local function Continue()
 	if kind == "QUEST_DETAIL" then
 		if Clean(Safe(QuestGetAutoAccept)) then Safe(AcknowledgeAutoAcceptQuest) else Safe(AcceptQuest) end
 	elseif kind == "QUEST_PROGRESS" then
-		if scene.completable then Safe(CompleteQuest) else CloseConversation() end
+		if not scene.completable then return CloseConversation() end
+		-- Gold asked: never paid by a Space pressed in a hurry.
+		if (scene.cost or 0) > 0 and deliberate ~= true and Locked() then
+			scene.warned = true
+			return Render()
+		end
+		Safe(CompleteQuest)
 	elseif kind == "QUEST_COMPLETE" then
-		if scene.choiceCount <= 1 then Safe(GetQuestReward, scene.choiceCount) end
+		if scene.choiceCount <= 1 then
+			Safe(GetQuestReward, scene.choiceCount)
+		elseif scene.selected then
+			Safe(GetQuestReward, scene.selected)
+		end
 	elseif #scene.choices == 1 then
-		GameSound("IG_QUEST_LIST_SELECT")
-		scene.choices[1].action()
+		Pick(scene.choices[1])
 	elseif #scene.choices == 0 then
 		CloseConversation()
 	end
 end
 
--- Escape or the second button: a quest offered is declined, the rest closed.
+-- Up arrow or the wheel: the page before, then what the character said before your words.
+local function Back()
+	if not scene or scene.back then return end
+	if scene.page > 1 then
+		scene.page = scene.page - 1
+	elseif scene.previous then
+		scene.back = true
+	else
+		return
+	end
+	pageAlpha = 0
+	Render()
+end
+
+-- Escape, a right click or the second button: a quest offered is declined, the rest closed.
 local function Leave()
 	if not scene then return end
-	GameSound("IG_QUEST_CANCEL")
+	U.PlaySound("IG_QUEST_CANCEL")
 	if scene.declinable then Safe(DeclineQuest) else CloseConversation() end
 end
 
--- 1 to 9: a choice, or a reward to choose.
+-- 1 to 9: a choice, or a reward to pick.
 local function Choose(number)
 	if not scene then return end
-	if not IsLastPage() then
+	if scene.back or not IsLastPage() then
 		-- The choices only show at the end: reach it first.
+		scene.back = false
 		scene.page = #scene.pages
 		pageAlpha = 0
 		return Render()
 	end
-	if scene.kind == "QUEST_COMPLETE" then
-		if number <= (scene.choiceCount or 0) then Safe(GetQuestReward, number) end
-		return
-	end
+	if scene.kind == "QUEST_COMPLETE" then return Select(number) end
 	local choice = scene.choices[number]
-	if choice then
-		GameSound("IG_QUEST_LIST_SELECT")
-		choice.action()
-	end
+	if choice then Pick(choice) end
 end
 
 -- Keys -------------------------------------------------------------------------------
 
+local function CanCycle()
+	return scene ~= nil and not scene.back and scene.kind == "QUEST_COMPLETE" and (scene.choiceCount or 0) > 1
+		and IsLastPage() and true or false
+end
+local function CanGoBack()
+	return scene ~= nil and not scene.back and (scene.page > 1 or scene.previous ~= nil)
+end
+
+local unbindPending = false
+local boundKeys -- the keys borrowed now, in one word (borrowed again only when it changes)
 local function BindKeys(bind)
-	if InCombatLockdown() then return end
+	if InCombatLockdown() then
+		unbindPending = not bind
+		return
+	end
+	unbindPending = false
+	local wanted = bind and scene and ("keys" .. (CanCycle() and " tab" or "")) or nil
+	if bind and wanted == boundKeys then return end
+	boundKeys = wanted
 	Safe(ClearOverrideBindings, panel)
-	if not bind then return end
+	if not wanted then return end
 	Safe(SetOverrideBindingClick, panel, true, "SPACE", "WandererSceneContinue")
 	for number = 1, MAX_CHOICES do
 		Safe(SetOverrideBindingClick, panel, true, tostring(number), "WandererSceneChoice" .. number)
 	end
+	if wanted:find("tab", 1, true) then Safe(SetOverrideBindingClick, panel, true, "TAB", "WandererSceneCycle") end
 end
 
 -- Pieces of the panel ----------------------------------------------------------------
@@ -467,14 +690,13 @@ end
 local function ChoiceRow(index)
 	local row = choiceRows[index]
 	if row then return row end
-	row = CreateFrame("Frame", nil, panel)
-	row:EnableMouse(true)
+	-- (a Button: picked only when pressed and released on it, never by a camera drag ending over it)
+	row = CreateFrame("Button", nil, panel)
+	row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	row.hover = row:CreateTexture(nil, "BACKGROUND")
 	row.hover:SetAllPoints()
-	row.hover:SetColorTexture(1, 0.82, 0, 0.07)
 	row.hover:Hide()
 	row.mark = row:CreateTexture(nil, "ARTWORK")
-	row.mark:SetColorTexture(1, 0.82, 0, 0.9)
 	row.mark:SetWidth(2)
 	row.mark:SetPoint("TOPLEFT")
 	row.mark:SetPoint("BOTTOMLEFT")
@@ -485,20 +707,47 @@ local function ChoiceRow(index)
 	row.text = ns.Skin.CreateText(row, "GameTooltipText", 0.95, 0.92, 0.85)
 	row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
 	row.text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-	if row.text.SetWordWrap then row.text:SetWordWrap(false) end
+	row.text:SetJustifyH("LEFT")
+	-- (two lines at most: a long answer in German or Russian is read whole)
+	if row.text.SetWordWrap then row.text:SetWordWrap(true) end
+	if row.text.SetMaxLines then row.text:SetMaxLines(2) end
 	row:SetScript("OnEnter", function(self) self.hover:Show() self.mark:Show() end)
 	row:SetScript("OnLeave", function(self) self.hover:Hide() self.mark:Hide() end)
-	row:SetScript("OnMouseUp", function(self, button) if button == "LeftButton" then Choose(self.number) end end)
+	row:SetScript("OnClick", function(self, button)
+		if button == "LeftButton" then Choose(self.number) elseif button == "RightButton" then Leave() end
+	end)
 	choiceRows[index] = row
 	return row
 end
 
--- An item: its icon with a thin border of its rarity, and its name.
+ShowRewardTip = function(item)
+	GameTooltip:SetOwner(item, "ANCHOR_RIGHT")
+	Safe(GameTooltip.SetQuestItem, GameTooltip, item.kind, item.index)
+	if item.isBest then GameTooltip:AddLine(L.SCENE_BEST_VALUE, 1, 0.82, 0) end
+	if item.compare and item.compare > 0 then
+		GameTooltip:AddLine(L.SCENE_UPGRADE:format(item.compare), 0.4, 1, 0.4)
+	elseif item.compare and item.compare < 0 then
+		GameTooltip:AddLine(L.SCENE_DOWNGRADE:format(-item.compare), 1, 0.4, 0.4)
+	end
+	GameTooltip:Show()
+end
+
+-- An item: its icon with a thin border of its rarity, and its name. A click
+-- picks a reward to choose; Shift links it, Ctrl tries it on (the game's own
+-- modified clicks).
 local function RewardItem(index)
 	local item = rewardItems[index]
 	if item then return item end
-	item = CreateFrame("Frame", nil, panel)
-	item:EnableMouse(true)
+	item = CreateFrame("Button", nil, panel)
+	item:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	item.picked = item:CreateTexture(nil, "BACKGROUND")
+	item.picked:SetAllPoints()
+	item.picked:Hide()
+	item.pickMark = item:CreateTexture(nil, "ARTWORK")
+	item.pickMark:SetWidth(2)
+	item.pickMark:SetPoint("TOPRIGHT")
+	item.pickMark:SetPoint("BOTTOMRIGHT")
+	item.pickMark:Hide()
 	item.border = item:CreateTexture(nil, "BORDER")
 	item.border:SetSize(REWARD_ICON + 2, REWARD_ICON + 2)
 	item.border:SetPoint("LEFT")
@@ -515,53 +764,62 @@ local function RewardItem(index)
 	item.arrow:SetPoint("BOTTOMLEFT", item.border, "BOTTOMLEFT", -4, -4)
 	item.price = ns.Skin.CreateText(item, "GameTooltipTextSmall", 0.7, 0.7, 0.7)
 	item.price:SetJustifyH("RIGHT")
-	item.price:SetPoint("RIGHT", item, "RIGHT", -4, 0)
+	item.price:SetPoint("RIGHT", item, "RIGHT", -6, 0)
 	item.text = ns.Skin.CreateText(item, "GameTooltipTextSmall", 0.95, 0.92, 0.85)
 	item.text:SetPoint("LEFT", item.border, "RIGHT", 8, 0)
 	item.text:SetPoint("RIGHT", item.price, "LEFT", -6, 0)
 	if item.text.SetWordWrap then item.text:SetWordWrap(false) end
 	if item.price.SetWordWrap then item.price:SetWordWrap(false) end
-	item:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		Safe(GameTooltip.SetQuestItem, GameTooltip, self.kind, self.index)
-		if self.isBest then GameTooltip:AddLine(L.SCENE_BEST_VALUE, 1, 0.82, 0) end
-		if self.compare and self.compare > 0 then
-			GameTooltip:AddLine(L.SCENE_UPGRADE:format(self.compare), 0.4, 1, 0.4)
-		elseif self.compare and self.compare < 0 then
-			GameTooltip:AddLine(L.SCENE_DOWNGRADE:format(-self.compare), 1, 0.4, 0.4)
-		end
-		GameTooltip:Show()
-	end)
+	item:SetScript("OnEnter", ShowRewardTip)
 	item:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	item:SetScript("OnMouseUp", function(self, button)
-		if button == "LeftButton" and self.number then Choose(self.number) end
+	item:SetScript("OnClick", function(self, button)
+		if button == "RightButton" then return Leave() end
+		if button ~= "LeftButton" then return end
+		local link = Clean(Safe(GetQuestItemLink, self.kind, self.index))
+		if link and HandleModifiedItemClick and (U.IsSkipping() or (IsControlKeyDown and IsControlKeyDown())) then
+			Safe(HandleModifiedItemClick, link)
+			return
+		end
+		if self.number then
+			if scene and (scene.back or not IsLastPage()) then return Choose(self.number) end
+			Select(self.number)
+		end
 	end)
 	rewardItems[index] = item
 	return item
 end
 
 -- A button drawn by the engine, like the panel: its text turns golden and its
--- border lights up under the mouse.
+-- border lights up under the mouse. onClick(true): clicked (a deliberate act).
+local function ButtonLook(button, hovered)
+	if hovered then
+		Paint(button.text, "accent")
+	else
+		Paint(button.text, button.locked and "keys" or "text")
+	end
+	if paper then
+		local layers = button.wandererParchment
+		local c = C(hovered and "accent" or "label")
+		if layers then layers.edges.Color(c[1], c[2], c[3], hovered and 0.85 or 0.45) end
+	else
+		button.skin:SetHighlight(hovered and "giver" or nil)
+	end
+end
+
 local function ActionButton(index)
 	local button = actionButtons[index]
 	if button then return button end
-	local window, buttonSkin = ns.Skin.CreateWindow(nil, nil, panel)
+	local window, buttonSkin = ns.Skin.CreateWindow(nil, nil, panel, nil, "Button")
 	button = window
 	button.skin = buttonSkin
-	button:EnableMouse(true)
 	button.text = ns.Skin.CreateText(button, "GameTooltipText", 0.95, 0.92, 0.85)
 	button.text:SetPoint("CENTER")
 	button.text:SetJustifyH("CENTER")
-	button:SetScript("OnEnter", function(self)
-		self.text:SetTextColor(1, 0.82, 0)
-		self.skin:SetHighlight("giver")
-	end)
-	button:SetScript("OnLeave", function(self)
-		self.text:SetTextColor(0.95, 0.92, 0.85)
-		self.skin:SetHighlight(nil)
-	end)
-	button:SetScript("OnMouseUp", function(self, mouse)
-		if mouse == "LeftButton" and self.onClick then self.onClick() end
+	button:SetScript("OnEnter", function(self) ButtonLook(self, true) end)
+	button:SetScript("OnLeave", function(self) ButtonLook(self, false) end)
+	button:RegisterForClicks("LeftButtonUp")
+	button:SetScript("OnClick", function(self)
+		if self.onClick then self.onClick(true) end
 	end)
 	actionButtons[index] = button
 	return button
@@ -579,31 +837,91 @@ local function Place(object, y, margin)
 	object:SetPoint("TOPLEFT", panel, "TOPLEFT", margin, -y)
 end
 
-Render = function()
-	if not scene then return end
-	local width = PanelWidth()
-	local margin = ns.Skin.Margin() + 8
-	local inner = width - margin * 2
-	local y = margin
-	local TEXT_SIZE = ns.db.scene.textSize or 15
-	local NAME_SIZE, TITLE_SIZE = TEXT_SIZE + 3, TEXT_SIZE - 2
-	StyleFont(nameText, NAME_SIZE)
-	StyleFont(titleText, TITLE_SIZE)
-	StyleFont(bodyText, TEXT_SIZE)
+-- The dark look or the parchment, as chosen (the panel and its buttons together).
+local function ApplyLook()
+	paper = Paper()
+	if panel.paper ~= paper then
+		ns.Skin.Parchment(panel, paper)
+		panel.paper = paper
+	end
+	for _, button in ipairs(actionButtons) do
+		if button.paper ~= paper then
+			ns.Skin.Parchment(button, paper, true)
+			button.paper = paper
+		end
+	end
+	local ring = C("ring")
+	portraitRing:SetVertexColor(ring[1], ring[2], ring[3], ring[4])
+	local line = C("rule")
+	rule:SetColorTexture(line[1], line[2], line[3], line[4])
+	Paint(nameText, "name")
+	Paint(titleText, "title")
+	Paint(rewardsLabel, "label")
+	Paint(moneyText, "text")
+	Paint(keysText, "keys")
+	Paint(replayLink.text, "label")
+	-- The background's opacity, the scene's own (the label's never lowers it).
+	local opacity = ns.db.scene.bgOpacity or 90
+	if skin.fixedOpacity ~= opacity then
+		skin.fixedOpacity, skin.minOpacity = opacity, opacity / 100
+		skin:ApplyStyle()
+	end
+end
 
-	-- Who speaks: its portrait in a round frame, its name, and the quest.
-	local unit = scene.unit
+-- The drawing's measures, shared by its parts (one table, set again at each drawing): width, margin, inner,
+-- textSize, nameSize, titleSize, smallSize, choiceHeight, last (the last page, not looking back), picking (a
+-- reward to choose).
+local layout = {}
+
+-- The sizes chosen for the words (the smaller ones follow too: rewards, gold, keys).
+local function StyleWords()
+	local textSize = ns.db.scene.textSize or 15
+	layout.textSize, layout.nameSize, layout.titleSize = textSize, textSize + 3, textSize - 2
+	layout.smallSize = math.max(10, textSize - 3)
+	layout.choiceHeight = math.max(CHOICE_HEIGHT, textSize + 10)
+	StyleFont(nameText, layout.nameSize)
+	StyleFont(titleText, layout.titleSize)
+	StyleFont(saidText, layout.titleSize)
+	StyleFont(bodyText, textSize)
+	StyleFont(rewardsLabel, layout.smallSize)
+	StyleFont(moneyText, layout.smallSize)
+	StyleFont(keysText, layout.smallSize)
+end
+
+-- Who speaks: its portrait in a round frame (an object's or an item's picture, never a black disc), its name,
+-- and the quest; Spoken's control to read it again at the top right; a rule under them.
+local function RenderHeader(y)
+	local margin, inner = layout.margin, layout.inner
+	local nameSize, titleSize = layout.nameSize, layout.titleSize
+	-- Spoken can read the quest again: its control, at the top right.
+	local reread = QUEST_PAGES[scene.kind] and SpokenReread() ~= nil
+	replayLink:SetShown(reread)
+	local replayWidth = 0
+	if reread then
+		replayLink:SetWidth(U.Measure(replayLink.text, "GetStringWidth", 80) + 10)
+		replayLink:ClearAllPoints()
+		replayLink:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -margin, -margin + 4)
+		replayWidth = replayLink:GetWidth() + SMALL_GAP
+	end
+	local unit, face = scene.unit, scene.icon
 	local top = y
-	local textLeft, textWidth = margin, inner
-	if unit then
-		Safe(SetPortraitTexture, portrait, unit)
+	local textLeft, textWidth = margin, inner - replayWidth
+	local pictured = face ~= nil or unit ~= nil
+	if face then
+		portrait:SetTexture(face)
+		portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	elseif unit then
+		portrait:SetTexCoord(0, 1, 0, 1)
+		ns.SetPortrait(portrait, unit, "scene")
+	end
+	if pictured then
 		portrait:ClearAllPoints()
 		portrait:SetPoint("TOPLEFT", panel, "TOPLEFT", margin, -y)
-		textLeft, textWidth = margin + PORTRAIT_SIZE + GAP, inner - PORTRAIT_SIZE - GAP
+		textLeft, textWidth = margin + PORTRAIT_SIZE + GAP, inner - PORTRAIT_SIZE - GAP - replayWidth
 	end
-	portrait:SetShown(unit ~= nil)
-	-- The golden ring only when it can be cut round: never a square.
-	portraitRing:SetShown(unit ~= nil and portraitRing.round or false)
+	portrait:SetShown(pictured)
+	-- The ring only when it can be cut round: never a square.
+	portraitRing:SetShown(pictured and portraitRing.round or false)
 	nameText:SetWidth(textWidth)
 	if not pcall(nameText.SetText, nameText, scene.name or "") then nameText:SetText("") end
 	local title = Clean(scene.title)
@@ -611,183 +929,629 @@ Render = function()
 	titleText:SetText(title and (scene.tag and (title .. "\n" .. scene.tag) or title) or "")
 	titleText:SetShown(title ~= nil)
 	-- The name and the quest stand beside the portrait, centered on it.
-	local textHeight = U.Measure(nameText, "GetStringHeight", NAME_SIZE)
-		+ (title and (2 + U.Measure(titleText, "GetStringHeight", TITLE_SIZE)) or 0)
-	local textTop = y + (unit and math.max(0, (PORTRAIT_SIZE - textHeight) / 2) or 0)
+	local textHeight = U.Measure(nameText, "GetStringHeight", nameSize)
+		+ (title and (2 + U.Measure(titleText, "GetStringHeight", titleSize)) or 0)
+	local textTop = y + (pictured and math.max(0, (PORTRAIT_SIZE - textHeight) / 2) or 0)
 	Place(nameText, textTop, textLeft)
-	if title then Place(titleText, textTop + U.Measure(nameText, "GetStringHeight", NAME_SIZE) + 2, textLeft) end
-	y = math.max(textTop + textHeight, unit and (top + PORTRAIT_SIZE) or 0)
+	if title then Place(titleText, textTop + U.Measure(nameText, "GetStringHeight", nameSize) + 2, textLeft) end
+	y = math.max(textTop + textHeight, pictured and (top + PORTRAIT_SIZE) or 0)
 	y = y + SMALL_GAP
 	rule:ClearAllPoints()
 	rule:SetPoint("TOPLEFT", panel, "TOPLEFT", margin, -y)
 	rule:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -margin, -y)
-	y = y + 1 + GAP
+	return y + 1 + GAP
+end
 
-	-- The words, page by page.
-	bodyText:SetWidth(inner)
-	if not pcall(bodyText.SetText, bodyText, scene.pages[scene.page] or "") then bodyText:SetText("") end
+-- Your words, quiet, over the character's answer; looking back, what it said before.
+local function RenderSaid(y)
+	local saidLine
+	if scene.back then
+		saidLine = L.SCENE_EARLIER
+	elseif scene.said and scene.page == 1 then
+		saidLine = L.SCENE_SAID:format(scene.said)
+	end
+	saidText:SetShown(saidLine ~= nil)
+	if not saidLine then return y end
+	Paint(saidText, "muted")
+	saidText:SetWidth(layout.inner)
+	if not pcall(saidText.SetText, saidText, saidLine) then saidText:SetText("") end
+	Place(saidText, y, layout.margin)
+	return y + U.Measure(saidText, "GetStringHeight", layout.titleSize) + SMALL_GAP
+end
+
+-- The words, page by page.
+local function RenderBody(y)
+	bodyText:SetWidth(layout.inner)
+	local words = scene.back and scene.previous.text or scene.pages[scene.page] or ""
+	-- (Spoken reading this page: the sentence it says stands out)
+	if not scene.back and scene.voice and scene.voice.page == scene.page then words = Voiced(words, scene.voice.sentence) end
+	if not pcall(bodyText.SetText, bodyText, words) then bodyText:SetText("") end
+	Paint(bodyText, scene.back and "muted" or "text")
 	bodyText:SetAlpha(pageAlpha)
-	Place(bodyText, y, margin)
-	y = y + U.Measure(bodyText, "GetStringHeight", TEXT_SIZE)
+	Place(bodyText, y, layout.margin)
+	return y + U.Measure(bodyText, "GetStringHeight", layout.textSize)
+end
 
-	local last = IsLastPage()
+-- One reward drawn on its item (number: its place among the rewards to choose, else nil).
+local function PaintReward(item, reward, number)
+	local picking = layout.picking
+	StyleFont(item.text, math.max(10, layout.textSize - 2))
+	StyleFont(item.price, layout.smallSize)
+	item.kind, item.index = reward.kind, reward.index
+	item.number = number
+	item.icon:SetTexture(reward.texture)
+	-- What this character cannot use: darkened, its name in red.
+	if item.icon.SetDesaturated then item.icon:SetDesaturated(reward.unusable) end
+	if reward.unusable then item.icon:SetVertexColor(1, 0.45, 0.45) else item.icon:SetVertexColor(1, 1, 1) end
+	Paint(item.text, reward.unusable and "unusable" or "text")
+	item.isBest = reward.best
+	item.compare = reward.compare
+	if reward.compare and reward.compare ~= 0 then
+		item.arrow:SetTexture(reward.compare > 0 and UP_TEXTURE or DOWN_TEXTURE)
+		if reward.compare > 0 then item.arrow:SetVertexColor(0.3, 1, 0.3) else item.arrow:SetVertexColor(1, 0.3, 0.3) end
+		item.arrow:Show()
+	else
+		item.arrow:Hide()
+	end
+	item.best:SetShown(reward.best and true or false)
+	item.price:SetText(reward.price and reward.price > 0 and U.Coins(reward.price) or "")
+	Paint(item.price, reward.best and "accent" or "price")
+	-- Picked: lit, the other choices dimmed.
+	local isPicked = picking and item.number ~= nil and item.number == scene.selected
+	local pickedColor, mark = C("picked"), C("mark")
+	item.picked:SetColorTexture(pickedColor[1], pickedColor[2], pickedColor[3], pickedColor[4])
+	item.pickMark:SetColorTexture(mark[1], mark[2], mark[3], mark[4])
+	item.picked:SetShown(isPicked)
+	item.pickMark:SetShown(isPicked)
+	item:SetAlpha((picking and scene.selected and item.number and not isPicked) and 0.45 or 1)
+	local r, g, b = 0.5, 0.5, 0.5
+	if reward.quality then r, g, b = U.QualityColor(reward.quality) end
+	item.border:SetColorTexture(r, g, b, 0.9)
+	local label = (reward.waiting and (Hex("muted") .. (RETRIEVING_ITEM_INFO or "...") .. "|r") or reward.name)
+		.. (reward.count > 1 and (" x" .. reward.count) or "")
+	if item.number then label = ("%s%d.|r %s"):format(Hex("accent"), item.number, label) end
+	item.text:SetText(label)
+end
 
-	-- Rewards, in two columns.
+-- Rewards, in two columns (on the last page).
+local function RenderRewards(y)
+	local last, margin = layout.last, layout.margin
 	for index, item in ipairs(rewardItems) do
 		if not (last and scene.rewards[index]) then item:Hide() end
 	end
 	rewardsLabel:SetShown(last and scene.rewards[1] ~= nil)
-	if last and scene.rewards[1] then
-		y = y + GAP
-		rewardsLabel:SetText(scene.kind == "QUEST_PROGRESS" and L.SCENE_REQUIRED or L.REWARDS)
-		Place(rewardsLabel, y, margin)
-		y = y + U.Measure(rewardsLabel, "GetStringHeight", 12) + SMALL_GAP
-		local column = math.floor((inner - GAP) / 2)
-		local number = 0
-		for index, reward in ipairs(scene.rewards) do
-			local item = RewardItem(index)
-			item.kind, item.index = reward.kind, reward.index
-			item.number = nil
-			if reward.kind == "choice" and scene.kind == "QUEST_COMPLETE" then
-				number = number + 1
-				item.number = number
-			end
-			item.icon:SetTexture(reward.texture)
-			-- What this character cannot use: darkened, its name in red.
-			if item.icon.SetDesaturated then item.icon:SetDesaturated(reward.unusable) end
-			if reward.unusable then item.icon:SetVertexColor(1, 0.45, 0.45) else item.icon:SetVertexColor(1, 1, 1) end
-			if reward.unusable then item.text:SetTextColor(unpack(UNUSABLE)) else item.text:SetTextColor(0.95, 0.92, 0.85) end
-			item.isBest = reward.best
-			item.compare = reward.compare
-			if reward.compare and reward.compare ~= 0 then
-				item.arrow:SetTexture(reward.compare > 0 and UP_TEXTURE or DOWN_TEXTURE)
-				if reward.compare > 0 then item.arrow:SetVertexColor(0.3, 1, 0.3) else item.arrow:SetVertexColor(1, 0.3, 0.3) end
-				item.arrow:Show()
-			else
-				item.arrow:Hide()
-			end
-			item.best:SetShown(reward.best and true or false)
-			item.price:SetText(reward.price and reward.price > 0 and U.Coins(reward.price) or "")
-			if reward.best then item.price:SetTextColor(1, 0.82, 0) else item.price:SetTextColor(0.7, 0.7, 0.7) end
-			local r, g, b = 0.5, 0.5, 0.5
-			if reward.quality then r, g, b = U.QualityColor(reward.quality) end
-			item.border:SetColorTexture(r, g, b, 0.9)
-			local label = (reward.waiting and ("|cff8c8070" .. (RETRIEVING_ITEM_INFO or "...") .. "|r") or reward.name)
-				.. (reward.count > 1 and (" x" .. reward.count) or "")
-			if item.number then label = ("|cffffd100%d.|r %s"):format(item.number, label) end
-			item.text:SetText(label)
-			item:SetSize(column, REWARD_ICON + 4)
-			item:ClearAllPoints()
-			local col, line = (index - 1) % 2, math.floor((index - 1) / 2)
-			item:SetPoint("TOPLEFT", panel, "TOPLEFT", margin + col * (column + GAP), -(y + line * (REWARD_ICON + 8)))
-			item:Show()
+	if not (last and scene.rewards[1]) then return y end
+	y = y + GAP
+	rewardsLabel:SetText(scene.kind == "QUEST_PROGRESS" and L.SCENE_REQUIRED or L.REWARDS)
+	Place(rewardsLabel, y, margin)
+	y = y + U.Measure(rewardsLabel, "GetStringHeight", 12) + SMALL_GAP
+	local column = math.floor((layout.inner - GAP) / 2)
+	local number = 0
+	for index, reward in ipairs(scene.rewards) do
+		local item = RewardItem(index)
+		local chosen
+		if reward.kind == "choice" and scene.kind == "QUEST_COMPLETE" then
+			number = number + 1
+			chosen = number
 		end
-		y = y + math.ceil(#scene.rewards / 2) * (REWARD_ICON + 8)
+		PaintReward(item, reward, chosen)
+		item:SetSize(column, REWARD_ICON + 4)
+		item:ClearAllPoints()
+		local col, line = (index - 1) % 2, math.floor((index - 1) / 2)
+		item:SetPoint("TOPLEFT", panel, "TOPLEFT", margin + col * (column + GAP), -(y + line * (REWARD_ICON + 8)))
+		item:Show()
 	end
-	local money = last and scene.money or ""
+	return y + math.ceil(#scene.rewards / 2) * (REWARD_ICON + 8)
+end
+
+-- The gold of the reward (on the last page).
+local function RenderMoney(y)
+	local money = layout.last and scene.money or ""
 	moneyText:SetText(money)
 	moneyText:SetShown(money ~= "")
-	if money ~= "" then
-		y = y + SMALL_GAP
-		moneyText:SetWidth(inner)
-		Place(moneyText, y, margin)
-		y = y + U.Measure(moneyText, "GetStringHeight", 12)
-	end
+	if money == "" then return y end
+	y = y + SMALL_GAP
+	moneyText:SetWidth(layout.inner)
+	Place(moneyText, y, layout.margin)
+	return y + U.Measure(moneyText, "GetStringHeight", 12)
+end
 
-	-- Choices, one per line.
+-- Choices, one per line; a quest's title in its level's color.
+local function RenderChoices(y)
+	local last = layout.last
 	for index, row in ipairs(choiceRows) do
 		if not (last and scene.choices[index]) then row:Hide() end
 	end
-	if last and scene.choices[1] then
-		y = y + GAP
-		for index = 1, math.min(#scene.choices, MAX_CHOICES) do
-			local choice = scene.choices[index]
-			local row = ChoiceRow(index)
-			row.number = index
-			SetIcon(row.icon, choice.atlas, choice.icon)
-			row.text:SetText(("|cffffd100%d.|r  %s"):format(index, Clean(choice.label) or "?"))
-			row:SetSize(inner, CHOICE_HEIGHT)
-			row:ClearAllPoints()
-			row:SetPoint("TOPLEFT", panel, "TOPLEFT", margin, -y)
-			row:Show()
-			y = y + CHOICE_HEIGHT + 2
-		end
-	end
-
-	-- Buttons at the bottom right: the main action (Space), then leave (Escape).
+	if not (last and scene.choices[1]) then return y end
 	y = y + GAP
-	local right = width - margin
-	local function PlaceButton(button, label, key, onClick)
-		button.text:SetText(label .. "   |cff808080" .. key .. "|r")
-		local buttonWidth = U.Measure(button.text, "GetStringWidth", 80) + BUTTON_PADDING * 2
-		button:SetSize(buttonWidth, BUTTON_HEIGHT)
-		button:ClearAllPoints()
-		button:SetPoint("TOPRIGHT", panel, "TOPLEFT", right, -y)
-		button.onClick = onClick
-		button.skin:Layout()
-		button:Show()
-		right = right - buttonWidth - SMALL_GAP
+	local hover, mark = C("hover"), C("mark")
+	for index = 1, math.min(#scene.choices, MAX_CHOICES) do
+		local choice = scene.choices[index]
+		local row = ChoiceRow(index)
+		row.number = index
+		row.hover:SetColorTexture(hover[1], hover[2], hover[3], hover[4])
+		row.mark:SetColorTexture(mark[1], mark[2], mark[3], mark[4])
+		Paint(row.text, "text")
+		StyleFont(row.text, layout.textSize - 1)
+		SetIcon(row.icon, choice.atlas, choice.icon)
+		local label = Clean(choice.label) or "?"
+		if choice.level and choice.level > 0 and type(label) == "string" then
+			label = U.Colorize(label, Tone(ns.World.LevelColor(choice.level, true)))
+		end
+		if not pcall(row.text.SetText, row.text, ("%s%d.|r  %s"):format(Hex("accent"), index, label)) then
+			row.text:SetText(("%s%d.|r"):format(Hex("accent"), index))
+		end
+		-- (already read: dimmed, at its place)
+		row:SetAlpha(ns.ChoiceSeen(choice.seen) and SEEN_ALPHA or 1)
+		row:SetSize(layout.inner, layout.choiceHeight)
+		local height = math.max(layout.choiceHeight, U.Measure(row.text, "GetStringHeight", 0) + 8)
+		row:SetHeight(height)
+		row:ClearAllPoints()
+		row:SetPoint("TOPLEFT", panel, "TOPLEFT", layout.margin, -y)
+		row:Show()
+		y = y + height + 2
 	end
-	local main = not last and L.SCENE_NEXT or scene.action
-	if main then PlaceButton(ActionButton(1), main, L.SCENE_KEY_SPACE, Continue) else ActionButton(1):Hide() end
-	PlaceButton(ActionButton(2), scene.declinable and L.SCENE_DECLINE or L.SCENE_CLOSE, L.SCENE_KEY_ESCAPE, Leave)
-	-- When something is to be chosen, the number keys are recalled on the left.
-	local choosing = last and (scene.choices[1] ~= nil or (scene.choiceCount or 0) > 1)
-	keysText:SetText(choosing and L.SCENE_KEYS_CHOOSE or "")
+	return y
+end
+
+-- One action button, its right edge at right, at the height y: its words and its key, its click. Returns where
+-- the next one ends (to its left).
+local function PlaceButton(button, label, key, onClick, dim, right, y)
+	if button.paper ~= paper then
+		ns.Skin.Parchment(button, paper, true)
+		button.paper = paper
+	end
+	button.text:SetText(label .. "   " .. Hex("keys") .. key .. "|r")
+	local buttonWidth = U.Measure(button.text, "GetStringWidth", 80) + BUTTON_PADDING * 2
+	button:SetSize(buttonWidth, BUTTON_HEIGHT)
+	button:ClearAllPoints()
+	button:SetPoint("TOPRIGHT", panel, "TOPLEFT", right, -y)
+	button.onClick = onClick
+	button.locked = dim and true or false
+	button.skin:Layout()
+	ButtonLook(button, false)
+	button:Show()
+	return right - buttonWidth - SMALL_GAP
+end
+
+-- The buttons at the bottom right: the main action (Space), then leave (Escape); what the keys do now, on the
+-- left. cost: the gold a turn-in costs; locked: Space still waiting for it.
+local function RenderActions(y, cost, locked)
+	local last, picking, margin = layout.last, layout.picking, layout.margin
+	y = y + GAP
+	local right = layout.width - margin
+	local main
+	if scene.back then
+		main = L.SCENE_RESUME
+	elseif not last then
+		main = L.SCENE_NEXT
+	elseif cost > 0 then
+		main = L.SCENE_PAY:format(U.Coins(cost))
+	elseif picking and scene.selected then
+		local reward
+		for _, candidate in ipairs(scene.rewards) do
+			if candidate.kind == "choice" and candidate.index == scene.selected then reward = candidate end
+		end
+		main = L.SCENE_TAKE:format(Short(reward and reward.name or "", NAME_ON_BUTTON))
+	else
+		main = scene.action
+	end
+	if main then
+		right = PlaceButton(ActionButton(1), main, L.SCENE_KEY_SPACE, Continue, locked, right, y)
+	else
+		ActionButton(1):Hide()
+	end
+	right = PlaceButton(ActionButton(2), scene.declinable and L.SCENE_DECLINE or L.SCENE_CLOSE, L.SCENE_KEY_ESCAPE, Leave,
+		nil, right, y)
+	local hint = ""
+	if locked then
+		hint = L.SCENE_KEYS_GOLD
+	elseif picking then
+		hint = scene.selected and L.SCENE_KEYS_TAKE or L.SCENE_KEYS_REWARD
+	elseif last and scene.choices[1] ~= nil then
+		hint = L.SCENE_KEYS_CHOOSE
+	elseif CanGoBack() then
+		hint = L.SCENE_KEYS_BACK
+	end
+	keysText:SetText(hint)
+	if locked and scene.warned then Paint(keysText, "accent") end
 	keysText:SetWidth(math.max(right - margin - SMALL_GAP, 40))
 	keysText:ClearAllPoints()
 	keysText:SetPoint("LEFT", panel, "TOPLEFT", margin, -(y + BUTTON_HEIGHT / 2))
-	y = y + BUTTON_HEIGHT + margin
+	-- (saying what was said before: a click on it goes back too)
+	local backHint = hint == L.SCENE_KEYS_BACK
+	keysLink:SetShown(backHint)
+	if backHint then
+		keysLink:ClearAllPoints()
+		keysLink:SetPoint("LEFT", keysText, "LEFT", 0, 0)
+		keysLink:SetSize(math.min(U.Measure(keysText, "GetStringWidth", 120), keysText:GetWidth() or 120), BUTTON_HEIGHT)
+	end
+	return y + BUTTON_HEIGHT + margin
+end
 
-	-- The panel grows with its content, within the screen.
-	local maxHeight = (UIParent:GetHeight() or 720) * PANEL_MAX_HEIGHT_SHARE
+Render = function()
+	if not scene then return end
+	ApplyLook()
+	layout.width = PanelWidth()
+	layout.margin = ns.Skin.Margin() + 8
+	layout.inner = layout.width - layout.margin * 2
+	StyleWords()
+	local y = RenderHeader(layout.margin)
+	y = RenderSaid(y)
+	y = RenderBody(y)
+	layout.last = IsLastPage() and not scene.back
+	layout.picking = layout.last and scene.kind == "QUEST_COMPLETE" and (scene.choiceCount or 0) > 1
+	y = RenderRewards(y)
+	y = RenderMoney(y)
+	y = RenderChoices(y)
+	-- A turn-in that costs gold: the button says the price, Space waits a moment.
+	local cost = layout.last and scene.kind == "QUEST_PROGRESS" and scene.completable and (scene.cost or 0) or 0
+	if cost > 0 and not scene.lockUntil then scene.lockUntil = GetTime() + LockTime(cost) end
+	y = RenderActions(y, cost, cost > 0 and Locked())
+	-- The panel grows with its content (nothing drawn out of it), kept on the screen.
 	panel:SetScale(ns.Skin.Scale())
-	panel:SetSize(width, math.min(y, maxHeight))
+	panel:SetSize(layout.width, y)
+	panel:SetClampedToScreen(true)
 	skin:Layout()
+	if panel.wandererParchment and panel.wandererParchment.Tile then panel.wandererParchment.Tile() end
+	BindKeys(true)
+end
+
+-- Spoken's voice ---------------------------------------------------------------------
+
+-- While Spoken reads the scene's own words, the scene follows its voice: the page turns as the
+-- voice reaches it (unless you turned pages yourself) and the sentence being read stands out.
+-- Only Spoken's public calls are read: GetCaption (the word being said, timed as its subtitles
+-- time it), else, with an older Spoken, the line playing and its length. Its subtitles would show
+-- the same words under the panel: Spoken has no public switch for them, so they are hidden while
+-- the scene shows that line and shown again once it ends; Spoken's settings are never written.
+
+local FOLLOW_STEP = 0.1 -- seconds between two looks at the voice
+local SAME_SHARE = 0.8 -- two copies of a line: the share of the shorter alike from the start
+
+local heardLines = setmetatable({}, { __mode = "k" }) -- Spoken's line: its letters, where each word ends
+local lineStarts = setmetatable({}, { __mode = "k" }) -- Spoken's line: when it began (an older Spoken)
+local listening = false
+local followFor = 0
+
+local function SpokenAPI()
+	local spoken = rawget(_G, "Spoken")
+	return type(spoken) == "table" and spoken or nil
+end
+
+-- Letters only, lower case: what two copies of the same words share (no escapes, spaces or marks).
+local function Letters(text)
+	if type(text) ~= "string" or U.IsSecret(text) then return "" end
+	return (U.PlainText(text):lower():gsub("[%s%p]", ""))
+end
+
+-- A line's letters and where each of its words ends in them, kept while the line lives.
+local function Heard(line, words)
+	local known = heardLines[line]
+	if known then return known end
+	local all, ends, length = {}, {}, 0
+	for index, word in ipairs(words) do
+		all[index] = Letters(word)
+		length = length + #all[index]
+		ends[index] = length
+	end
+	known = { text = table.concat(all), ends = ends }
+	heardLines[line] = known
+	return known
+end
+
+-- An older Spoken without captions: when each line begins, from its callback.
+local function Listen(spoken)
+	if listening or type(spoken.GetCaption) == "function" or type(spoken.RegisterCallback) ~= "function" then return end
+	listening = true
+	pcall(spoken.RegisterCallback, spoken, "CLIP_STARTED", function(line)
+		if type(line) == "table" then lineStarts[line] = GetTime() end
+	end)
+end
+
+-- What Spoken reads now: the line, its letters, and how many of them are said (nil: not speaking).
+local function Voice(spoken)
+	if type(spoken.GetCaption) == "function" then
+		local ok, caption = pcall(spoken.GetCaption, spoken)
+		if not ok or type(caption) ~= "table" or type(caption.clip) ~= "table" or type(caption.words) ~= "table" then
+			return nil
+		end
+		local line = caption.clip
+		local heard = heardLines[line]
+		if not heard then
+			local words = {}
+			for index, word in ipairs(caption.words) do words[index] = type(word) == "table" and word.text or "" end
+			heard = Heard(line, words)
+		end
+		local active = caption.speaking and tonumber(caption.activeWord)
+		return line, heard, active and heard.ends[active] or nil
+	end
+	if type(spoken.GetNowPlaying) ~= "function" then return nil end
+	local ok, line = pcall(spoken.GetNowPlaying, spoken)
+	if not ok or type(line) ~= "table" then return nil end
+	local present = type(line.present) == "table" and line.present or {}
+	local text = present.transcript or line.text
+	if type(text) ~= "string" then return nil end
+	local heard = heardLines[line]
+	if not heard then
+		local words = {}
+		for word in text:gmatch("%S+") do words[#words + 1] = word end
+		heard = Heard(line, words)
+	end
+	-- Timed by its length: the letters said in proportion to the time gone.
+	local length, began = tonumber(line.length), lineStarts[line]
+	local paused = type(spoken.IsPaused) == "function" and select(2, pcall(spoken.IsPaused, spoken)) == true
+	if not (length and length > 0 and began) or paused then return line, heard, nil end
+	local share = (GetTime() - began) / length
+	if share >= 1 then return line, heard, nil end
+	return line, heard, math.max(1, math.floor(#heard.text * share))
+end
+
+-- The scene's letters, sentence by sentence, with the page and sentence each ends in.
+local function SceneLetters()
+	if scene.letters then return scene.letters end
+	local all, marks, length = {}, {}, 0
+	for page, text in ipairs(scene.pages) do
+		if type(text) == "string" and not U.IsSecret(text) then
+			for index, sentence in ipairs(Sentences(text)) do
+				local letters = Letters(sentence)
+				all[#all + 1] = letters
+				length = length + #letters
+				marks[#marks + 1] = { page = page, sentence = index, last = length }
+			end
+		end
+	end
+	scene.letters = { text = table.concat(all), marks = marks }
+	return scene.letters
+end
+
+-- Where Spoken's line starts in the scene's letters, or nil when it reads something else.
+local function Offset(heard, letters)
+	local voiced, shown = heard.text, letters.text
+	if voiced == "" or shown == "" then return nil end
+	local at = shown:find(voiced, 1, true)
+	if at then return at - 1 end
+	-- The same words, one copy a little different (a name, a last line): alike from the start.
+	local shorter, same = math.min(#voiced, #shown), 0
+	while same < shorter and voiced:byte(same + 1) == shown:byte(same + 1) do same = same + 1 end
+	return same >= shorter * SAME_SHARE and 0 or nil
+end
+
+-- Spoken's line: the scene's own words? Its place in them then.
+local function Ours(line, heard)
+	if scene.heardLine ~= line then
+		scene.heardLine, scene.heardAt = line, Offset(heard, SceneLetters()) or false
+	end
+	return scene.heardAt or nil
+end
+
+-- Spoken's windows: its subtitles and its players (the one in use). While a scene shows, the scene alone is
+-- seen: Spoken's voice plays, its words go by in the scene, its own windows wait hidden and come back as
+-- they were once the scene ends. Only shown and hidden: Spoken's settings are never written.
+local SPOKEN_WINDOWS = { "SpokenSubtitleFrame", "SpokenPlayerFrame", "SpokenMinimalPlayerFrame", "SpokenDialogueUIPlayerFrame" }
+local spokenHidden, spokenWatched = {}, {}
+
+local function HideSubtitles(frame)
+	spokenHidden[frame] = true
+	pcall(frame.Hide, frame)
+end
+
+-- Spoken's windows back as they were: shown again, and Spoken goes on with them (or hides them itself,
+-- its voice over).
+local function GiveSubtitlesBack()
+	for frame in pairs(spokenHidden) do
+		if type(frame.Show) == "function" then pcall(frame.Show, frame) end
+	end
+	wipe(spokenHidden)
+end
+
+-- Each of Spoken's windows: hidden now while a scene shows, and kept hidden should Spoken show it again,
+-- before a single frame is drawn.
+local function HideSpoken()
+	if not scene then return end
+	for _, name in ipairs(SPOKEN_WINDOWS) do
+		local frame = rawget(_G, name)
+		if type(frame) == "table" and type(frame.Hide) == "function" and type(frame.HookScript) == "function" then
+			if not spokenWatched[frame] then
+				spokenWatched[frame] = true
+				pcall(frame.HookScript, frame, "OnShow", function(self)
+					if scene then HideSubtitles(self) end
+				end)
+			end
+			if Clean(Safe(frame.IsShown, frame)) then HideSubtitles(frame) end
+		end
+	end
+end
+
+local Follow
+
+-- One look at the voice; true when Spoken reads the scene's words.
+Follow = function()
+	if not scene then return false end
+	local spoken = SpokenAPI()
+	if not spoken then return false end
+	Listen(spoken)
+	local line, heard, reached = Voice(spoken)
+	local at = line and Ours(line, heard)
+	HideSpoken()
+	-- The sentence the voice is in (none looking back, or the voice silent).
+	local mark
+	if at and reached and not scene.back then
+		local position = at + reached
+		for _, each in ipairs(SceneLetters().marks) do
+			mark = each
+			if each.last >= position then break end
+		end
+	end
+	local shown = scene.voice
+	if not mark then
+		if shown then
+			scene.voice = nil
+			Render()
+		end
+		return at ~= nil
+	end
+	if shown and shown.page == mark.page and shown.sentence == mark.sentence then return true end
+	-- The page turns with the voice while you follow it: never away from a page you went to yourself.
+	local followed = scene.voicePage
+	local following = followed == scene.page or (followed == nil and mark.page >= scene.page)
+	if following and mark.page ~= scene.page then
+		scene.page = mark.page
+		pageAlpha = 0
+	end
+	scene.voicePage = mark.page
+	scene.voice = { page = mark.page, sentence = mark.sentence }
+	Render()
+	return true
 end
 
 -- Scene ------------------------------------------------------------------------------
 
-local function Begin(event)
+local HUSH_SHARE = 0.4 -- the music and the ambience while a scene is shown
+
+local function Begin(event, startItem, args)
 	sceneToken = sceneToken + 1
-	local first = not scene
-	scene = Build(event)
+	local before = scene
+	scene = Build(event, startItem)
+	scene.args = args
+	-- The same character goes on talking: the page it said before, and your words, kept.
+	if before and before.guid and before.guid == scene.guid and not before.back then
+		local text = before.pages and before.pages[before.page]
+		if type(text) == "string" and not U.IsSecret(text) and text ~= "" then scene.previous = { text = text } end
+		scene.said = said
+	end
+	said = nil
+	local first = not before
 	pageAlpha = first and 1 or 0
 	ns.sceneActive = true
-	if ns.RefreshCinema then ns.RefreshCinema() end
+	ns.RefreshCinema()
 	if first then
 		appear, target = 0, 1
 		panel:SetAlpha(0)
 		panel:Show()
-		BindKeys(true)
-		GameSound("IG_QUEST_LIST_OPEN")
+		U.PlaySound("IG_QUEST_LIST_OPEN")
+		-- (written once, before the camera moves: a setting written stops it on its way)
+		-- Spoken lowers the music itself while it speaks: never both at once.
+		if ns.db.scene.hush and not ns.SpokenLoaded() then ns.LowerVolumes("sceneVolumes", HUSH_SHARE) end
 	end
 	Render()
+	-- (Spoken may already be reading it)
+	followFor = 0
+	Follow()
+end
+
+-- The conversation left: Spoken's voice stops with it, and what it would queue as the quest is taken or
+-- handed in (its accept and turn-in lines come a moment after) is dropped too. To hear a quest again,
+-- Spoken's own buttons. Its public StopAll only; nothing of Spoken is changed.
+-- Only once the conversation is really over: going from a dialogue to its quest closes one page before the
+-- next opens, and the new page's voice must play. Any page shown after the end keeps Spoken speaking.
+local QUIET_AGAIN = { 0.4, 1.2 } -- seconds after the end: the lines Spoken queues late
+local lastPage = 0 -- when a conversation page was last shown
+local pages = CreateFrame("Frame")
+for _, event in ipairs({ "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE" }) do
+	pages:RegisterEvent(event)
+end
+pages:SetScript("OnEvent", function() lastPage = GetTime() end)
+
+local function QuietSpoken()
+	local spoken = SpokenAPI()
+	local stop = spoken and spoken.StopAll
+	if type(stop) ~= "function" then return end
+	local ended = GetTime()
+	local function Stop()
+		-- (a page shown since, or a scene open again: its voice is the one wanted)
+		if scene or lastPage > ended then return end
+		pcall(stop, spoken)
+	end
+	for _, delay in ipairs(QUIET_AGAIN) do C_Timer.After(delay, Stop) end
 end
 
 local function Finish(closeConversation)
 	if not scene then return end
 	if closeConversation then CloseConversation() end
 	scene = nil
+	said = nil
 	ns.sceneActive = false
-	GameSound("IG_QUEST_LIST_CLOSE")
-	if ns.RefreshCinema then ns.RefreshCinema() end
+	ns.RestoreVolumes("sceneVolumes")
+	GiveSubtitlesBack()
+	QuietSpoken()
+	U.PlaySound("IG_QUEST_LIST_CLOSE")
+	ns.RefreshCinema()
 	BindKeys(false)
 	GameTooltip:Hide()
 	-- The panel fades away (OnUpdate hides it).
 	target = 0
 end
 
+-- A game window still open (from a fight, or Shift): Wanderer takes the
+-- events back once it closes, never in the middle of its conversation.
+local function GameWindowOpen()
+	for _, name in ipairs({ "GossipFrame", "QuestFrame" }) do
+		local window = _G[name]
+		if window and window.IsShown and window:IsShown() then return true end
+	end
+	return false
+end
+
+-- A scene that could not be drawn (a page the game says in a way Wanderer does not expect): let go, and the
+-- game's own window shows the conversation instead. Said once a session, quietly; the fault itself in the
+-- diagnostic mode.
+local faultSaid = false
+local function Fallback(event, args, problem)
+	if scene then Finish(false) end
+	if panel then
+		appear, target = 0, 0
+		panel:Hide()
+	end
+	if not faultSaid then
+		faultSaid = true
+		ns.Print(L.SCENE_FALLBACK)
+	end
+	if ns.debug then ns.Print(tostring(problem)) end
+	if event and not InCombatLockdown() then Relay(event, unpack(args or {}, 1, args and args.n or 0)) end
+end
+
+-- Every drawing of the scene guarded: a fault never leaves you stuck before a character.
+local Draw = Render
+Render = function()
+	if not scene then return end
+	local ok, problem = pcall(Draw)
+	if ok then return end
+	-- (the conversation already closed, or the character gone: nothing to hand to the game's window)
+	local talking = Clean(Safe(UnitExists, "npc")) or Clean(Safe(UnitExists, "questnpc"))
+	local event = scene and not scene.closed and talking and scene.kind or nil
+	Fallback(event, scene and scene.args, problem)
+end
+
+-- A show event taken, then nothing on the screen half a second later (no scene, no game window) while you
+-- still face the character: the game's window gets it.
+local WATCH_AFTER = 0.5
+local watched -- { event, args } of the last show event taken
+local function Watch(event, args)
+	local this = { event = event, args = args }
+	watched = this
+	C_Timer.After(WATCH_AFTER, function()
+		if watched ~= this then return end
+		watched = nil
+		if scene or planned or InCombatLockdown() or GameWindowOpen() or ns.WasAnswered(event) then return end
+		if not (Clean(Safe(UnitExists, "npc")) or Clean(Safe(UnitExists, "questnpc"))) then return end
+		if ns.debug then ns.Print("scene watchdog: " .. tostring(event)) end
+		Relay(event, unpack(args, 1, args.n))
+	end)
+end
+
 -- The game closed the conversation: a new page of it may come right after
 -- (a quest chosen in a dialogue, a choice that goes back), so the scene waits:
 -- a moment, longer while you still face the character (the next page can
--- take a while to come), so the interface never comes back between two pages. A dialogue's
--- end never closes a quest shown after it, and the other way round.
+-- take a while to come), so the interface never comes back between two
+-- pages. A dialogue's end never closes a quest shown after it, and the other
+-- way round.
 local NEXT_PAGE_STEP = 0.15 -- seconds
 local NEXT_PAGE_WAIT = 1.5 -- at most, while still facing the character
 
 local function OnClosed(event)
 	local gossip = event == "GOSSIP_CLOSED"
+	watched = nil
 	if not scene then
 		-- Answered at once (Comfort): the scene planned is not shown.
 		sceneToken = sceneToken + 1
@@ -800,6 +1564,7 @@ local function OnClosed(event)
 		planned = nil
 	end
 	if gossip ~= (scene.kind == "GOSSIP_SHOW") then return end
+	scene.closed = true
 	sceneToken = sceneToken + 1
 	local token = sceneToken
 	local waited = 0
@@ -816,12 +1581,14 @@ end
 local function Wanted()
 	local db = ns.db
 	return db and db.enabled and db.scene.enabled and not InCombatLockdown() and not U.IsSkipping()
+		and not ns.SceneYielded()
 end
 
 local function OnEvent(_, event, ...)
 	if event == "GOSSIP_CLOSED" or event == "QUEST_FINISHED" then return OnClosed(event) end
 	-- The game took the quest (or its reward): its page is over.
 	if event == "QUEST_ACCEPTED" or event == "QUEST_TURNED_IN" then
+		watched = nil
 		local kinds = event == "QUEST_ACCEPTED" and { QUEST_DETAIL = true } or { QUEST_PROGRESS = true, QUEST_COMPLETE = true }
 		if planned and kinds[planned] then
 			sceneToken = sceneToken + 1
@@ -849,6 +1616,11 @@ local function OnEvent(_, event, ...)
 			scene.waitingPrices = Prices(scene.rewards)
 			changed = true
 		end
+		-- (the item that began the quest: its name and picture once the game knows them)
+		if scene.item and not scene.itemKnown and U.ItemName(scene.item) then
+			scene.name, scene.icon, scene.itemKnown = U.ItemName(scene.item), U.ItemIcon(scene.item) or scene.icon, true
+			changed = true
+		end
 		if changed then Render() end
 		return
 	end
@@ -859,14 +1631,19 @@ local function OnEvent(_, event, ...)
 		-- conversation would stay stuck.
 		sceneToken = sceneToken + 1
 		planned = nil
+		watched = nil
 		if scene then Finish(true) end
 		SetTaken(false)
 		return
 	end
-	if event == "PLAYER_REGEN_ENABLED" then return ns.RefreshScene() end
-	-- Scenes off: the game's windows hear their events themselves.
-	if not taken then return end
-	if GameHandlesAlone(event, ...) then
+	if event == "PLAYER_REGEN_ENABLED" then
+		if unbindPending and not scene then BindKeys(false) end
+		return ns.RefreshScene()
+	end
+	-- Scenes off (or shown by another addon): the game's windows hear their events themselves.
+	if not taker.taken then return end
+	-- (the game's own window shows this conversation already: its next page stays there, never a scene over it)
+	if GameHandlesAlone(event) or GameWindowOpen() then
 		if scene then Finish(false) end
 		return Relay(event, ...)
 	end
@@ -876,41 +1653,35 @@ local function OnEvent(_, event, ...)
 		local token = sceneToken + 1
 		sceneToken = token
 		planned = event
+		local startItem = event == "QUEST_DETAIL" and ... or nil
+		local args = { n = select("#", ...), ... }
 		C_Timer.After(0, function()
 			if sceneToken == token then
 				planned = nil
 				sceneToken = token - 1
 				-- Answered by itself (quests accepted and handed in by
 				-- themselves): nothing to show.
-				if ns.WasAnswered and ns.WasAnswered(event) then
+				if ns.WasAnswered(event) then
 					if scene then Finish(false) end
 					return
 				end
-				Begin(event)
+				local ok, problem = pcall(Begin, event, startItem, args)
+				if not ok then Fallback(event, args, problem) end
 			end
 		end)
+		Watch(event, args)
 	else
 		if scene then Finish(false) end
 		Relay(event, ...)
 	end
 end
 
--- A game window still open (from a fight, or Shift): Wanderer takes the
--- events back once it closes, never in the middle of its conversation.
-local function GameWindowOpen()
-	for _, name in ipairs({ "GossipFrame", "QuestFrame" }) do
-		local window = _G[name]
-		if window and window.IsShown and window:IsShown() then return true end
-	end
-	return false
-end
-
 local retryPending = false
 
 function ns.RefreshScene()
 	local db = ns.db
-	local wanted = db.enabled and db.scene.enabled and not InCombatLockdown() and true or false
-	if wanted and not taken and GameWindowOpen() then
+	local wanted = db.enabled and db.scene.enabled and not InCombatLockdown() and not ns.SceneYielded() and true or false
+	if wanted and not taker.taken and GameWindowOpen() then
 		if not retryPending then
 			retryPending = true
 			C_Timer.After(0.5, function()
@@ -921,11 +1692,23 @@ function ns.RefreshScene()
 		return
 	end
 	SetTaken(wanted)
-	if not taken and scene then Finish(true) end
+	if not taker.taken and scene then Finish(true) end
+	if scene then Render() end
+	-- (the reading window follows the scenes' settings: its own, the parchment)
+	if ns.RefreshReader then ns.RefreshReader() end
 end
 
--- Motion: the panel rises softly as it appears, the page fades in.
+-- Motion: the panel rises softly as it appears (only fades with the calm movements), the page fades in.
 local function Ease(t) return 1 - (1 - t) ^ 3 end
+
+-- The panel where this character put it (the placing mode), risen as far as it appeared (0 to 1).
+PlacePanel = function(eased)
+	local point, relPoint, x, y = ns.PlaceSpot("scene")
+	if not point then point, relPoint, x, y = "BOTTOM", "BOTTOM", 0, PANEL_BOTTOM end
+	local rise = ns.CalmMotion() and 0 or RISE * (1 - (eased or 1))
+	panel:ClearAllPoints()
+	panel:SetPoint(point, UIParent, relPoint, x, y - rise)
+end
 
 -- A scene with a character whose dialogue ended without a word from the game
 -- (gone, out of reach): it fades away by itself.
@@ -946,13 +1729,25 @@ end
 
 local function OnUpdate(self, elapsed)
 	StillTalking(elapsed)
+	-- Spoken's voice, followed.
+	if scene then
+		followFor = followFor + elapsed
+		if followFor >= FOLLOW_STEP then
+			followFor = 0
+			Follow()
+		end
+	end
+	-- A turn-in's short wait over: Space pays now.
+	if scene and scene.lockUntil and not scene.unlocked and not Locked() then
+		scene.unlocked = true
+		Render()
+	end
 	if appear ~= target then
 		local step = elapsed / (target > appear and APPEAR or DISAPPEAR)
 		appear = target > appear and math.min(target, appear + step) or math.max(target, appear - step)
 		local eased = Ease(appear)
 		self:SetAlpha(eased)
-		self:ClearAllPoints()
-		self:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, PANEL_BOTTOM - RISE * (1 - eased))
+		PlacePanel(eased)
 	end
 	-- Gone (even if it closed before it had begun to appear).
 	if appear <= 0 and target == 0 then
@@ -968,10 +1763,41 @@ end
 -- Construction -----------------------------------------------------------------------
 
 function ns.InitScene()
+	ns.RestoreVolumes("sceneVolumes") -- a session ended within a scene: the sounds back
 	panel, skin = ns.Skin.CreateWindow("WandererScene", "DIALOG")
-	panel:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, PANEL_BOTTOM)
+	-- Its place: where this character put it in the placing mode, else at the bottom of the screen.
+	ns.Placeable({ key = "scene", label = function() return L.PLACING_SCENE end, frame = panel,
+		size = function() return { PanelWidth(), 200 } end, scale = function() return ns.Skin.Scale() end,
+		default = { "BOTTOM", "BOTTOM", 0, PANEL_BOTTOM },
+		enabled = function() return ns.db and ns.db.enabled and ns.db.scene.enabled and not ns.SceneYielded() or false end,
+		onMoved = function() PlacePanel(1) end })
+	-- (this character's list: once the game knows who it is, at login; loaded after it, a /reload: now)
+	if IsLoggedIn and IsLoggedIn() then
+		ForgetOldSeen()
+	else
+		local login = CreateFrame("Frame")
+		login:RegisterEvent("PLAYER_LOGIN")
+		login:SetScript("OnEvent", function(self)
+			self:UnregisterAllEvents()
+			ForgetOldSeen()
+		end)
+	end
+	PlacePanel(1)
 	panel:EnableMouse(true)
-	panel:SetScript("OnMouseUp", function(_, button) if button == "LeftButton" then Continue() end end)
+	-- (only a click begun on the panel: a camera drag ending over it neither turns the page nor accepts)
+	panel:SetScript("OnMouseDown", function(self, button) self.pressed = button end)
+	panel:SetScript("OnMouseUp", function(self, button)
+		local pressed = self.pressed
+		self.pressed = nil
+		if pressed ~= button then return end
+		if button == "LeftButton" then Continue(false) elseif button == "RightButton" then Leave() end
+	end)
+	-- The wheel: up, what was said before; down, the next page (never an answer).
+	if panel.EnableMouseWheel then panel:EnableMouseWheel(true) end
+	panel:SetScript("OnMouseWheel", function(_, delta)
+		if delta > 0 then return Back() end
+		if scene and (scene.back or not IsLastPage()) then Continue(false) end
+	end)
 	-- Portrait: round, with a thin golden ring.
 	portrait = panel:CreateTexture(nil, "ARTWORK")
 	portrait:SetSize(PORTRAIT_SIZE, PORTRAIT_SIZE)
@@ -989,23 +1815,54 @@ function ns.InitScene()
 	rule = panel:CreateTexture(nil, "ARTWORK")
 	rule:SetColorTexture(1, 0.82, 0, 0.25)
 	rule:SetHeight(1)
+	saidText = ns.Skin.CreateText(panel, "GameTooltipText", 0.62, 0.6, 0.54)
+	saidText:Hide()
 	bodyText = ns.Skin.CreateText(panel, "GameTooltipText", 0.95, 0.92, 0.85)
 	rewardsLabel = ns.Skin.CreateText(panel, "GameTooltipTextSmall", 0.75, 0.68, 0.5)
 	moneyText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", 0.95, 0.92, 0.85)
 	keysText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", 0.55, 0.55, 0.55)
 	if keysText.SetWordWrap then keysText:SetWordWrap(false) end
+	-- Spoken's own reading of the quest, again (its slash command, as its key binding does).
+	replayLink = CreateFrame("Button", nil, panel)
+	replayLink:SetHeight(18)
+	replayLink.text = ns.Skin.CreateText(replayLink, "GameTooltipTextSmall", 0.75, 0.68, 0.5)
+	replayLink.text:SetPoint("RIGHT")
+	replayLink.text:SetText(L.SCENE_SPOKEN_REPLAY)
+	replayLink:SetScript("OnEnter", function(self)
+		Paint(self.text, "accent")
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(L.SCENE_SPOKEN_REPLAY_DESC, 1, 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	replayLink:SetScript("OnLeave", function(self)
+		Paint(self.text, "label")
+		GameTooltip:Hide()
+	end)
+	replayLink:SetScript("OnClick", function()
+		local reread = SpokenReread()
+		if reread then pcall(reread, "") end
+	end)
+	replayLink:Hide()
 	-- Buttons the borrowed keys click.
 	local continue = CreateFrame("Button", "WandererSceneContinue", panel)
-	continue:SetScript("OnClick", Continue)
+	continue:SetScript("OnClick", function() Continue(false) end)
 	for number = 1, MAX_CHOICES do
 		local button = CreateFrame("Button", "WandererSceneChoice" .. number, panel)
 		button:SetScript("OnClick", function() Choose(number) end)
 	end
+	CreateFrame("Button", "WandererSceneCycle", panel):SetScript("OnClick", Cycle)
+	CreateFrame("Button", "WandererSceneBack", panel):SetScript("OnClick", Back)
+	-- The hint "what was said before", clickable (no key is borrowed for it: the arrows move you).
+	keysLink = CreateFrame("Button", nil, panel)
+	keysLink:SetScript("OnClick", Back)
+	keysLink:SetScript("OnEnter", function() Paint(keysText, "accent") end)
+	keysLink:SetScript("OnLeave", function() Paint(keysText, "keys") end)
+	keysLink:Hide()
 	-- Escape closes the scene and the conversation.
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererScene") end
 	-- Closed (Escape), not merely hidden with the whole interface (Alt+Z).
 	panel:SetScript("OnHide", function()
-		if scene and not (UIParent and not UIParent:IsShown()) then Finish(true) end
+		if scene and UIParent:IsShown() then Finish(true) end
 	end)
 	panel:SetScript("OnUpdate", OnUpdate)
 	panel:SetScript("OnEvent", OnEvent)
@@ -1017,8 +1874,7 @@ function ns.InitScene()
 		local window = _G[name]
 		if window and window.HookScript then
 			window:HookScript("OnShow", function()
-				if scene and not relaying then
-					if ns.debug then ns.Print("scene: " .. name .. " shown by the game") end
+				if scene and not taker.relaying then
 					Finish(false)
 				end
 			end)

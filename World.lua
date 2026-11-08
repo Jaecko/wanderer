@@ -2,7 +2,7 @@ local _, ns = ...
 
 -- Knowledge about what is hovered in the world: difficulty colors of the
 -- original game, reputation with an NPC's faction, beasts a hunter can tame,
--- and rares this character has already defeated.
+-- and the kills left before the next level.
 
 local World = {}
 ns.World = World
@@ -22,14 +22,26 @@ local function GreyLevel(player)
 	return player - 9
 end
 
-local function CreatureColor(level)
-	local player = Clean(Safe(UnitLevel, "player")) or level
+-- isGreen(level, player, gap): whether a level under the yellow ones still gives something.
+local function ScaleColor(level, player, isGreen)
 	local gap = level - player
 	if gap >= 5 then return 1, 0.1, 0.1 end
 	if gap >= 3 then return 1, 0.5, 0.25 end
 	if gap >= -2 then return 1, 0.82, 0 end
-	if level > GreyLevel(player) then return 0.25, 0.75, 0.25 end
+	if isGreen(level, player, gap) then return 0.25, 0.75, 0.25 end
 	return 0.5, 0.5, 0.5
+end
+
+local function CreatureGreen(level, player) return level > GreyLevel(player) end
+
+local function QuestGreen(level, player, gap)
+	local green = Clean(Safe(GetQuestGreenRange))
+	if green then return -gap <= green end
+	return level > GreyLevel(player)
+end
+
+local function CreatureColor(level)
+	return ScaleColor(level, Clean(Safe(UnitLevel, "player")) or level, CreatureGreen)
 end
 
 -- Color of a level compared to the player's: grey, green, yellow, orange, red.
@@ -47,13 +59,7 @@ function World.LevelColor(level, forQuest, unit)
 	-- green while it still gives something), not the newer function's wider yellow.
 	if forQuest then
 		local player = Clean(Safe(UnitEffectiveLevel, "player")) or Clean(Safe(UnitLevel, "player")) or level
-		local gap = level - player
-		if gap >= 5 then return 1, 0.1, 0.1 end
-		if gap >= 3 then return 1, 0.5, 0.25 end
-		if gap >= -2 then return 1, 0.82, 0 end
-		local green = Clean(Safe(GetQuestGreenRange))
-		if (green and -gap <= green) or (not green and level > GreyLevel(player)) then return 0.25, 0.75, 0.25 end
-		return 0.5, 0.5, 0.5
+		return ScaleColor(level, player, QuestGreen)
 	end
 	local color = Safe(GetCreatureDifficultyColor, level)
 	if type(color) == "table" and color.r then return color.r, color.g, color.b end
@@ -98,7 +104,7 @@ function World.Reputation(lines)
 			local standing = _G["FACTION_STANDING_LABEL" .. tostring(faction.reaction)] or "?"
 			local color = FACTION_BAR_COLORS and FACTION_BAR_COLORS[faction.reaction]
 			local code = color and U.ColorCode(color.r, color.g, color.b) or "|cffffffff"
-			local text = ("%s : %s%s|r"):format(line.text, code, standing)
+			local text = ns.L.LABEL_REPUTATION_LINE:format(line.text, code .. standing .. "|r")
 			if faction.max and faction.min and faction.value and faction.max > faction.min then
 				text = text .. (" |cffaaaaaa(%d %%)|r"):format(math.floor((faction.value - faction.min) / (faction.max - faction.min) * 100))
 			end
@@ -127,15 +133,12 @@ function World.IsTameable(lines)
 	return false
 end
 
-
-
 -- Experience ---------------------------------------------------------------------------
 -- Learned from the game's own messages ("Wolf dies, you gain 45 experience"),
 -- for this session and this level: the real numbers, not a formula.
 
 local xpByName, xpByLevel, levelByName = {}, {}, {}
 local xpPatterns -- built from the game's messages, once
-
 
 local function XPPatterns()
 	if not xpPatterns then

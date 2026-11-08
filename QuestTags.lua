@@ -25,6 +25,13 @@ function ns.QuestTag(questID, inDialog)
 	local info = Safe(log.GetQuestTagInfo, questID)
 	local tagID = type(info) == "table" and Clean(info.tagID) or nil
 	local consts = Constants and Constants.QuestConsts or {}
+	local tags = Enum and Enum.QuestTag or {}
+	consts = {
+		QUEST_INFO_ELITE_ID = consts.QUEST_INFO_ELITE_ID or tags.Group or 1,
+		QUEST_INFO_DUNGEON_ID = consts.QUEST_INFO_DUNGEON_ID or tags.Dungeon or 81,
+		QUEST_INFO_RAID_ID = consts.QUEST_INFO_RAID_ID or tags.Raid or 62,
+		QUEST_INFO_PVP_ID = consts.QUEST_INFO_PVP_ID or tags.PvP or 41,
+	}
 	local elite = Clean(Safe(log.IsEliteQuest, questID)) and true or false
 	if type(info) == "table" and Clean(info.isElite) then elite = true end
 	if tagID and tagID == consts.QUEST_INFO_ELITE_ID then elite = true end

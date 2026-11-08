@@ -13,18 +13,18 @@
 ## Notes-zhTW: 為你的旅程帶來沉浸與便利：隱藏名稱、豐富的滑鼠懸停標籤、安靜的對話場景、按天賦系評估物品以及許多貼心的小功能。
 ## Category: Immersion
 ## Category-frFR: Immersion
-## Version: 0.44.7
+## Version: 1.4.0
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 ## SavedVariables: WandererDB
 ## AddonCompartmentFunc: Wanderer_OnAddonCompartmentClick
 ## X-Curse-Project-ID: 1720988
-## X-Wago-ID: b6XyRBKp
 ## X-Website: https://wanderer-addon.com
 
 Locales.lua
 # Only your client's language is loaded ([TextLocale]); English is Locales.lua, the base.
 Locales\[TextLocale].lua
 Util.lua
+Compat.lua
 Core.lua
 Quests.lua
 Skin.lua
@@ -35,6 +35,7 @@ Inspect.lua
 Casts.lua
 Label.lua
 Tagging.lua
+Acquaintances.lua
 Plates.lua
 Markers.lua
 Threat.lua
@@ -42,8 +43,13 @@ Meter.lua
 Buffs.lua
 TargetInfo.lua
 Minimap.lua
+Card.lua
 Bar.lua
 MinimapLook.lua
+Layer.lua
+DotData.lua
+TickTracker.lua
+Dots.lua
 TrackerLook.lua
 Cinema.lua
 Tooltips.lua
@@ -51,7 +57,8 @@ Upgrade.lua
 Weights.lua
 Reagents.lua
 Merchant.lua
-Mail.lua
+Provisions.lua
+Worth.lua
 Loot.lua
 Trainer.lua
 Dialogues.lua
@@ -62,11 +69,11 @@ Fishing.lua
 Crafts.lua
 Threshold.lua
 Gestures.lua
+Hands.lua
+Characters.lua
 Chat.lua
-Messages.lua
 Todo.lua
 Copy.lua
-ChatComfort.lua
 GameFrames.lua
 BarSlots.lua
 Curtain.lua
@@ -75,10 +82,27 @@ Clean.lua
 Icons.lua
 QuestTags.lua
 Scene.lua
+Reader.lua
 Camera.lua
 Themes.lua
 Extensions.lua
+Playstyles.lua
 Welcome.lua
 News.lua
 Preview.lua
 Options.lua
+Sparkles.lua
+Emotes.lua
+DotBars.lua
+ZoneData.lua
+Changes.lua
+Town.lua
+Place.lua
+SettingsWindow.lua
+LootFeed.lua
+StatModel.lua
+HotData.lua
+Hots.lua
+HotBars.lua
+UnitFrames.lua
+Portraits.lua

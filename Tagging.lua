@@ -17,9 +17,7 @@ local L = ns.L
 --
 -- The mark stands over the monster's nameplate when the game shows it; for
 -- the monster you target, it is said on the line over the target frame
--- (TargetInfo.lua). The game may
--- keep some fight details from addons (health, threat): /wanderer debug then
--- tells which ones, on the target.
+-- (TargetInfo.lua).
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -111,31 +109,15 @@ local function CreateMark()
 	return mark
 end
 
--- What the game tells (or keeps) about a monster, for /wanderer debug.
-local function Shown(value)
-	if U.IsSecret(value) then return "secret" end
-	return tostring(value)
-end
-
-function ns.DebugTagging(unit)
-	if not Clean(Safe(UnitExists, unit)) then return end
-	local mine = UnitIsTappedByPlayer and Shown(Safe(UnitIsTappedByPlayer, unit)) or "-"
-	local key = Key(unit)
-	ns.Print(("untagged %s: attack=%s taken=%s combat=%s threat=%s targetsYou=%s mine=%s hit=%s health=%s/%s -> %s"):format(
-		unit, Shown(Safe(UnitCanAttack, "player", unit)), Shown(Safe(UnitIsTapDenied, unit)),
-		Shown(Safe(UnitAffectingCombat, unit)), Shown(Safe(UnitThreatSituation, "player", unit)),
-		Shown(Safe(UnitIsUnit, unit .. "target", "player")), mine, tostring(key and touched[key] ~= nil or false), Shown(Safe(UnitHealth, unit)),
-		Shown(Safe(UnitHealthMax, unit)), tostring(ns.IsUntaggedOnYou(unit))))
-end
+local shown = {} -- nameplate -> true, for one check (reused: it runs five times a second in a fight)
 
 local function Update()
-	local shown = {}
+	wipe(shown)
 	local plates = C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}
 	for _, plate in ipairs(plates) do
 		local unit = U.PlateUnit(plate)
 		-- The label says it already for the one it describes.
-		local described = unit and ns.IsLabelActive and ns.IsLabelActive() and ns.LabelUnit
-			and Clean(Safe(UnitIsUnit, unit, ns.LabelUnit()))
+		local described = unit and ns.IsLabelActive() and Clean(Safe(UnitIsUnit, unit, ns.LabelUnit()))
 		if unit and not described and not (plate.IsForbidden and plate:IsForbidden()) and ns.IsUntaggedOnYou(unit) then
 			local mark = marks[plate] or CreateMark()
 			marks[plate] = mark
@@ -165,18 +147,19 @@ function ns.InitTagging()
 	driver:RegisterEvent("PLAYER_REGEN_DISABLED")
 	driver:RegisterEvent("PLAYER_REGEN_ENABLED")
 	driver:RegisterEvent("PLAYER_TARGET_CHANGED")
-	driver:RegisterEvent("UNIT_COMBAT")
 	driver:SetScript("OnEvent", function(_, event, unit, action)
 		if event == "UNIT_COMBAT" then return OnBlow(unit, action) end
-		if ns.debug and (event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_REGEN_DISABLED") then
-			ns.DebugTagging("target")
-		end
 		if event == "PLAYER_REGEN_DISABLED" then
-			driver:SetShown(ns.db and ns.db.enabled and ns.db.label.untagged and true or false)
+			-- (not in a dungeon or a raid: the group shares the tapping there)
+			local instance = ns.zone == "dungeon" or ns.zone == "raid"
+			driver:SetShown(ns.db and ns.db.enabled and ns.db.label.untagged and not instance and true or false)
+			-- The blows are counted only while the check runs (in a group, dozens a second).
+			if driver:IsShown() then driver:RegisterEvent("UNIT_COMBAT") end
 		elseif event == "PLAYER_REGEN_ENABLED" then
 			wipe(touched) -- fights over: monsters come back fresh
 			Update()
 			driver:Hide()
+			driver:UnregisterEvent("UNIT_COMBAT")
 		else
 			-- A plate handed to another monster: the blows it knew were not on this one.
 			if event == "NAME_PLATE_UNIT_REMOVED" and unit and C_NamePlate then

@@ -1,31 +1,49 @@
 local _, ns = ...
 local L = ns.L
 
--- Welcome screen: shown once, on the first arrival in the world with Wanderer,
--- a few steps to make it yours: the look, the way you play, a quieter
--- interface, the chat tabs, and what is worth knowing. One step at a time,
--- with Back, Next and Skip. Reopened with /wanderer welcome or from the options.
+-- Welcome screen: shown once for each character, on its first arrival in the
+-- world with Wanderer. Three choices and it is done: what Wanderer is about
+-- (and the key that shows every name), the look, the way you play, then what
+-- it sets out with. Further pages wait there for who wants them: a quieter
+-- interface, the look of the interface (the bar, the movable windows), what
+-- is this character's own (what you play, the profiles by place, the action
+-- bars), the extensions. One step at a time, with Back, Next and Not now, and
+-- the dots to go straight to a step.
+-- A character met after others opens on one choice: like your main character
+-- (a copy of its settings, its own from then on) or set up apart.
+-- Reopened with /wanderer welcome or from the options.
 
 local U = ns.Util
 
-local WIDTH, HEIGHT = 620, 510
-local SCREEN_SHARE = 0.94 -- never taller than this share of the screen
+local WIDTH, HEIGHT = 620, 640
 local CREST_SIZE = 44
-local CARD_HEIGHT, CARD_GAP = 64, 10
+local CARD_GAP = 10
 local ROW_HEIGHT = 46
-local CHIP_HEIGHT, CHIP_GAP = 28, 8
 local DOT_SIZE, DOT_GAP = 8, 8
+local MORE_GAP = 10 -- between the dots of the way and the further ones
 local ICON = "Interface\\Icons\\INV_Misc_Map_01"
-local CHECK = "Interface\\Buttons\\UI-CheckBox-Check"
 local SHOW_DELAY = 2 -- seconds after arriving, once the screen has settled
-local STEPS = { "intro", "look", "play", "interface", "appearance", "chat", "ready" }
--- (a step for the extensions, before the last one, when some are missing)
-local function WithExtensions()
-	if ns.MissingExtensions and ns.MissingExtensions()[1] and STEPS[#STEPS - 1] ~= "extensions" then
-		table.insert(STEPS, #STEPS, "extensions")
-	end
+local SHOW_DELAY_BESIDE = 7 -- with Naowh Forever, after its own first window (it comes at 5)
+local AFTER_OTHER = 1 -- seconds after another addon's first window closed
+local LIKE_HEIGHT, APART_HEIGHT = 92, 64
+local SUMMARY_LINE = 16
+-- The way to the road: three choices, then what this character sets out with (READY, where it may end).
+local ESSENTIAL = { "intro", "look", "play", "ready" }
+local READY = #ESSENTIAL
+-- Further, for who wants them: after READY, the extensions' page last (when some are missing).
+local MORE = { "interface", "appearance", "character" }
+local STEPS = {} -- every page in order (made with the window)
+local function BuildSteps()
+	for index = #STEPS, 1, -1 do STEPS[index] = nil end
+	for _, key in ipairs(ESSENTIAL) do STEPS[#STEPS + 1] = key end
+	for _, key in ipairs(MORE) do STEPS[#STEPS + 1] = key end
+	if ns.OffersWanted() and ns.MissingExtensions()[1] then STEPS[#STEPS + 1] = "extensions" end
 end
-local PLAYSTYLE_ORDER = { "immersion", "adventurer", "roleplay", "dungeons" }
+local LAYOUT_KEYS = { "stacked", "clean", "blizzard" }
+local SMALL_CARD = 56
+local REVEAL = "WANDERER_REVEAL" -- the key that shows every name while held
+local REVEAL_HEIGHT = 66
+local REVEAL_ICON = "Interface\\Icons\\INV_Misc_Spyglass_02"
 local HIGHLIGHTS = {
 	{ "Interface\\CURSOR\\Point", "WELCOME_HIGHLIGHT_NAMES" },
 	{ "Interface\\Icons\\INV_Misc_Note_06", "WELCOME_HIGHLIGHT_SCENES" },
@@ -33,19 +51,36 @@ local HIGHLIGHTS = {
 }
 -- The quieter interface: options from several pages, gathered for the start.
 local INTERFACE = {
-	{ "world.cleanMinimap", "CLEAN_MINIMAP" },
-	{ "world.cleanTracker", "CLEAN_TRACKER" },
 	{ "world.gatherIcons", "GATHER_ICONS" },
-	{ "cinema.enabled", "CINEMA_ENABLE" },
 	{ "travel.enabled", "TRAVEL_ENABLE" },
 	{ "scene.enabled", "SCENE_ENABLE" },
 }
--- The look of your interface: Wanderer's own hand on the minimap, the quest tracker, a quiet bar.
+-- The look of your interface: a quiet bar, the game's windows where you put them (each with a short line here,
+-- the whole of it in its tooltip); then the minimap's and the quest tracker's look, one choice of three each, as
+-- in the settings (Clean.lua's).
 local APPEARANCE = {
-	{ "world.styledMinimap", "STYLED_MINIMAP" },
-	{ "world.styledTracker", "STYLED_TRACKER" },
-	{ "world.bar", "BAR_SHOW" },
+	{ "world.bar", "BAR_SHOW", "WELCOME_BAR_DESC" },
+	{ "world.moveFrames", "MOVE_FRAMES", "WELCOME_MOVE_FRAMES_DESC" },
 }
+-- (a choice among a few: its words, its getter by profile, its setter; keys and their words prefix, the looks'
+-- by default; yield: its job, greyed as in the settings while another addon does it)
+local LOOKS = {
+	{ "MINIMAP_LOOK", function(profile) return ns.MinimapLook(profile) end, function(value) ns.SetMinimapLook(value) end,
+		yield = "minimapLook" },
+	{ "TRACKER_LOOK", function(profile) return ns.TrackerLook(profile) end, function(value) ns.SetTrackerLook(value) end,
+		yield = "trackerLook" },
+}
+-- The fade, one choice of three as in the settings (Cinema.lua's), on the quieter interface's page.
+local FADE = { "CINEMA_MODE", function(profile) return ns.FadeMode(profile) end, function(value) ns.SetFadeMode(value) end,
+	keys = ns.FADE_CHOICES, words = "CINEMA_MODE_" }
+local function LookWords(look, key) return L[(look.words or "LOOK_") .. tostring(key):upper()] end
+-- What another character's settings bring, shown before the copy: the switches told, the looks named.
+local LIKE_PREVIEW = {
+	{ "world.bar", "BAR_SHOW" }, { "world.moveFrames", "MOVE_FRAMES" }, { "scene.enabled", "SCENE_ENABLE" },
+}
+-- A character's own settings outside its profile, copied with it: where its windows stand, the minimap
+-- button, the reminders' size and their opening at login (not its weights or its trade: those are its own).
+local MINE_COPIED = { "framePoints", "spots", "minimap", "todoSize", "todoAtLogin" }
 local TIPS = {
 	{ "Interface\\CURSOR\\Point", "WELCOME_TIP_HOVER" },
 	{ "Interface\\Icons\\INV_Misc_Spyglass_02", "WELCOME_TIP_REVEAL" },
@@ -53,123 +88,126 @@ local TIPS = {
 	{ "Interface\\Icons\\INV_Misc_Note_01", "WELCOME_TIP_COMMAND" },
 }
 
--- Ways to play: each one sets the same whole set of options (names, scenes,
--- the interface fading, the ambiance while away, quest automations, gestures),
--- so going from one to another never leaves something of the first behind.
--- Merchants, loot, the label's content and the journal are everyone's: left
--- as they are. Everything stays free to change afterwards. places: the profiles by place made with it, for
--- the ways whose interface fades (in dungeons everything in view and the damage meter, in cities the
--- interface out of the way); the dungeons' way keeps everything in view and its meter everywhere.
-local function Way(preset, values, places)
-	local all = {
-		["combatEnemies"] = false, ["label.stickyTarget"] = true, ["enemyNames"] = "names", ["nearNames.show"] = "bar", ["zones.dungeon"] = "group", ["zones.raid"] = "group",
-		["scene.enabled"] = true, ["scene.camera"] = true,
-		["cinema.enabled"] = false, ["cinema.combatOnly"] = true, ["cinema.alpha"] = 20,
-		["travel.enabled"] = true, ["away.enabled"] = false,
-		["world.cleanMinimap"] = false, ["world.cleanTracker"] = false, ["world.gatherIcons"] = false,
-		["world.styledMinimap"] = true, ["world.styledTracker"] = false, ["world.bar"] = false,
-		["quest.autoAccept"] = false, ["quest.autoTurnIn"] = false, ["quest.skipGossip"] = false,
-		["gestures.read"] = false, ["gestures.levelUp"] = false, ["gestures.greet"] = false,
-		["groupMarks"] = true, ["guildMarks"] = true, ["label.showPower"] = true,
-		["messages.enabled"] = false, ["fishing.splash"] = false, ["meter.show"] = "own",
-	}
-	for path, value in pairs(values) do all[path] = value end
-	return { preset = preset, values = all, places = places }
+-- Seen once by each character (part of what it sets is the character's own). Before 0.45 one mark said it
+-- for the whole account: every character known then (by anything Wanderer kept for it) had seen it, and gets
+-- the news of the release, never the welcome again.
+function ns.Welcomed()
+	local root = ns.root
+	if not root then return true end
+	if root.welcomed then
+		local by = type(root.welcomedBy) == "table" and root.welcomedBy or {}
+		root.welcomedBy = by
+		by[ns.CharacterKey()] = true
+		for _, name in ipairs(ns.BY_CHARACTER or {}) do
+			if name ~= "welcomedBy" and type(root[name]) == "table" then
+				for key in pairs(root[name]) do
+					if type(key) == "string" then by[key] = true end
+				end
+			end
+		end
+		root.welcomed = nil
+	end
+	return type(root.welcomedBy) == "table" and root.welcomedBy[ns.CharacterKey()] and true or false
 end
 
-ns.PLAYSTYLES = {
-	-- No names, face to face, an interface that steps aside, an ambiance while away.
-	immersion = Way("immersion", {
-		["enemyNames"] = "near",
-		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "contemplation",
-		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
-		["world.styledTracker"] = true, ["world.bar"] = true,
-		["label.showPower"] = false, ["fishing.splash"] = true }, true),
-	-- Enemies named, quests without delay, the whole interface at hand.
-	adventurer = Way("balanced", {
-		["scene.enabled"] = false, ["scene.camera"] = false, ["cinema.combatOnly"] = false,
-		["quest.autoAccept"] = true, ["quest.autoTurnIn"] = true, ["quest.skipGossip"] = true,
-		["loot.fast"] = true }),
-	-- No names, quiet scenes, whispers as conversations, a character who lives,
-	-- resting by the fire while away.
-	roleplay = Way("immersion", {
-		["enemyNames"] = "near", ["nearNames.show"] = "name",
-		["cinema.enabled"] = true, ["away.enabled"] = true, ["away.style"] = "hearth",
-		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.gatherIcons"] = true,
-		["world.styledTracker"] = true, ["world.bar"] = true,
-		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true,
-		["messages.enabled"] = true, ["label.showPower"] = false, ["fishing.splash"] = true }, true),
-	-- Companions named and their health bars in dungeons and raids, the whole
-	-- interface, threat at a glance.
-	dungeons = Way("balanced", {
-		["cinema.combatOnly"] = false,
-		["scene.camera"] = false, ["threat.show"] = true, ["threat.alert"] = true, ["meter.show"] = "on" }),
-}
-
-local function Path(path)
-	return U.SplitPath(path)
+function ns.SetWelcomed()
+	local root = ns.root
+	if not root then return end
+	root.welcomedBy = type(root.welcomedBy) == "table" and root.welcomedBy or {}
+	root.welcomedBy[ns.CharacterKey()] = true
 end
 
--- A way's values written into a profile.
-local function Assign(profile, values)
-	for path, value in pairs(values) do
-		local section, field = Path(path)
-		if section then
-			profile[section] = type(profile[section]) == "table" and profile[section] or {}
-			profile[section][field] = value
-		else
-			profile[path] = value
+-- Like another character ------------------------------------------------------------------
+
+-- A place's profile for this character, named as Core names them: the place, then its own profile's name.
+local PLACE_KINDS = { world = true, city = true, dungeon = true }
+local function PlaceName(zone, own)
+	return L["PLACE_PROFILE_" .. zone:upper()] .. " (" .. own .. ")"
+end
+
+local undo -- what this character had before a copy, while the welcome is open
+local copiedFrom -- the name of the character copied
+
+-- Another character's settings copied into this one's own: its profile, its profiles by place (named for this
+-- one), where its windows stand. A copy, never a link: changed here, it stays here. Never in a fight.
+function ns.CopyCharacterSettings(from)
+	local root = ns.root
+	local source = ns.CharacterProfile(from)
+	local me = ns.CharacterKey()
+	if not source or from == me or InCombatLockdown() then return false end
+	-- (copied again from another one: from what this character had first)
+	if undo then ns.UndoCharacterCopy() end
+	local own = ns.OwnProfile()
+	local map = ns.PlaceProfiles()
+	local mine = ns.Mine()
+	-- (kept to be put back while the welcome is open)
+	undo = { chosen = root.profileKeys[me], own = own, profiles = { [own] = U.Copy(root.profiles[own]) }, places = U.Copy(map), mine = {} }
+	for _, name in ipairs(MINE_COPIED) do undo.mine[name] = U.Copy(mine[name]) end
+	local function Keep(name)
+		if undo.profiles[name] == nil then undo.profiles[name] = root.profiles[name] and U.Copy(root.profiles[name]) or false end
+	end
+	root.profiles[own] = U.Copy(root.profiles[source])
+	-- The places: each of its profiles copied once (raids and battlegrounds follow the dungeons' copy).
+	local theirs = type(root.placeProfiles) == "table" and type(root.placeProfiles[from]) == "table" and root.placeProfiles[from] or {}
+	local made = {}
+	for zone in pairs(map) do map[zone] = nil end
+	local zones = { "world", "city", "dungeon" }
+	for zone in pairs(theirs) do
+		if not PLACE_KINDS[zone] then zones[#zones + 1] = zone end
+	end
+	for _, zone in ipairs(zones) do
+		local name = theirs[zone]
+		if name and root.profiles[name] then
+			if not made[name] then
+				made[name] = PLACE_KINDS[zone] and PlaceName(zone, own) or (name .. " (" .. own .. ")")
+				Keep(made[name])
+				root.profiles[made[name]] = U.Copy(root.profiles[name])
+			end
+			map[zone] = made[name]
 		end
 	end
-end
-
--- A way written into a profile: its values and its names (the preset), Wanderer on.
-local function ApplyTo(profile, style)
-	Assign(profile, style.values)
-	local names = ns.PRESETS[style.preset] or {}
-	profile.preset = style.preset
-	profile.show = type(profile.show) == "table" and profile.show or {}
-	for _, category in ipairs(ns.CATEGORIES) do profile.show[category.key] = names[category.key] and true or false end
-	profile.label = type(profile.label) == "table" and profile.label or {}
-	profile.label.enabled = style.preset ~= "all"
-	profile.enabled = true
-end
-
--- A way chosen: written into this profile, the character's own and its profiles by place (made first by the
--- ways whose interface fades: dungeons in view with their meter, cities quiet; their places' own settings
--- set again after). A way that does not make them leaves each place its damage meter.
-function ns.ApplyPlaystyle(key)
-	local style = ns.PLAYSTYLES[key]
-	if not style then return end
-	if style.places and ns.MakePlaceProfiles then ns.MakePlaceProfiles(true) end
-	local done = {}
-	local function To(profile)
-		if type(profile) ~= "table" or done[profile] then return end
-		done[profile] = true
-		ApplyTo(profile, style)
-	end
-	To(ns.db)
-	To(ns.root.profiles[ns.root.profileKeys[ns.CharacterKey()] or ""])
-	for _, name in pairs(ns.PlaceProfiles and ns.PlaceProfiles() or {}) do To(ns.root.profiles[name]) end
-	if style.places and ns.MakePlaceProfiles then
-		ns.MakePlaceProfiles()
-	else
-		for zone, name in pairs(ns.PlaceProfiles and ns.PlaceProfiles() or {}) do
-			local profile, meter = ns.root.profiles[name], ns.PLACE_METER and ns.PLACE_METER[zone]
-			if type(profile) == "table" and meter and type(profile.meter) == "table" then profile.meter.show = meter end
+	local theirMine = type(root.mine) == "table" and type(root.mine[from]) == "table" and root.mine[from] or {}
+	for _, name in ipairs(MINE_COPIED) do mine[name] = U.Copy(theirMine[name]) end
+	local who = root.characters and root.characters[from]
+	copiedFrom = type(who) == "table" and who.name or from
+	ns.SetProfile(own)
+	ns.UpdatePlaceProfile()
+	-- Its Edit Mode layout, when it was one of Wanderer's the game keeps for each character: made here too.
+	local layout = type(root.profiles[own].world) == "table" and root.profiles[own].world.editLayout
+	if layout and layout ~= "" and ns.EditModeLayouts and not tContains(ns.EditModeLayouts(), layout) then
+		for _, key in ipairs(LAYOUT_KEYS) do
+			if ns.LayoutName(key) == layout then ns.MakeLayout(key) end
 		end
 	end
-	ns.SetPreset(style.preset) -- refreshes every module
-	if ns.RefreshOptions then ns.RefreshOptions() end
+	ns.RefreshAll()
+	ns.RefreshThemeGrids()
+	return true
+end
+
+-- The copy taken back: this character as it was before (while the welcome is open).
+function ns.UndoCharacterCopy()
+	if not undo or InCombatLockdown() then return false end
+	local root = ns.root
+	for name, profile in pairs(undo.profiles) do root.profiles[name] = profile or nil end
+	local map = ns.PlaceProfiles()
+	for zone in pairs(map) do map[zone] = nil end
+	for zone, name in pairs(undo.places) do map[zone] = name end
+	local mine = ns.Mine()
+	for _, name in ipairs(MINE_COPIED) do mine[name] = undo.mine[name] end
+	local chosen = undo.chosen and root.profiles[undo.chosen] and undo.chosen or undo.own
+	undo, copiedFrom = nil, nil
+	ns.SetProfile(chosen)
+	ns.UpdatePlaceProfile()
+	ns.RefreshAll()
+	ns.RefreshThemeGrids()
+	return true
 end
 
 local window
 local pages, dots = {}, {}
 local current = 1
-local chosenStyle
 local refreshers = {} -- one per page, run when it shows
 
-local function Sound() U.PlaySound("IG_MAINMENU_OPTION_CHECKBOX_ON") end
 
 -- Pieces --------------------------------------------------------------------------------
 
@@ -186,27 +224,38 @@ local function Card(parent, title, text, height)
 	card.check = card:CreateTexture(nil, "OVERLAY")
 	card.check:SetSize(18, 18)
 	card.check:SetPoint("TOPRIGHT", card, "TOPRIGHT", -6, -6)
-	card.check:SetTexture(CHECK)
+	ns.Skin.GlyphOn(card.check, "check")
 	card.title = ns.Skin.CreateText(card, "GameTooltipText")
 	card.title:SetPoint("TOPLEFT", card, "TOPLEFT", 10, -9)
 	card.title:SetPoint("RIGHT", card.check, "LEFT", -4, 0)
 	if card.title.SetWordWrap then card.title:SetWordWrap(false) end
 	card.title:SetText(title)
-	card.text = ns.Skin.CreateText(card, "GameTooltipTextSmall", 0.78, 0.78, 0.78)
+	card.text = ns.Skin.Text(card, "GameTooltipTextSmall", "soft")
 	card.text:SetPoint("TOPLEFT", card.title, "BOTTOMLEFT", 0, -4)
 	card.text:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -10, 6)
 	card.text:SetJustifyV("TOP")
 	if card.text.SetMaxLines then card.text:SetMaxLines(2) end
 	card.text:SetText(text)
-	card:SetScript("OnEnter", function(self) self.hover:Show() end)
-	card:SetScript("OnLeave", function(self) self.hover:Hide() end)
+	-- (card.Preview(): what the choice brings, told in its tooltip before it is made)
+	card:SetScript("OnEnter", function(self)
+		self.hover:Show()
+		if not self.Preview then return end
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		self.Preview()
+		GameTooltip:Show()
+	end)
+	card:SetScript("OnLeave", function(self)
+		self.hover:Hide()
+		if self.Preview then GameTooltip:Hide() end
+	end)
 	function card:SetChosen(chosen)
 		if chosen then
 			self.background:SetColorTexture(1, 0.82, 0, 0.16)
 			self.title:SetTextColor(1, 0.82, 0)
 		else
+			local c = ns.Skin.COLORS.text
 			self.background:SetColorTexture(1, 1, 1, 0.04)
-			self.title:SetTextColor(0.9, 0.9, 0.9)
+			self.title:SetTextColor(c[1], c[2], c[3])
 		end
 		self.check:SetShown(chosen)
 	end
@@ -220,12 +269,12 @@ local function IconLine(parent, icon, text, anchor, offset)
 	texture:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -offset)
 	texture:SetTexture(icon)
 	if texture.SetTexCoord and icon:find("Icons") then texture:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
-	local line = ns.Skin.CreateText(parent, "GameTooltipText", 0.9, 0.88, 0.82)
+	local line = ns.Skin.Text(parent, "GameTooltipText", "text")
 	line:SetPoint("LEFT", texture, "RIGHT", 10, 0)
 	line:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
 	if line.SetWordWrap then line:SetWordWrap(false) end
 	line:SetText(text)
-	return texture
+	return texture, line
 end
 
 -- Each page: a title, a line saying what it is for, its content below.
@@ -239,7 +288,7 @@ local function Page(step, titleKey, textKey)
 	page.title:SetPoint("RIGHT", page, "RIGHT", 0, 0)
 	if page.title.SetWordWrap then page.title:SetWordWrap(false) end
 	page.title:SetText(L[titleKey])
-	page.text = ns.Skin.CreateText(page, "GameTooltipTextSmall", 0.7, 0.68, 0.62)
+	page.text = ns.Skin.Text(page, "GameTooltipTextSmall", "soft")
 	page.text:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, -4)
 	page.text:SetPoint("RIGHT", page, "RIGHT", 0, 0)
 	page.text:SetText(textKey and L[textKey] or "")
@@ -254,59 +303,304 @@ end
 
 -- Steps ---------------------------------------------------------------------------------
 
-local function IntroPage()
-	local page = Page("intro", "WELCOME_TITLE")
-	page.title:SetFontObject("GameFontNormalHuge")
-	page.title:SetTextColor(1, 0.82, 0)
-	page.text:SetFontObject("GameTooltipText")
-	page.text:SetTextColor(0.9, 0.88, 0.8)
-	page.text:SetText(L.WELCOME_INTRO)
-	local previous = page.rule
-	for index, line in ipairs(HIGHLIGHTS) do
-		previous = IconLine(page, line[1], L[line[2]], previous, index == 1 and 18 or 12)
+-- Previews --------------------------------------------------------------------------------
+
+-- A value of a profile by its path ("world.bar").
+local function ValueIn(values, path)
+	local section, field = U.SplitPath(path)
+	if section then return type(values[section]) == "table" and values[section][field] end
+	return values[path]
+end
+
+local function OnOff(on) return on and L.WELCOME_ON or L.WELCOME_OFF end
+
+-- A tooltip line in two halves (what, then how).
+local function Pair(left, right)
+	if GameTooltip.AddDoubleLine then
+		GameTooltip:AddDoubleLine(left, right, 0.9, 0.88, 0.8, 1, 0.82, 0)
+	else
+		GameTooltip:AddLine(left .. ": " .. right, 0.9, 0.88, 0.8)
 	end
 end
 
+-- The character a new one would copy: the one picked, else the main one.
+local likeFrom
+local function LikeCandidates() return ns.CopyableCharacters() end
+local function LikeWho()
+	local list = LikeCandidates()
+	for _, who in ipairs(list) do
+		if who.key == likeFrom then return who, list end
+	end
+	local main = ns.MainCharacter(list)
+	likeFrom = main and main.key
+	return main, list
+end
+
+-- On a character not welcomed yet, while others have their settings: the choice comes first.
+local function OffersLike()
+	return not ns.Welcomed() and LikeCandidates()[1] ~= nil
+end
+
+local ShowStep
+
+-- The reveal key ------------------------------------------------------------------------------------------
+-- Names stay quiet over heads: a key held shows them all. Told on the first page, and set right there (the
+-- game's own key binding, saved as the game saves it).
+
+local function RevealKey()
+	local key = GetBindingKey and GetBindingKey(REVEAL)
+	return type(key) == "string" and key ~= "" and key or nil
+end
+
+local function KeyWords(key) return ns.Skin.KeyText(key) end
+
+-- The reveal on this key (as the Keys page sets one: SettingsWindow.lua's ns.SetKey): true, or false and the
+-- action the key does already (asked first, as on the Keys page).
+function ns.SetRevealKey(key)
+	if type(key) ~= "string" or key == "" or InCombatLockdown() then return false end
+	local action = GetBindingAction and GetBindingAction(key)
+	if type(action) == "string" and action ~= "" and action ~= REVEAL then return false, action end
+	return ns.SetKey(REVEAL, key)
+end
+
+-- A card: the key told (or none yet), a button to choose it; the next key pressed is the one (Escape: no change).
+local function RevealCard(parent, anchor)
+	local card = ns.Skin.Panel(parent)
+	card:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -18)
+	card:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+	card:SetHeight(REVEAL_HEIGHT)
+	local icon = ns.Skin.Icon(card, 34)
+	icon:SetPoint("LEFT", card, "LEFT", 12, 0)
+	icon:Set(REVEAL_ICON)
+	local said
+	local button, listener
+	local title = ns.Skin.Text(card, "GameTooltipText", "gold")
+	local text = ns.Skin.Text(card, "GameTooltipTextSmall", "soft")
+	local function Refresh()
+		local key = RevealKey()
+		title:SetText(key and L.WELCOME_REVEAL_BOUND:format(KeyWords(key)) or L.WELCOME_REVEAL_TITLE)
+		local listening = listener and listener:Listening()
+		text:SetText(said or (listening and L.WELCOME_REVEAL_PRESS_DESC) or (key and L.WELCOME_REVEAL_BOUND_DESC)
+			or L.WELCOME_REVEAL_DESC)
+		button:SetText(listening and L.WELCOME_REVEAL_PRESS or (key and L.WELCOME_REVEAL_CHANGE or L.WELCOME_REVEAL_PICK))
+		button:Fit()
+	end
+	button = ns.Skin.Button(card, L.WELCOME_REVEAL_PICK, function()
+		said = nil
+		-- (keys are never set in a fight)
+		if not listener:Listening() and InCombatLockdown() then return ns.Skin.Play("refuse") end
+		listener:Set(not listener:Listening())
+	end, nil, 120)
+	button:SetHeight(26)
+	button:SetPoint("RIGHT", card, "RIGHT", -12, 0)
+	-- (the kit's listening: Escape, the modifiers, a fight, one at a time; your keys are never taken in a fight)
+	listener = ns.Skin.KeyListener(button, { onChange = Refresh, onKey = function(full)
+		local done, other = ns.SetRevealKey(full)
+		if done then
+			said = nil
+			ns.Skin.Play("confirm")
+		elseif other then
+			-- (another action's key: asked first, as on the Keys page)
+			ns.Skin.Ask(L.SETTINGS_KEY_TAKEN:format(KeyWords(full), ns.Skin.BindingName(other), ns.Skin.BindingName(REVEAL)), function()
+				if ns.SetKey(REVEAL, full) then ns.Skin.Play("confirm") end
+				Refresh()
+			end)
+		else
+			ns.Skin.Play("refuse")
+		end
+		Refresh()
+	end })
+	-- (the page left, the window closed: what was said goes; the listening stops with the button)
+	card:SetScript("OnHide", function() said = nil end)
+	title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 0)
+	title:SetPoint("RIGHT", button, "LEFT", -12, 0)
+	title:SetJustifyH("LEFT")
+	if title.SetWordWrap then title:SetWordWrap(false) end
+	text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+	text:SetPoint("RIGHT", button, "LEFT", -12, 0)
+	text:SetJustifyH("LEFT")
+	if text.SetMaxLines then text:SetMaxLines(2) end
+	card.Refresh, card.button = Refresh, button
+	Refresh()
+	return card
+end
+
+local function IntroPage()
+	local page = Page("intro", "WELCOME_TITLE")
+	page.title:SetFontObject(ns.Skin.FontFor("GameFontNormalHuge"))
+	page.title:SetTextColor(1, 0.82, 0)
+	page.text:SetFontObject(ns.Skin.FontFor("GameTooltipText"))
+	page.text:SetTextColor(unpack(ns.Skin.COLORS.text))
+	page.text:SetText(L.WELCOME_INTRO)
+	-- The first character: what Wanderer is about.
+	local first = CreateFrame("Frame", nil, page)
+	first:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, 0)
+	first:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", 0, 0)
+	local previous = page.rule
+	for index, line in ipairs(HIGHLIGHTS) do
+		previous = IconLine(first, line[1], L[line[2]], previous, index == 1 and 18 or 12)
+	end
+	local reveal = RevealCard(first, previous)
+	-- Another one: like your main character, or set up apart.
+	local alt = CreateFrame("Frame", nil, page)
+	alt:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, 0)
+	alt:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", 0, 0)
+	local like = Card(alt, "", L.WELCOME_LIKE_DESC, LIKE_HEIGHT)
+	like:SetPoint("TOPLEFT", alt, "TOPLEFT", 0, -14)
+	like:SetPoint("RIGHT", alt, "RIGHT", 0, 0)
+	like.facts = ns.Skin.Text(like, "GameTooltipTextSmall", "muted")
+	like.facts:SetPoint("BOTTOMLEFT", like, "BOTTOMLEFT", 10, 8)
+	like.facts:SetPoint("RIGHT", like, "RIGHT", -10, 0)
+	like.facts:SetJustifyH("LEFT")
+	if like.facts.SetWordWrap then like.facts:SetWordWrap(false) end
+	like.text:SetPoint("BOTTOMRIGHT", like, "BOTTOMRIGHT", -10, 24)
+	like.Preview = function()
+		local who = LikeWho()
+		local profile = who and ns.root.profiles[ns.CharacterProfile(who.key) or ""]
+		if type(profile) ~= "table" then return end
+		GameTooltip:AddLine(L.WELCOME_LIKE_TIP:format(who.name), 1, 0.82, 0)
+		for _, entry in ipairs(LIKE_PREVIEW) do Pair(L[entry[2]], OnOff(ValueIn(profile, entry[1]))) end
+		for _, look in ipairs({ FADE, LOOKS[1], LOOKS[2] }) do Pair(L[look[1]], LookWords(look, look[2](profile))) end
+		local places = type(ns.root.placeProfiles) == "table" and ns.root.placeProfiles[who.key]
+		Pair(L.WELCOME_PLACES, OnOff(type(places) == "table" and next(places) ~= nil))
+		local muted = ns.Skin.COLORS.muted
+		GameTooltip:AddLine(L.WELCOME_LIKE_COPY, muted[1], muted[2], muted[3], true)
+	end
+	like:SetScript("OnClick", function()
+		if not likeFrom or not ns.CopyCharacterSettings(likeFrom) then
+			ns.Skin.Play("refuse")
+			return
+		end
+		ns.Skin.Play("confirm")
+		ShowStep(READY)
+	end)
+	-- Another one to copy, picked from the list (remembered as your main).
+	local pickRow = CreateFrame("Frame", nil, alt)
+	pickRow:SetHeight(26)
+	pickRow:SetPoint("TOPLEFT", like, "BOTTOMLEFT", 0, -8)
+	pickRow:SetPoint("RIGHT", alt, "RIGHT", 0, 0)
+	local pickLabel = ns.Skin.Text(pickRow, "GameTooltipTextSmall", "muted")
+	pickLabel:SetPoint("LEFT", pickRow, "LEFT", 4, 0)
+	if pickLabel.SetWordWrap then pickLabel:SetWordWrap(false) end
+	pickLabel:SetText(L.WELCOME_LIKE_PICK)
+	local pick = ns.Skin.Dropdown(pickRow, function()
+		local choices = {}
+		for _, who in ipairs(LikeCandidates()) do
+			choices[#choices + 1] = { id = who.key, label = who.level and L.WELCOME_LIKE_ENTRY:format(who.name, who.level) or who.name }
+		end
+		return choices
+	end, function() return likeFrom end, function(key)
+		likeFrom = key
+		ns.SetMainCharacter(key, true)
+		ns.RefreshWelcome()
+	end, nil, 160)
+	pick:SetHeight(24)
+	pick:SetPoint("LEFT", pickLabel, "RIGHT", 10, 0)
+	ns.Skin.Tooltip(pick, L.WELCOME_LIKE_PICK_DESC)
+	local apart = Card(alt, L.WELCOME_APART, L.WELCOME_APART_DESC, APART_HEIGHT)
+	apart:SetScript("OnClick", function()
+		ns.Skin.Play("click")
+		ShowStep(2)
+	end)
+	page.like, page.apart, page.pick = like, apart, pick
+	refreshers.intro = function()
+		local who = OffersLike() and LikeWho()
+		first:SetShown(not who)
+		alt:SetShown(who and true or false)
+		page.text:SetText(who and L.WELCOME_ALT_INTRO or L.WELCOME_INTRO)
+		if not who then return reveal.Refresh() end
+		like.title:SetText(L.WELCOME_LIKE:format(who.name))
+		local facts = {}
+		if who.level then facts[#facts + 1] = L.WELCOME_LIKE_LEVEL:format(who.level) end
+		if who.seen then facts[#facts + 1] = U.AgoWords(time() - who.seen) end
+		like.facts:SetText(table.concat(facts, "  ·  "))
+		like:SetChosen(false)
+		apart:SetChosen(false)
+		pick:Refresh()
+		-- (the list only when there is another one to pick)
+		local several = #LikeCandidates() > 1
+		pickRow:SetShown(several)
+		apart:ClearAllPoints()
+		apart:SetPoint("TOPLEFT", several and pickRow or like, "BOTTOMLEFT", 0, several and -14 or -CARD_GAP)
+		apart:SetPoint("RIGHT", alt, "RIGHT", 0, 0)
+	end
+end
+
+-- The look: the label's style, then the unit frames' (UnitFrames.lua): offered as cards, nothing chosen for you
+-- (the game's own frames until one is picked).
 local function LookPage()
 	local page = Page("look", "WELCOME_STEP_LOOK", "WELCOME_LOOK_DESC")
 	local grid = ns.CreateThemeGrid(page, { columns = 3, cardHeight = 96, quiet = true })
+	local caption = ns.Skin.Caps(page, L.WELCOME_UNIT_FRAMES, "kicker")
+	caption:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, -12)
+	caption:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	local frames = ns.UnitFramesCards and ns.UnitFramesCards(page, { withGame = true, cardHeight = 74 })
 	refreshers.look = function()
-		grid:Layout(page.rule, page:GetWidth() > 0 and page:GetWidth() or WIDTH - 2 * (ns.Skin.Margin() + 8), 12)
+		local width = page:GetWidth() > 0 and page:GetWidth() or WIDTH - 2 * (ns.Skin.Margin() + 8)
+		grid:Layout(page.rule, width, 12)
 		grid:Refresh()
+		caption:ClearAllPoints()
+		caption:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, -(12 + grid:Height() + 14))
+		caption:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+		-- (another addon drawing the unit frames: nothing offered here)
+		local yielded = ns.Yields("unitFrames") ~= nil
+		caption:SetShown(frames ~= nil and not yielded)
+		if not frames then return end
+		for _, card in ipairs(frames.cards) do card:SetShown(not yielded) end
+		if yielded then return end
+		frames:Layout(caption, width, 8)
+		frames:Refresh()
 	end
 end
 
+-- The way you play: six cards (Playstyles.lua), a click applies one at once (the character is new: nothing
+-- asked), another click switches cleanly; keys 1 to 6 too. The panel under them tells the one under the mouse.
 local function PlayPage()
 	local page = Page("play", "WELCOME_STEP_PLAY", "WELCOME_PLAY_DESC")
-	local cards = {}
-	for index, key in ipairs(PLAYSTYLE_ORDER) do
-		local card = Card(page, L["PLAYSTYLE_" .. key:upper()], L["PLAYSTYLE_" .. key:upper() .. "_DESC"], CARD_HEIGHT)
-		card.index = index
-		card:SetScript("OnClick", function()
-			chosenStyle = key
-			ns.ApplyPlaystyle(key)
-			if ns.RefreshThemeGrids then ns.RefreshThemeGrids() end
-			for _, other in ipairs(cards) do other:SetChosen(other == card) end
-			Sound()
-		end)
-		cards[index] = card
+	local function Pick(key)
+		if ns.ApplyPlaystyle(key) then ns.Skin.Play("click") else ns.Skin.Play("refuse") end
 	end
+	local grid = ns.CreatePlaystyleGrid(page, {
+		keys = true, recommend = true, onPick = Pick,
+		-- (the extensions' page, when it is one of the steps)
+		onGet = function()
+			for index, key in ipairs(STEPS) do
+				if key == "extensions" then
+					ns.Skin.Play("click")
+					return ShowStep(index)
+				end
+			end
+		end,
+	})
+	page.grid = grid
+	-- Keys 1 to 6 pick a card while the page shows; every other key goes on to the game. Out of a fight only.
+	local function Listen(on)
+		if page.EnableKeyboard then page:EnableKeyboard(on and true or false) end
+		if on and page.SetPropagateKeyboardInput then pcall(page.SetPropagateKeyboardInput, page, true) end
+	end
+	page:SetScript("OnKeyDown", function(self, key)
+		if InCombatLockdown() then return end
+		local index = not (IsShiftKeyDown() or IsControlKeyDown() or IsAltKeyDown()) and tonumber(key)
+		local way = index and ns.PLAYSTYLE_ORDER[index]
+		if self.SetPropagateKeyboardInput then pcall(self.SetPropagateKeyboardInput, self, not way) end
+		if way then Pick(way) end
+	end)
+	page:SetScript("OnKeyUp", function(self)
+		if not InCombatLockdown() and self.SetPropagateKeyboardInput then pcall(self.SetPropagateKeyboardInput, self, true) end
+	end)
+	page:SetScript("OnShow", function() Listen(not InCombatLockdown()) end)
+	page:SetScript("OnHide", function() Listen(false) end)
+	page:RegisterEvent("PLAYER_REGEN_DISABLED")
+	page:RegisterEvent("PLAYER_REGEN_ENABLED")
+	page:SetScript("OnEvent", function(self, event) Listen(event == "PLAYER_REGEN_ENABLED" and self:IsShown()) end)
 	refreshers.play = function()
 		local width = page:GetWidth() > 0 and page:GetWidth() or WIDTH - 2 * (ns.Skin.Margin() + 8)
-		local cardWidth = math.floor((width - CARD_GAP) / 2)
-		for index, card in ipairs(cards) do
-			local column, row = (index - 1) % 2, math.floor((index - 1) / 2)
-			card:SetWidth(cardWidth)
-			card:ClearAllPoints()
-			card:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", column * (cardWidth + CARD_GAP), -12 - row * (CARD_HEIGHT + CARD_GAP))
-			card:SetChosen(chosenStyle == PLAYSTYLE_ORDER[index])
-		end
+		grid:Layout(page.rule, width, 10)
 	end
 end
 
--- A switch: a quiet row, checked when on.
-local function SwitchRow(page, path, key, previous)
-	local section, field = Path(path)
+-- A switch: a quiet row, checked when on; get() and set(on).
+local function RowSwitch(page, key, get, set, previous, descKey)
 	local row = CreateFrame("Button", nil, page)
 	row:SetHeight(ROW_HEIGHT)
 	row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, previous == page.rule and -10 or -4)
@@ -315,35 +609,32 @@ local function SwitchRow(page, path, key, previous)
 	row.hover:SetAllPoints()
 	row.hover:SetColorTexture(1, 1, 1, 0.05)
 	row.hover:Hide()
-	row.box = row:CreateTexture(nil, "ARTWORK")
-	row.box:SetSize(16, 16)
-	row.box:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -6)
-	row.box:SetColorTexture(0, 0, 0, 0.5)
-	row.check = row:CreateTexture(nil, "OVERLAY")
-	row.check:SetSize(22, 22)
-	row.check:SetPoint("CENTER", row.box, "CENTER", 1, 1)
-	row.check:SetTexture(CHECK)
+	-- The kit's check box (the whole row answers the clicks).
+	row.check = ns.Skin.Check(row, "", get, set)
+	row.check:EnableMouse(false)
+	row.check:SetWidth(row.check.box:GetWidth())
+	row.check:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -6)
 	row.title = ns.Skin.CreateText(row, "GameTooltipText")
-	row.title:SetPoint("TOPLEFT", row.box, "TOPRIGHT", 10, 1)
+	row.title:SetPoint("TOPLEFT", row.check.box, "TOPRIGHT", 10, 1)
 	row.title:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-	row.text = ns.Skin.CreateText(row, "GameTooltipTextSmall", 0.7, 0.68, 0.62)
+	row.text = ns.Skin.Text(row, "GameTooltipTextSmall", "muted")
 	row.text:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -3)
 	row.text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 	for _, text in ipairs({ row.title, row.text }) do
 		if text.SetWordWrap then text:SetWordWrap(false) end
 	end
 	row.title:SetText(L[key])
-	row.text:SetText(L[key .. "_DESC"])
+	row.text:SetText(L[descKey or (key .. "_DESC")])
 	function row:Refresh()
-		local on = ns.db[section][field] and true or false
-		self.check:SetShown(on)
-		self.title:SetTextColor(on and 1 or 0.85, on and 0.92 or 0.85, on and 0.75 or 0.85)
+		local on = get() and true or false
+		self.check:Refresh()
+		local c = ns.Skin.COLORS[on and "text" or "soft"]
+		self.title:SetTextColor(c[1], c[2], c[3])
 	end
 	row:SetScript("OnClick", function(self)
-		ns.db[section][field] = not ns.db[section][field]
-		ns.RefreshAll()
+		set(not get())
 		self:Refresh()
-		Sound()
+		ns.Skin.Play("click")
 	end)
 	row:SetScript("OnEnter", function(self)
 		self.hover:Show()
@@ -359,6 +650,55 @@ local function SwitchRow(page, path, key, previous)
 	return row
 end
 
+-- A switch bound to a setting of the profile ("world.cleanMinimap").
+local function SwitchRow(page, path, key, previous, descKey)
+	local section, field = U.SplitPath(path)
+	return RowSwitch(page, key, function() return ns.db[section][field] end, function(on)
+		ns.ChangeEverywhere(function() ns.db[section][field] = on end)
+		ns.RefreshAll()
+	end, previous, descKey)
+end
+
+-- A look chosen among three (the game's, discreet, Wanderer's style): its name and line at the left, the choices
+-- at the right, the one now in gold.
+local function LookRow(page, look, previous)
+	local row = CreateFrame("Frame", nil, page)
+	row:SetHeight(ROW_HEIGHT)
+	row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -4)
+	row:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	local list = {}
+	for _, key in ipairs(look.keys or ns.LOOK_CHOICES) do list[#list + 1] = { key, LookWords(look, key) } end
+	row.choices = ns.Skin.Choices(row, list, function(value)
+		ns.ChangeEverywhere(function() look[3](value) end)
+		ns.RefreshAll()
+	end, 26)
+	row.choices:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+	row.title = ns.Skin.Text(row, "GameTooltipText", "text")
+	row.title:SetPoint("TOPLEFT", row, "TOPLEFT", 30, -7)
+	row.title:SetPoint("RIGHT", row.choices, "LEFT", -12, 0)
+	row.text = ns.Skin.Text(row, "GameTooltipTextSmall", "muted")
+	row.text:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -3)
+	row.text:SetPoint("RIGHT", row.choices, "LEFT", -12, 0)
+	for _, text in ipairs({ row.title, row.text }) do
+		text:SetJustifyH("LEFT")
+		if text.SetWordWrap then text:SetWordWrap(false) end
+	end
+	row.title:SetText(L[look[1]])
+	row.text:SetText(L[look[1] .. "_DESC"])
+	row:EnableMouse(true)
+	ns.Skin.Tooltip(row, { L[look[1]], L[look[1] .. "_DESC"] })
+	function row:Refresh()
+		self.choices:Select(look[2]())
+		-- (left to another addon: greyed, its "Done by" line in place of the description)
+		local taken = look.yield and ns.YieldText and ns.YieldText(look.yield)
+		self:SetAlpha(taken and 0.45 or 1)
+		for _, button in ipairs(self.choices.buttons) do button:SetEnabled(not taken) end
+		self.text:SetText(taken or L[look[1] .. "_DESC"])
+	end
+	return row
+end
+
+-- The quieter interface: its switches, then the fade's choice of three.
 local function InterfacePage()
 	local page = Page("interface", "WELCOME_STEP_INTERFACE", "WELCOME_INTERFACE_DESC")
 	local rows, previous = {}, page.rule
@@ -366,6 +706,7 @@ local function InterfacePage()
 		previous = SwitchRow(page, entry[1], entry[2], previous)
 		rows[#rows + 1] = previous
 	end
+	rows[#rows + 1] = LookRow(page, FADE, previous)
 	refreshers.interface = function()
 		for _, row in ipairs(rows) do row:Refresh() end
 	end
@@ -375,7 +716,11 @@ local function AppearancePage()
 	local page = Page("appearance", "WELCOME_STEP_APPEARANCE", "WELCOME_APPEARANCE_DESC")
 	local rows, previous = {}, page.rule
 	for _, entry in ipairs(APPEARANCE) do
-		previous = SwitchRow(page, entry[1], entry[2], previous)
+		previous = SwitchRow(page, entry[1], entry[2], previous, entry[3])
+		rows[#rows + 1] = previous
+	end
+	for _, look in ipairs(LOOKS) do
+		previous = LookRow(page, look, previous)
 		rows[#rows + 1] = previous
 	end
 	refreshers.appearance = function()
@@ -383,149 +728,284 @@ local function AppearancePage()
 	end
 end
 
-local function ChatPage()
-	local page = Page("chat", "WELCOME_STEP_CHAT", "WELCOME_CHAT_DESC")
-	local chips, previous = {}, nil
-	for _, tab in ipairs(ns.CHAT_TABS) do
-		local key = tab.key
-		local chip = CreateFrame("Button", nil, page)
-		chip:SetHeight(CHIP_HEIGHT)
-		chip.background = chip:CreateTexture(nil, "BACKGROUND")
-		chip.background:SetAllPoints()
-		chip.box = chip:CreateTexture(nil, "ARTWORK")
-		chip.box:SetSize(14, 14)
-		chip.box:SetPoint("LEFT", chip, "LEFT", 8, 0)
-		chip.box:SetColorTexture(0, 0, 0, 0.5)
-		chip.check = chip:CreateTexture(nil, "OVERLAY")
-		chip.check:SetSize(20, 20)
-		chip.check:SetPoint("CENTER", chip.box, "CENTER", 1, 1)
-		chip.check:SetTexture(CHECK)
-		chip.label = ns.Skin.CreateText(chip, "GameTooltipText")
-		chip.label:SetPoint("LEFT", chip.box, "RIGHT", 8, 0)
-		if chip.label.SetWordWrap then chip.label:SetWordWrap(false) end
-		chip.label:SetText(L["CHAT_TAB_" .. key:upper()])
-		chip:SetWidth(U.Measure(chip.label, "GetStringWidth", 70) + 44)
-		if previous then
-			chip:SetPoint("LEFT", previous, "RIGHT", CHIP_GAP, 0)
-		else
-			chip:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, -14)
-		end
-		function chip:Refresh()
-			local on = ns.db.chat[key]
-			self.check:SetShown(on and true or false)
-			self.background:SetColorTexture(1, on and 0.82 or 1, on and 0 or 1, on and 0.12 or 0.04)
-			self.label:SetTextColor(on and 1 or 0.7, on and 0.92 or 0.7, on and 0.75 or 0.7)
-		end
-		chip:SetScript("OnClick", function(self)
-			ns.db.chat[key] = not ns.db.chat[key]
-			self:Refresh()
-			if ns.RefreshOptions then ns.RefreshOptions() end
+-- What is this character's own: how you play it, the profiles by place, the layout of the bars and the
+-- bars shown (the game keeps an active layout for each character).
+local function CharacterPage()
+	local page = Page("character", "WELCOME_STEP_CHARACTER", "WELCOME_CHARACTER_DESC")
+	local playRow = CreateFrame("Frame", nil, page)
+	playRow:SetHeight(26)
+	playRow:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, -6)
+	playRow:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	local playLabel = ns.Skin.CreateText(playRow, "GameTooltipText")
+	playLabel:SetPoint("LEFT", playRow, "LEFT", 6, 0)
+	playLabel:SetText(L.PLAY_CHOICE)
+	if playLabel.SetWordWrap then playLabel:SetWordWrap(false) end
+	local play = ns.Skin.Dropdown(playRow, ns.PlayChoices, function() return ns.PlayChoice() end, function(id) ns.PlayChoice(id) end,
+		L.PLAY_CHOICE_PICK, 160, nil, L.PLAY_CHOICE_DESC)
+	play:SetHeight(24)
+	play:SetPoint("LEFT", playLabel, "RIGHT", 12, 0)
+	-- (the profile on its own line under it: two lists side by side would leave the window in some languages)
+	local profileRow = CreateFrame("Frame", nil, page)
+	profileRow:SetHeight(26)
+	profileRow:SetPoint("TOPLEFT", playRow, "BOTTOMLEFT", 0, -4)
+	profileRow:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	local profileLabel = ns.Skin.CreateText(profileRow, "GameTooltipText")
+	profileLabel:SetPoint("LEFT", profileRow, "LEFT", 6, 0)
+	profileLabel:SetText(L.PROFILE)
+	if profileLabel.SetWordWrap then profileLabel:SetWordWrap(false) end
+	local profile = ns.Skin.Dropdown(profileRow, function()
+		local choices = {}
+		for _, name in ipairs(ns.ListProfiles()) do choices[#choices + 1] = { id = name, label = name } end
+		return choices
+	end, function() return ns.profileName end, function(name)
+		ns.SetProfile(name)
+		ns.RefreshWelcome()
+	end, nil, 120, 220, L.PROFILE_DESC)
+	profile:SetHeight(24)
+	profile:SetPoint("LEFT", profileLabel, "RIGHT", 12, 0)
+	local places = RowSwitch(page, "WELCOME_PLACES", function() return next(ns.PlaceProfiles()) ~= nil end, function(on)
+		if on then ns.MakePlaceProfiles() else ns.ClearPlaceProfiles() end
+	end, profileRow)
+	local layoutCaption = ns.Skin.Text(page, "GameTooltipTextSmall", "label")
+	layoutCaption:SetPoint("TOPLEFT", places, "BOTTOMLEFT", 6, -8)
+	layoutCaption:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	layoutCaption:SetJustifyH("LEFT")
+	layoutCaption:SetText(L.SECTION_LAYOUT_BARS)
+	if layoutCaption.SetWordWrap then layoutCaption:SetWordWrap(false) end
+	local cards = {}
+	for index, key in ipairs(LAYOUT_KEYS) do
+		local card = Card(page, ns.LayoutName(key), L["LAYOUT_" .. key:upper() .. "_DESC"], SMALL_CARD)
+		if card.text.SetMaxLines then card.text:SetMaxLines(1) end
+		card.key = key
+		card:SetScript("OnClick", function()
+			if ns.MakeLayout(key) then ns.Skin.Play("click") end
+			for _, other in ipairs(cards) do other:SetChosen(ns.db.world.editLayout == ns.LayoutName(other.key)) end
 		end)
-		chip:SetScript("OnEnter", function(self)
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:AddLine(L["CHAT_TAB_" .. key:upper()])
-			GameTooltip:AddLine(L["CHAT_TAB_" .. key:upper() .. "_DESC"], 1, 1, 1, true)
-			GameTooltip:Show()
-		end)
-		chip:SetScript("OnLeave", function() GameTooltip:Hide() end)
-		chips[#chips + 1] = chip
-		previous = chip
+		cards[index] = card
 	end
-	local create = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
-	create:SetText(L.CHAT_TABS_BUTTON)
-	create:SetSize(math.max(160, U.Measure(create:GetFontString() or create, "GetStringWidth", 120) + 30), 26)
-	create:SetPoint("TOPLEFT", chips[1], "BOTTOMLEFT", 0, -16)
-	create:SetScript("OnClick", function(self)
-		local made = ns.CreateChatTabs()
-		if made[1] then
-			self:SetText(L.CHAT_TABS_DONE)
-			self:Disable()
+	-- (which bars show is the game's own option: said here, the game's settings a click away)
+	local barsButton = ns.Skin.SmallButton(page, L.BARS_SHOWN_GAME_BUTTON, function()
+		ns.Skin.Play("click")
+		ns.OpenGameActionBars()
+	end, L.BARS_SHOWN_GAME_DESC)
+	barsButton:SetPoint("TOPRIGHT", cards[#cards], "BOTTOMRIGHT", 0, -10)
+	local barsCaption = ns.Skin.Text(page, "GameTooltipTextSmall", "label")
+	barsCaption:SetText(L.BARS_SHOWN_GAME)
+	barsCaption:SetPoint("LEFT", cards[1], "LEFT", 6, 0)
+	barsCaption:SetPoint("TOP", barsButton, "TOP", 0, 0)
+	barsCaption:SetPoint("BOTTOM", barsButton, "BOTTOM", 0, 0)
+	barsCaption:SetPoint("RIGHT", barsButton, "LEFT", -8, 0)
+	barsCaption:SetJustifyH("LEFT")
+	if barsCaption.SetWordWrap then barsCaption:SetWordWrap(false) end
+	refreshers.character = function()
+		local width = page:GetWidth() > 0 and page:GetWidth() or WIDTH - 2 * (ns.Skin.Margin() + 8)
+		play:Refresh()
+		profile:Refresh()
+		places:Refresh()
+		local cardWidth = math.floor((width - 2 * CARD_GAP) / 3)
+		for index, card in ipairs(cards) do
+			card:SetWidth(cardWidth)
+			card:ClearAllPoints()
+			card:SetPoint("TOPLEFT", layoutCaption, "BOTTOMLEFT", -6 + (index - 1) * (cardWidth + CARD_GAP), -6)
+			card:SetChosen(ns.db.world.editLayout == ns.LayoutName(card.key))
 		end
-	end)
-	local messages = SwitchRow(page, "messages.enabled", "MESSAGES_ENABLE", create)
-	messages:ClearAllPoints()
-	messages:SetPoint("TOPLEFT", create, "BOTTOMLEFT", 0, -18)
-	messages:SetPoint("RIGHT", page, "RIGHT", 0, 0)
-	refreshers.chat = function()
-		for _, chip in ipairs(chips) do chip:Refresh() end
-		messages:Refresh()
 	end
+end
+
+-- Many missing: one quiet line each (its icon, its name, what it does in a few words, the whole of it in its
+-- tooltip), so that all of them fit on the page.
+local EXT_COMPACT, EXT_ROW, EXT_ROW_GAP = 4, 30, 4
+local function ExtensionRow(page, offer, previous, first)
+	local row = ns.Skin.Panel(page)
+	row:SetHeight(EXT_ROW)
+	row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, first and -12 or -EXT_ROW_GAP)
+	row:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	local icon = ns.Skin.Icon(row, 22)
+	icon:SetPoint("LEFT", row, "LEFT", 8, 0)
+	icon:Set(offer.icon, 1)
+	local get = ns.Skin.SmallButton(row, L.EXT_GET_BUTTON, function() ns.OfferExtension(offer) end)
+	get:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+	local text = ns.Skin.Text(row, "GameTooltipTextSmall", "soft")
+	text:SetPoint("LEFT", icon, "RIGHT", 10, 0)
+	text:SetPoint("RIGHT", get, "LEFT", -10, 0)
+	text:SetJustifyH("LEFT")
+	if text.SetWordWrap then text:SetWordWrap(false) end
+	text:SetText(ns.Skin.Colorize(offer.name, "gold") .. "  " .. L[offer.text .. "_SHORT"])
+	row:EnableMouse(true)
+	ns.Skin.Tooltip(row, { offer.name, L[offer.text] })
+	return row
 end
 
 -- The extensions not installed yet: each with its icon, what it does, its address a click away.
 local function ExtensionsPage()
 	local page = Page("extensions", "WELCOME_STEP_EXTENSIONS", "WELCOME_EXTENSIONS_DESC")
 	local previous = page.rule
-	for index, offer in ipairs(ns.MissingExtensions()) do
-		local card = ns.Skin.Panel(page)
-		card:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, index == 1 and -14 or -10)
-		card:SetPoint("RIGHT", page, "RIGHT", 0, 0)
-		local icon = ns.Skin.Icon(card, 36)
-		icon:SetPoint("TOPLEFT", card, "TOPLEFT", 10, -10)
-		icon:Set(offer.icon, 1)
-		local name = ns.Skin.Text(card, "GameTooltipText", "gold")
-		name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, 0)
-		name:SetText(offer.name)
-		local get = ns.Skin.Button(card, L.EXT_GET_BUTTON, function() ns.OfferExtension(offer) end)
-		get:SetPoint("TOPRIGHT", card, "TOPRIGHT", -10, -10)
-		local text = ns.Skin.Text(card, "GameTooltipTextSmall", "soft")
-		text:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -4)
-		text:SetPoint("RIGHT", get, "LEFT", -10, 0)
-		text:SetJustifyH("LEFT")
-		text:SetText(L[offer.text])
-		card:SetHeight(math.max(56, 24 + U.Measure(text, "GetStringHeight", 30) + 16))
-		previous = card
+	local missing = ns.MissingExtensions()
+	for index, offer in ipairs(missing) do
+		if #missing > EXT_COMPACT then
+			previous = ExtensionRow(page, offer, previous, index == 1)
+		else
+			local card = ns.Skin.Panel(page)
+			card:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, index == 1 and -14 or -10)
+			card:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+			local icon = ns.Skin.Icon(card, 36)
+			icon:SetPoint("TOPLEFT", card, "TOPLEFT", 10, -10)
+			icon:Set(offer.icon, 1)
+			local name = ns.Skin.Text(card, "GameTooltipText", "gold")
+			name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, 0)
+			name:SetText(offer.name)
+			local get = ns.Skin.Button(card, L.EXT_GET_BUTTON, function() ns.OfferExtension(offer) end)
+			get:SetPoint("TOPRIGHT", card, "TOPRIGHT", -10, -10)
+			local text = ns.Skin.Text(card, "GameTooltipTextSmall", "soft")
+			text:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -4)
+			text:SetPoint("RIGHT", get, "LEFT", -10, 0)
+			text:SetJustifyH("LEFT")
+			text:SetText(L[offer.text])
+			card:SetHeight(math.max(56, 24 + U.Measure(text, "GetStringHeight", 30) + 16))
+			previous = card
+		end
 	end
 end
 
+-- A setting of the active profile ("world.bar").
+local function Setting(path) return ValueIn(ns.db, path) end
+
+-- The last step: what this character sets out with (two columns on a soft card), a few words of advice, the
+-- options, and while a copy is fresh, a way to take it back.
 local function ReadyPage()
 	local page = Page("ready", "WELCOME_STEP_READY", "WELCOME_READY_DESC")
-	local previous = page.rule
-	for index, tip in ipairs(TIPS) do
-		previous = IconLine(page, tip[1], L[tip[2]], previous, index == 1 and 16 or 12)
+	local summary = ns.Skin.Panel(page)
+	summary:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, -12)
+	summary:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	summary:SetHeight(24 + 3 * SUMMARY_LINE + 2 * 6)
+	local left = CreateFrame("Frame", nil, summary)
+	left:SetPoint("TOPLEFT", summary, "TOPLEFT", 0, 0)
+	left:SetPoint("BOTTOMRIGHT", summary, "BOTTOM", -6, 0)
+	local right = CreateFrame("Frame", nil, summary)
+	right:SetPoint("TOPLEFT", summary, "TOP", 6, 0)
+	right:SetPoint("BOTTOMRIGHT", summary, "BOTTOMRIGHT", 0, 0)
+	local lines = {}
+	local function Column(column, list)
+		local previous
+		for _, entry in ipairs(list) do
+			local line = ns.Skin.SummaryLine(column, previous, L[entry[1]])
+			line.value:SetJustifyH("RIGHT")
+			line.label:SetPoint("RIGHT", line.value, "LEFT", -8, 0)
+			line.label:SetJustifyH("LEFT")
+			for _, text in ipairs({ line.label, line.value }) do
+				if text.SetWordWrap then text:SetWordWrap(false) end
+			end
+			line.Value = entry[2]
+			lines[#lines + 1] = line
+			previous = line
+		end
 	end
-	local options = CreateFrame("Button", nil, page, "UIPanelButtonTemplate")
-	options:SetText(L.WELCOME_OPTIONS)
-	options:SetSize(math.max(140, U.Measure(options:GetFontString() or options, "GetStringWidth", 110) + 30), 24)
-	options:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -22)
-	options:SetScript("OnClick", function()
+	Column(left, {
+		{ "WELCOME_SUM_LOOK", function()
+			local theme = ns.CurrentTheme()
+			return theme and L["STYLE_" .. theme:upper()] or L.WELCOME_SUM_CUSTOM
+		end },
+		{ "WELCOME_SUM_WAY", function()
+			if copiedFrom then return L.WELCOME_LIKE:format(copiedFrom) end
+			local way = ns.CurrentPlaystyle()
+			return way == "" and L.WELCOME_SUM_NONE or ns.PlaystyleWords(way)
+		end },
+		{ "WELCOME_SUM_LIGHTER", function()
+			local on = 0
+			for _, entry in ipairs(INTERFACE) do
+				if Setting(entry[1]) then on = on + 1 end
+			end
+			if ns.FadeMode() ~= "none" then on = on + 1 end
+			return L.WELCOME_SUM_COUNT:format(on, #INTERFACE + 1)
+		end },
+	})
+	Column(right, {
+		{ "BAR_SHOW", function() return OnOff(Setting("world.bar")) end },
+		{ "MOVE_FRAMES", function() return OnOff(Setting("world.moveFrames")) end },
+		{ "WELCOME_PLACES", function() return OnOff(next(ns.PlaceProfiles()) ~= nil) end },
+	})
+	local tipsCaption = ns.Skin.Caps(page, L.WELCOME_TIPS)
+	tipsCaption:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -16)
+	tipsCaption:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	tipsCaption:SetJustifyH("LEFT")
+	if tipsCaption.SetWordWrap then tipsCaption:SetWordWrap(false) end
+	local previous = tipsCaption
+	local revealTip
+	for index, tip in ipairs(TIPS) do
+		local line
+		previous, line = IconLine(page, tip[1], L[tip[2]], previous, index == 1 and 10 or 12)
+		if tip[2] == "WELCOME_TIP_REVEAL" then revealTip = line end
+	end
+	local options = ns.Skin.Button(page, L.WELCOME_OPTIONS, function()
 		window:Hide()
-		if ns.OpenOptions then ns.OpenOptions() end
-	end)
-	local later = ns.Skin.CreateText(page, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
+		ns.OpenOptions()
+	end, nil, 140)
+	options:SetHeight(24)
+	options:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -20)
+	local takeBack = ns.Skin.Button(page, L.WELCOME_UNDO, function()
+		if ns.UndoCharacterCopy() then ShowStep(1) end
+	end, nil, 120)
+	takeBack:SetHeight(24)
+	takeBack:SetPoint("LEFT", options, "RIGHT", 8, 0)
+	ns.Skin.Tooltip(takeBack, L.WELCOME_UNDO_DESC)
+	local later = ns.Skin.Text(page, "GameTooltipTextSmall", "muted")
 	later:SetPoint("LEFT", options, "RIGHT", 12, 0)
 	later:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	if later.SetWordWrap then later:SetWordWrap(false) end
 	later:SetText(L.WELCOME_LATER)
+	page.summary, page.takeBack = lines, takeBack
+	refreshers.ready = function()
+		page.text:SetText(copiedFrom and L.WELCOME_READY_COPIED:format(copiedFrom) or L.WELCOME_READY_DESC)
+		for _, line in ipairs(lines) do line.value:SetText(line.Value()) end
+		-- (the reveal's key, once chosen: named)
+		local key = RevealKey()
+		revealTip:SetText(key and L.WELCOME_TIP_REVEAL_BOUND:format(KeyWords(key)) or L.WELCOME_TIP_REVEAL)
+		takeBack:SetShown(undo ~= nil)
+		later:ClearAllPoints()
+		later:SetPoint("LEFT", undo and takeBack or options, "RIGHT", 12, 0)
+		later:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+	end
 end
 
 -- Navigation ----------------------------------------------------------------------------
 
-local function ShowStep(step)
+-- The shown step drawn again (the game said its layouts again).
+function ns.RefreshWelcome()
+	if not (window and window:IsShown()) then return end
+	local refresh = refreshers[STEPS[current]]
+	if refresh then refresh() end
+end
+
+-- The pages counted on the way (the three choices and the road), the further ones apart, marked fainter.
+function ShowStep(step)
 	current = math.max(1, math.min(#STEPS, step))
+	local further = current > READY
 	for index, key in ipairs(STEPS) do
 		pages[key]:SetShown(index == current)
-		local done = index <= current
-		dots[index]:SetColorTexture(1, done and 0.82 or 1, done and 0 or 1, done and 0.9 or 0.25)
+		local done = index <= current and (index <= READY or further)
+		dots[index].mark:SetColorTexture(1, done and 0.82 or 1, done and 0 or 1, done and 0.9 or (index > READY and 0.15 or 0.25))
 	end
 	local refresh = refreshers[STEPS[current]]
 	if refresh then refresh() end
 	window.back:SetShown(current > 1)
-	local last = current == #STEPS
-	window.next:SetText(last and L.WELCOME_START or L.WELCOME_NEXT)
-	window.skip:SetShown(not last)
-	window.counter:SetText(L.WELCOME_STEP_COUNT:format(current, #STEPS))
+	-- The road (or the last further page): setting out closes; from the road, the further pages for who wants them.
+	local ends = current == READY or current == #STEPS
+	window.next:SetText(ends and L.WELCOME_START or L.WELCOME_NEXT)
+	window.more:SetShown(current == READY and #STEPS > READY)
+	window.skip:SetShown(not ends)
+	window.skip:SetLabel(further and L.WELCOME_DONE or L.WELCOME_SKIP)
+	window.counter:SetText(further and L.WELCOME_MORE_COUNT:format(current - READY, #STEPS - READY)
+		or L.WELCOME_STEP_COUNT:format(current, READY))
 end
 
+-- (seen: marked once it hides, whatever closed it)
 local function Close()
-	ns.root.welcomed = true
 	window:Hide()
 end
 
-local function FooterButton(text, onClick)
-	local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-	button:SetText(text)
-	button:SetSize(math.max(110, U.Measure(button:GetFontString() or button, "GetStringWidth", 80) + 30), 26)
-	button:SetScript("OnClick", onClick)
+local function FooterButton(text, onClick, main)
+	local button = ns.Skin.Button(window, text, onClick, main and "main" or nil, 110)
+	button:SetHeight(26)
 	return button
 end
 
@@ -552,53 +1032,76 @@ local function CreateWindow()
 	name:SetPoint("RIGHT", window, "RIGHT", -40, 0)
 	if name.SetWordWrap then name:SetWordWrap(false) end
 	name:SetText(L.ADDON_TITLE)
-	window.counter = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
+	window.counter = ns.Skin.Text(window, "GameTooltipTextSmall", "muted")
 	window.counter:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -3)
 	window.counter:SetPoint("RIGHT", window, "RIGHT", -40, 0)
 	window.top = CreateFrame("Frame", nil, window)
 	window.top:SetSize(1, 1)
 	window.top:SetPoint("TOPLEFT", crest, "BOTTOMLEFT", 0, -16)
 
-	WithExtensions()
+	BuildSteps()
 	IntroPage()
 	LookPage()
 	PlayPage()
+	ReadyPage()
 	InterfacePage()
 	AppearancePage()
-	ChatPage()
-	if pages.extensions == nil and ns.MissingExtensions()[1] then ExtensionsPage() end
-	ReadyPage()
+	CharacterPage()
+	if tContains(STEPS, "extensions") then ExtensionsPage() end
 
-	-- Progress dots and the way forward.
-	for index in ipairs(STEPS) do
-		local dot = window:CreateTexture(nil, "ARTWORK")
-		dot:SetSize(DOT_SIZE, DOT_SIZE)
-		dot:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin + (index - 1) * (DOT_SIZE + DOT_GAP), margin + 9)
+	-- Progress dots (each one names its step and goes straight to it) and the way forward.
+	for index, key in ipairs(STEPS) do
+		local dot = CreateFrame("Button", nil, window)
+		dot:SetSize(DOT_SIZE + DOT_GAP, DOT_SIZE + DOT_GAP)
+		-- (the further pages a little apart, their dots smaller)
+		local further = index > READY
+		dot:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT",
+			margin - DOT_GAP / 2 + (index - 1) * (DOT_SIZE + DOT_GAP) + (further and MORE_GAP or 0), margin + 9 - DOT_GAP / 2)
+		dot.mark = dot:CreateTexture(nil, "ARTWORK")
+		dot.mark:SetSize(further and DOT_SIZE - 2 or DOT_SIZE, further and DOT_SIZE - 2 or DOT_SIZE)
+		dot.mark:SetPoint("CENTER", dot, "CENTER", 0, 0)
+		dot:SetScript("OnClick", function()
+			if index ~= current then
+				ns.Skin.Play("click")
+				ShowStep(index)
+			end
+		end)
+		ns.Skin.Tooltip(dot, function() return pages[key].title:GetText() end, "ANCHOR_TOP")
 		dots[index] = dot
 	end
 	window.next = FooterButton(L.WELCOME_NEXT, function()
-		if current == #STEPS then Close() else ShowStep(current + 1) end
+		if current == READY or current == #STEPS then Close() else ShowStep(current + 1) end
 	end)
 	window.next:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
 	window.back = FooterButton(L.WELCOME_BACK, function() ShowStep(current - 1) end)
 	window.back:SetPoint("RIGHT", window.next, "LEFT", -8, 0)
-	window.skip = CreateFrame("Button", nil, window)
-	window.skip.text = ns.Skin.CreateText(window.skip, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
-	window.skip.text:SetText(L.WELCOME_SKIP)
-	window.skip:SetSize(U.Measure(window.skip.text, "GetStringWidth", 60) + 16, 20)
-	window.skip.text:SetPoint("LEFT", window.skip, "LEFT", 0, 0)
-	window.skip.text:SetPoint("RIGHT", window.skip, "RIGHT", 0, 0)
-	window.skip.text:SetJustifyH("CENTER")
+	-- From the road: the further pages.
+	window.more = FooterButton(L.WELCOME_MORE, function() ShowStep(READY + 1) end)
+	window.more:SetPoint("RIGHT", window.back, "LEFT", -8, 0)
+	ns.Skin.Tooltip(window.more, L.WELCOME_MORE_DESC, "ANCHOR_TOP")
+	-- (a real button, quiet, in line with Back and Next)
+	window.skip = ns.Skin.SmallButton(window, L.WELCOME_SKIP, Close, nil, 26)
 	window.skip:SetPoint("LEFT", dots[#STEPS], "RIGHT", 16, 0)
-	window.skip:SetScript("OnClick", Close)
-	window.skip:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 0.82, 0) end)
-	window.skip:SetScript("OnLeave", function(self) self.text:SetTextColor(0.6, 0.6, 0.6) end)
 
-	window:SetScript("OnHide", function() ns.root.welcomed = true end)
-	window:SetScript("OnShow", function(self)
+	-- Seen once closed by you; hidden with the whole interface (a new character's opening film, the screen
+	-- hidden by the game), it is still to come: it shows again with the interface.
+	window:HookScript("OnHide", function(self)
+		if self:IsShown() then return end
+		ns.SetWelcomed()
+		-- (a copy kept: no taking it back once closed)
+		undo, copiedFrom = nil, nil
+	end)
+	window:HookScript("OnShow", function(self)
 		-- On a small screen (or a large interface scale), the window shrinks to fit.
-		local screen = (UIParent:GetHeight() or 768) * SCREEN_SHARE
-		self:SetScale(math.min(ns.Skin.Scale(), screen / HEIGHT))
+		self:SetScale(ns.Skin.FitScale(self))
+		-- (the extensions no more suggested, or all installed since the window was made: their page goes, its dot too)
+		if STEPS[#STEPS] == "extensions" and not (ns.OffersWanted() and ns.MissingExtensions()[1]) then
+			pages.extensions:Hide()
+			dots[#STEPS]:Hide()
+			STEPS[#STEPS] = nil
+			self.skip:ClearAllPoints()
+			self.skip:SetPoint("LEFT", dots[#STEPS], "RIGHT", 16, 0)
+		end
 		ShowStep(1)
 	end)
 	ns.Skin.Get(window):Layout()
@@ -610,21 +1113,68 @@ function ns.ShowWelcome()
 	if window:IsShown() then ShowStep(1) else window:Show() end
 end
 
+-- Another addon's first window (Naowh Forever's, Spoken's), open now: ours waits until it closes.
+local NAOWH_WINDOW_KEY = "setupWindow"
+local naowhWindow
+function ns.OtherWelcome()
+	local spoken = _G.SpokenWelcomeFrame
+	if type(spoken) == "table" and spoken.IsShown and spoken:IsShown() then return spoken end
+	if not _G.NaowhForever then return nil end
+	if not naowhWindow then
+		-- (its window has no name: known by the place it keeps, among the screen's windows)
+		local ok, found = pcall(function()
+			for _, child in ipairs({ UIParent:GetChildren() }) do
+				if child.positionKey == NAOWH_WINDOW_KEY then return child end
+			end
+		end)
+		naowhWindow = ok and found or nil
+	end
+	if naowhWindow and naowhWindow:IsShown() then return naowhWindow end
+end
+
+-- fn run now, or a moment after the other addon's first window has closed.
+local waiting = {}
+function ns.AfterOtherWelcome(fn)
+	local other = ns.OtherWelcome()
+	if not other then return fn() end
+	if not waiting[other] then
+		waiting[other] = {}
+		other:HookScript("OnHide", function(self)
+			local list = waiting[self]
+			waiting[self] = {}
+			C_Timer.After(AFTER_OTHER, function()
+				for _, later in ipairs(list) do ns.AfterOtherWelcome(later) end
+			end)
+		end)
+	end
+	table.insert(waiting[other], fn)
+end
+
 function ns.InitWelcome()
-	if ns.root.welcomed then return end
+	if ns.Welcomed() then return end
 	local frame = CreateFrame("Frame")
 	frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-	-- Never over a fight: it waits for the next quiet moment.
+	-- Never over a fight, nor over another addon's first window: it waits for the next quiet moment.
+	local function Due()
+		return not ns.Welcomed() and not (window and window:IsShown())
+	end
 	frame:SetScript("OnEvent", function(self)
 		self:UnregisterAllEvents()
-		if ns.root.welcomed then return end
-		C_Timer.After(SHOW_DELAY, function()
-			if ns.root.welcomed or (window and window:IsShown()) then return end
+		if ns.Welcomed() then return end
+		C_Timer.After(_G.NaowhForever and SHOW_DELAY_BESIDE or SHOW_DELAY, function()
+			if not Due() then return end
 			if InCombatLockdown() then
 				self:RegisterEvent("PLAYER_REGEN_ENABLED")
-			else
-				ns.ShowWelcome()
+				return
 			end
+			ns.AfterOtherWelcome(function()
+				if not Due() then return end
+				if InCombatLockdown() then
+					self:RegisterEvent("PLAYER_REGEN_ENABLED")
+				else
+					ns.ShowWelcome()
+				end
+			end)
 		end)
 	end)
 end

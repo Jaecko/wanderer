@@ -43,7 +43,9 @@ function Cast:Read(unit, enabled)
 	if not IsSecret(name) and name == nil then return false end
 	if not pcall(self.text.SetText, self.text, name) then return false end
 	self.icon.wanted = (IsSecret(texture) or texture ~= nil) and pcall(self.icon.SetTexture, self.icon, texture) or false
-	local color = Clean(locked) and COLORS.locked or (channel and COLORS.channel or COLORS.cast)
+	local kind = Clean(locked) and "locked" or (channel and "channel" or "cast")
+	-- (the unit frames' cast colours while Wanderer's own bars follow their look)
+	local color = ns.UnitFramesOwnCastColor and ns.UnitFramesOwnCastColor(kind) or COLORS[kind]
 	self.bar:SetStatusBarColor(color[1], color[2], color[3])
 	self.channel = channel
 	if IsSecret(start) or IsSecret(finish) then
@@ -102,12 +104,7 @@ function ns.Casts.New(frame)
 	self.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 	self.text = ns.Skin.CreateText(frame, "GameTooltipTextSmall", 1, 1, 1)
 	if self.text.SetWordWrap then self.text:SetWordWrap(false) end
-	self.bar = CreateFrame("StatusBar", nil, frame)
-	self.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-	self.bar:SetHeight(BAR_HEIGHT)
-	local background = self.bar:CreateTexture(nil, "BACKGROUND")
-	background:SetAllPoints()
-	background:SetColorTexture(0, 0, 0, 0.6)
+	self.bar = U.NewBar(frame, BAR_HEIGHT)
 	self.icon:Hide()
 	self.text:Hide()
 	self.bar:Hide()
