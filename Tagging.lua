@@ -147,19 +147,22 @@ function ns.InitTagging()
 	driver:RegisterEvent("PLAYER_REGEN_DISABLED")
 	driver:RegisterEvent("PLAYER_REGEN_ENABLED")
 	driver:RegisterEvent("PLAYER_TARGET_CHANGED")
+	-- (heard outside a fight too: your first blow lands as the fight begins, and it is the one that makes it yours)
+	driver:RegisterEvent("UNIT_COMBAT")
 	driver:SetScript("OnEvent", function(_, event, unit, action)
-		if event == "UNIT_COMBAT" then return OnBlow(unit, action) end
+		if event == "UNIT_COMBAT" then
+			-- (not in a dungeon or a raid: nothing to tell there, and dozens of blows a second)
+			if ns.zone == "dungeon" or ns.zone == "raid" or not (ns.db and ns.db.enabled and ns.db.label.untagged) then return end
+			return OnBlow(unit, action)
+		end
 		if event == "PLAYER_REGEN_DISABLED" then
 			-- (not in a dungeon or a raid: the group shares the tapping there)
 			local instance = ns.zone == "dungeon" or ns.zone == "raid"
 			driver:SetShown(ns.db and ns.db.enabled and ns.db.label.untagged and not instance and true or false)
-			-- The blows are counted only while the check runs (in a group, dozens a second).
-			if driver:IsShown() then driver:RegisterEvent("UNIT_COMBAT") end
 		elseif event == "PLAYER_REGEN_ENABLED" then
 			wipe(touched) -- fights over: monsters come back fresh
 			Update()
 			driver:Hide()
-			driver:UnregisterEvent("UNIT_COMBAT")
 		else
 			-- A plate handed to another monster: the blows it knew were not on this one.
 			if event == "NAME_PLATE_UNIT_REMOVED" and unit and C_NamePlate then

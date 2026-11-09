@@ -118,7 +118,7 @@ local DEFAULTS = {
 		threatAlert = true,
 		threatSound = true,
 		hideInCombat = false,
-		combatLight = true, -- in a fight, only what matters for it (level, health, cast, target...)
+		combatLight = false, -- in a fight, only what matters for it (asked for: the label stays whole by default)
 		scale = 1,
 		textScale = 1,
 		offset = 22,
@@ -1617,6 +1617,11 @@ function ns.SetProfile(name, byPlace)
 			if scene.cameraFrame == nil then scene.cameraFrame = scene.camera == true end
 		end
 		profile.styleVersion = 13
+	end
+	-- 1.4.6: the label stays whole in a fight, once for every profile (the option remains, to ask for less).
+	if (profile.styleVersion or 0) < 14 then
+		if type(profile.label) == "table" then profile.label.combatLight = false end
+		profile.styleVersion = 14
 	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
