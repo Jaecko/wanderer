@@ -1273,11 +1273,18 @@ function Skin.Tabs(parent, list, onPick)
 	end
 	function tabs:Layout()
 		local previous, width = nil, 0
+		local words = 0
 		for _, tab in ipairs(self.order) do
 			tab:SetWidth(U.Measure(tab.text, "GetStringWidth", 60) + (tab.badge:IsShown() and tab.badge:GetWidth() + 8 or 0))
+			words = words + tab:GetWidth()
+		end
+		-- (self.fit: the room there is; the tabs come closer rather than leave their window)
+		local gap = 26
+		if self.fit and #self.order > 1 then gap = math.max(8, math.min(26, math.floor((self.fit - words) / (#self.order - 1)))) end
+		for _, tab in ipairs(self.order) do
 			tab:ClearAllPoints()
-			if previous then tab:SetPoint("LEFT", previous, "RIGHT", 26, 0) else tab:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0) end
-			width = width + tab:GetWidth() + (previous and 26 or 0)
+			if previous then tab:SetPoint("LEFT", previous, "RIGHT", gap, 0) else tab:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0) end
+			width = width + tab:GetWidth() + (previous and gap or 0)
 			previous = tab
 		end
 		self:SetWidth(math.max(1, width))
