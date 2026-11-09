@@ -433,7 +433,7 @@ function Skin.GlyphButton(parent, name, size, tooltip, onClick)
 	local button = CreateFrame("Button", nil, parent)
 	size = size or 14
 	button:SetSize(size + 6, size + 6)
-	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	button:RegisterForClicks("LeftButtonUp", "RightButtonUp") button.padRight = true
 	button.glyph = Skin.Glyph(button, name, size)
 	button.glyph:SetPoint("CENTER")
 	function button:Tint(role)
@@ -728,6 +728,7 @@ function Skin.Resizable(window, opts)
 	grip:SetSize(16, 16)
 	grip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -3, 3)
 	grip:SetFrameLevel(window:GetFrameLevel() + 20)
+	if ns.Pad then ns.Pad.Ignore(grip) end
 	grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
 	grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
 	grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
@@ -777,6 +778,8 @@ local question -- the one open: { accept, refuse, text }
 local function AskWindow()
 	if ask then return ask end
 	ask = Skin.CreateWindow("WandererAsk", "DIALOG")
+	-- (a controller moves in it too: Pad.lua)
+	if Skin.PadWindow then Skin.PadWindow(ask, { close = function() if ask.no and ask.no:IsShown() then ask.no:Click() else ask:Hide() end end }) end
 	ask:SetSize(380, 120)
 	ask:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
 	ask:EnableMouse(true)
@@ -1049,7 +1052,7 @@ function Skin.Table(parent, spec)
 			row.more:SetAlpha(0.8)
 			row.more:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 		end
-		row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		row:RegisterForClicks("LeftButtonUp", "RightButtonUp") row.padRight = true
 		row:SetScript("OnClick", function(self, mouse)
 			if self.entry and not self.entry.header then
 				Skin.Play("click")
@@ -1170,6 +1173,8 @@ function Skin.ScrollBar(parent, onOffset)
 	thumb.fill:SetColorTexture(0.85, 0.75, 0.5, 0.5)
 	bar.thumb = thumb
 	bar.total, bar.shown, bar.offset = 0, 0, 0
+	-- (a mouse's bar: a controller scrolls with its right stick, Pad.lua)
+	if ns.Pad then ns.Pad.Ignore(bar) end
 	bar:Hide()
 	local function Range() return math.max(0, bar.total - bar.shown) end
 	local function OffsetAt(position)
@@ -1484,6 +1489,7 @@ function Skin.ActionCard(owner, spec)
 	end
 	if not actionCard then
 		actionCard = Skin.CreateWindow("WandererActionCard", "DIALOG")
+		if Skin.PadWindow then Skin.PadWindow(actionCard) end
 		Skin.Closable(actionCard, "WandererActionCard")
 		actionCard.title = Skin.Caps(actionCard, "", "kicker")
 		actionCard.foot = Skin.Text(actionCard, "GameTooltipTextSmall", "muted")
@@ -1525,7 +1531,8 @@ function Skin.ActionCard(owner, spec)
 	card:SetScale(Skin.Scale())
 	card:ClearAllPoints()
 	local x, cy
-	if GetCursorPosition then x, cy = GetCursorPosition() end
+	-- (opened from a controller: beside the button chosen)
+	if ns.Pad then x, cy = ns.Pad.Point() elseif GetCursorPosition then x, cy = GetCursorPosition() end
 	local scale = card:GetEffectiveScale() or 1
 	if (spec.atCursor or not owner) and x and cy and scale > 0 then
 		card:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale + 4, cy / scale - 4)
@@ -1744,6 +1751,7 @@ do
 	-- is gone (it closes); card.onHide(card) when it closes.
 	function Skin.Card(name, withIcon)
 		local card = Skin.CreateWindow(name, "DIALOG")
+		if Skin.PadWindow then Skin.PadWindow(card) end
 		card:EnableMouse(true)
 		card:SetClampedToScreen(true)
 		card.margin = Skin.Margin() + 8
@@ -1904,7 +1912,8 @@ do
 			if owner then
 				Anchor(self, owner)
 			else
-				local x, y = GetCursorPosition()
+				local x, y
+				if ns.Pad then x, y = ns.Pad.Point() else x, y = GetCursorPosition() end
 				local scale = self:GetEffectiveScale()
 				scale = type(scale) == "number" and scale > 0 and scale or 1
 				self:ClearAllPoints()
@@ -1960,7 +1969,7 @@ function Skin.RowMore(row, onClick, before, paper, opts)
 	opts = opts or {}
 	local more = CreateFrame("Button", nil, row)
 	more:SetSize(MORE_SIZE, MORE_SIZE)
-	more:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	more:RegisterForClicks("LeftButtonUp", "RightButtonUp") more.padRight = true
 	more.dots = {}
 	for index, x in ipairs(MORE_DOTS) do
 		local dot = Skin.Glyph(more, "dot", 10)
@@ -1976,7 +1985,7 @@ function Skin.RowMore(row, onClick, before, paper, opts)
 	more:SetFrameLevel(row:GetFrameLevel() + 2)
 	more:Hide()
 	local function Hover()
-		if not opts.manual then more:SetShown(row:IsMouseOver() or more:IsMouseOver()) end
+		if not opts.manual then more:SetShown(U.Hovered(row) or U.Hovered(more)) end
 	end
 	more:SetScript("OnEnter", function(self)
 		Tint("gold")

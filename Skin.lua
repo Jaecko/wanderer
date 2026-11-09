@@ -476,6 +476,8 @@ function Skin.Dress(window, point, save, onClose)
 	local close = Skin.CloseButton(window, onClose) -- (Kit.lua)
 	local name = window:GetName()
 	if name and UISpecialFrames then table.insert(UISpecialFrames, name) end
+	-- (a controller moves in it as in the game's windows: Pad.lua)
+	if Skin.PadWindow and not window.padSkip then Skin.PadWindow(window) end
 	return close
 end
 
@@ -580,6 +582,8 @@ function Skin.CreateWindow(name, strata, parent, hud, kind)
 	kind = kind or "Frame"
 	local ok, created = pcall(CreateFrame, kind, name, parent, "TooltipBackdropTemplate")
 	local window = ok and created or CreateFrame(kind, name, parent)
+	-- (a piece of the screen, always there: never given the controller's attention)
+	if hud then window.padSkip = true end
 	local plain = strata == "MEDIUM" or strata == "HIGH"
 	if strata and not (plain and not own) then window:SetFrameStrata(plain and "MEDIUM" or strata) end
 	if own and plain then

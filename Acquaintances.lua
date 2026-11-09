@@ -118,11 +118,6 @@ function ns.AcquaintanceCount()
 	return count
 end
 
-function ns.ForgetAllAcquaintances()
-	ns.Mine().acquaintances = {}
-	Changed()
-end
-
 -- Your group, met: every member (out of a fight, when the game hides names: read again at the next change).
 local function LearnGroup()
 	if not On() then return end

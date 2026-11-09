@@ -692,7 +692,7 @@ local function ChoiceRow(index)
 	if row then return row end
 	-- (a Button: picked only when pressed and released on it, never by a camera drag ending over it)
 	row = CreateFrame("Button", nil, panel)
-	row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	row:RegisterForClicks("LeftButtonUp", "RightButtonUp") row.padRight = true
 	row.hover = row:CreateTexture(nil, "BACKGROUND")
 	row.hover:SetAllPoints()
 	row.hover:Hide()
@@ -739,7 +739,7 @@ local function RewardItem(index)
 	local item = rewardItems[index]
 	if item then return item end
 	item = CreateFrame("Button", nil, panel)
-	item:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	item:RegisterForClicks("LeftButtonUp", "RightButtonUp") item.padRight = true
 	item.picked = item:CreateTexture(nil, "BACKGROUND")
 	item.picked:SetAllPoints()
 	item.picked:Hide()
@@ -1101,7 +1101,9 @@ local function PlaceButton(button, label, key, onClick, dim, right, y)
 		ns.Skin.Parchment(button, paper, true)
 		button.paper = paper
 	end
-	button.text:SetText(label .. "   " .. Hex("keys") .. key .. "|r")
+	-- (with a controller, no key of a keyboard said: the pad's buttons are the game's)
+	local keyText = (ns.Pad and ns.Pad.Navigating()) and "" or ("   " .. Hex("keys") .. key .. "|r")
+	button.text:SetText(label .. keyText)
 	local buttonWidth = U.Measure(button.text, "GetStringWidth", 80) + BUTTON_PADDING * 2
 	button:SetSize(buttonWidth, BUTTON_HEIGHT)
 	button:ClearAllPoints()
@@ -1153,6 +1155,7 @@ local function RenderActions(y, cost, locked)
 	elseif CanGoBack() then
 		hint = L.SCENE_KEYS_BACK
 	end
+	if ns.Pad and ns.Pad.Navigating() and not locked and hint ~= L.SCENE_KEYS_BACK then hint = L.SCENE_PAD_KEYS end
 	keysText:SetText(hint)
 	if locked and scene.warned then Paint(keysText, "accent") end
 	keysText:SetWidth(math.max(right - margin - SMALL_GAP, 40))
@@ -1165,6 +1168,12 @@ local function RenderActions(y, cost, locked)
 		keysLink:ClearAllPoints()
 		keysLink:SetPoint("LEFT", keysText, "LEFT", 0, 0)
 		keysLink:SetSize(math.min(U.Measure(keysText, "GetStringWidth", 120), keysText:GetWidth() or 120), BUTTON_HEIGHT)
+	end
+	-- A controller: the page read again by the game's navigation, the first answer (else the main button) chosen.
+	if ns.Pad and ns.Pad.On() then
+		local first = last and choiceRows[1]
+		if not (first and first:IsShown()) then first = actionButtons[1] and actionButtons[1]:IsShown() and actionButtons[1] or actionButtons[2] end
+		ns.Pad.Refresh(panel, first)
 	end
 	return y + BUTTON_HEIGHT + margin
 end
@@ -1784,6 +1793,8 @@ function ns.InitScene()
 	end
 	PlacePanel(1)
 	panel:EnableMouse(true)
+	-- A controller: the game's navigation moves among the answers and buttons; its back button leaves.
+	if ns.Skin.PadWindow then ns.Skin.PadWindow(panel, { close = function() Leave() end }) end
 	-- (only a click begun on the panel: a camera drag ending over it neither turns the page nor accepts)
 	panel:SetScript("OnMouseDown", function(self, button) self.pressed = button end)
 	panel:SetScript("OnMouseUp", function(self, button)

@@ -138,7 +138,7 @@ local function Row(index)
 	if row then return row end
 	row = CreateFrame("Button", nil, window)
 	row:SetHeight(ROW_HEIGHT)
-	row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	row:RegisterForClicks("LeftButtonUp", "RightButtonUp") row.padRight = true
 	-- The kit's check box, ticked when done (the whole row answers the clicks).
 	row.check = ns.Skin.Check(row, "", function() return row.item and row.item.done end, function() end)
 	row.check:EnableMouse(false)

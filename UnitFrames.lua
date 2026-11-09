@@ -694,14 +694,17 @@ end
 -- given back as it was. (never in a fight on a protected frame: then left as it is)
 function ns.UnitFramesMouse(bar, state, back)
 	if not (bar.EnableMouse and bar.IsMouseEnabled) then return end
+	-- (a bar the game protects is never asked in a fight, each try is an action blocked: done after it)
+	if not CanMake(bar) then return end
+	local now = Clean(Safe(bar.IsMouseEnabled, bar)) and true or false
 	if back then
 		if state.mouse == nil then return end
-		pcall(bar.EnableMouse, bar, state.mouse)
+		if now ~= state.mouse then pcall(bar.EnableMouse, bar, state.mouse) end
 		state.mouse = nil
 		return
 	end
-	if state.mouse == nil then state.mouse = Clean(Safe(bar.IsMouseEnabled, bar)) and true or false end
-	if state.mouse then pcall(bar.EnableMouse, bar, false) end
+	if state.mouse == nil then state.mouse = now end
+	if state.mouse and now then pcall(bar.EnableMouse, bar, false) end
 end
 
 local function Unmirror(bar, state)

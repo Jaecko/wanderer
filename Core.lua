@@ -61,7 +61,7 @@ local DEFAULTS = {
 	groupMarks = true, -- in the world, the name of each member of your group, small, over their head
 	guildMarks = true, -- and of each member of your guild, in the guild's color
 	knownMarks = false, -- and of the players this character has met (Acquaintances.lua)
-	enemyNames = "names", -- "names" (as the names settings say), "always", "never", "near" (as you come near)
+	enemyNames = "near", -- "names" (as the names settings say), "always", "never", "near" (as you come near)
 	nearNames = {
 		distance = 45, -- yards from the camera beyond which the enemies' names are gone
 		show = "bar", -- what comes as you come near: "bar" (their health bar, as the game) or "name"
@@ -101,7 +101,7 @@ local DEFAULTS = {
 		showTarget = true,
 		showPortrait = true,
 		showHealth = true, -- allies only
-		showPower = true, -- mana, rage, energy... under the health bar (label and game tooltip)
+		showPower = false, -- mana, rage, energy... under the health bar (label and game tooltip)
 		showDifficulty = true,
 		showReputation = true,
 		showTameable = true,
@@ -143,11 +143,11 @@ local DEFAULTS = {
 		quality = true,
 	},
 	cinema = {
-		enabled = false,
+		enabled = true,
 		alpha = 20,
 		delay = 4,
 		-- faded out of a fight even with a target: asked for (on by default before the ways to play; a saved profile keeps its own)
-		combatOnly = false,
+		combatOnly = true,
 	},
 	merchant = {
 		sellJunk = true,
@@ -174,7 +174,7 @@ local DEFAULTS = {
 	fishing = {
 		doubleClick = true,
 		tell = true, -- the label tells the fishing over the bobber, a notice each catch
-		splash = false, -- the music and the ambience lowered while the line is in the water
+		splash = true, -- the music and the ambience lowered while the line is in the water
 	},
 	crafts = {
 		skillUps = false, -- a short notice for the points gained in a profession (the game says it in the chat)
@@ -182,23 +182,23 @@ local DEFAULTS = {
 		ceiling = true, -- a profession at its ceiling: a trainer teaches the next rank (information)
 	},
 	gestures = {
-		read = false, -- automations: off until the player asks
-		levelUp = false,
-		greet = false,
+		read = true, -- automations: off until the player asks
+		levelUp = true,
+		greet = true,
 		sitAtFire = true, -- a click on a campfire seats you by it
 	},
 	hands = { -- what the game makes you do by hand, done for you: off until asked
 		easyDestroy = false, -- destroying an item without typing the word
 		bagsClosed = false, -- the bags no longer open by themselves for the game's windows
-		standUp = false, -- stand up or dismount when an action is refused for it
+		standUp = true, -- stand up or dismount when an action is refused for it
 	},
 	travel = {
 		enabled = true,
 		camera = true,
 	},
 	away = {
-		enabled = false, -- an ambiance while away: asked for
-		style = "hearth",
+		enabled = true, -- an ambiance while away: asked for
+		style = "contemplation",
 	},
 	buffs = {
 		remind = true, -- your long blessings that fade, to cast again (a notice, out of a fight)
@@ -208,7 +208,7 @@ local DEFAULTS = {
 		look = "game", -- "game" (as it is) or "text" (text only)
 	},
 	dots = {
-		enabled = false, -- what your damage over time will still deal: asked for
+		enabled = true, -- what your damage over time will still deal: asked for
 		mark = true, -- and the skull on the portrait, whole when they will finish it
 		target = true, -- on your target's frame
 		focus = true, -- on your focus's frame
@@ -216,7 +216,7 @@ local DEFAULTS = {
 		plates = true, -- on the nameplates
 	},
 	hots = {
-		enabled = false, -- what your heals over time will still heal: asked for
+		enabled = true, -- what your heals over time will still heal: asked for
 		mark = true, -- and the plus that fills up, whole when they will be topped
 		player = true, -- on your own frame
 		group = true, -- on the party frames and the game's group and raid frames
@@ -249,11 +249,11 @@ local DEFAULTS = {
 			castBars = true },
 	},
 	sparkles = {
-		nodes = false, -- the game's gathering icon over the herb or vein you come near: asked for
-		questObjects = false, -- and over quest objects: asked for
+		nodes = true, -- the game's gathering icon over the herb or vein you come near: asked for
+		questObjects = true, -- and over quest objects: asked for
 	},
 	emotes = {
-		enabled = false, -- the emote bar: asked for
+		enabled = true, -- the emote bar: asked for
 	},
 	threat = {
 		show = true, -- in groups and dungeons only
@@ -262,10 +262,10 @@ local DEFAULTS = {
 	scene = {
 		enabled = true,
 		camera = true, -- closer to the character you talk to (conversations and quests)
-		cameraShops = false, -- also at merchants, trainers, bankers, flight masters, auction houses: asked for
+		cameraShops = true, -- also at merchants, trainers, bankers, flight masters, auction houses: asked for
 		cameraFrame = false, -- the character framed (a hidden setting of the game, which warns): asked for
 		textSize = 16,
-		hush = false, -- the music and the ambience lowered while a scene is shown
+		hush = true, -- the music and the ambience lowered while a scene is shown
 		parchment = false, -- the scene and the reading window on parchment
 		reader = true, -- books, plaques and letters in Wanderer's reading window
 		bgOpacity = 90, -- the panel's background, %
@@ -275,13 +275,13 @@ local DEFAULTS = {
 		autoAccept = false,
 		autoTurnIn = false,
 		bestReward = true,
-		skipGossip = false,
+		skipGossip = true,
 	},
 	social = {
 		declineDuels = false,
 		acceptInvites = false,
-		acceptResurrect = false,
-		acceptSummon = false,
+		acceptResurrect = true,
+		acceptSummon = true,
 		inviteOnWord = false, -- a whisper made of one word brings its sender into your group
 		inviteWord = "",
 	},
@@ -292,19 +292,19 @@ local DEFAULTS = {
 	world = {
 		threshold = true, -- at a dungeon's door: your quests there, your worn equipment
 		townCard = true, -- arriving in a town or an inn: what waits there, in one notice (information)
-		actionCam = false,
-		calmMotion = false, -- no camera moved by Wanderer, its pieces fade without moving: asked for
-		filterErrors = false, -- the red messages repeated in fights, filtered: asked for
+		actionCam = true,
+		calmMotion = true, -- no camera moved by Wanderer, its pieces fade without moving: asked for
+		filterErrors = true, -- the red messages repeated in fights, filtered: asked for
 		hideTalkingHead = false,
-		cleanMinimap = false, -- the game's frames as they are, until asked
+		cleanMinimap = true, -- the game's frames as they are, until asked
 		-- Wanderer's looks: the quest tracker, the minimap, the bar (offered at the welcome; off until asked).
-		styledTracker = false,
-		styledMinimap = false,
-		bar = false,
-		cleanTracker = false,
-		gatherIcons = false, -- other addons' buttons: left alone until asked
+		styledTracker = true,
+		styledMinimap = true,
+		bar = true,
+		cleanTracker = true,
+		gatherIcons = true, -- other addons' buttons: left alone until asked
 		layer = true, -- your layer: one line over the zone's name, never on the screen
-		lootSparkle = false, -- the game's sparkle on quest items kept through the graphics presets: asked for
+		lootSparkle = true, -- the game's sparkle on quest items kept through the graphics presets: asked for
 		editLayout = "", -- "": the game's Edit Mode layout is left alone
 		moveFrames = true, -- the game's windows moved where you drop them (kept)
 	},
@@ -415,7 +415,7 @@ _G.Wanderer = setmetatable({
 	-- Skin.GlyphText, Skin.ProgressLine, Skin.UnitBar, OpenOptions, RemoveTodo, HasFishingPole, SetPortrait, the shared word PIN_FAILED,
 	-- Skin.ShowTip, Skin.KeyListener, Skin.LineHeight, the dropdown's tip, Skin.Ask's strata, Skin.Tabs SetList, OnCharacterForgotten;
 	-- 16 = Util.ChatInsert, the job "trackerLook" an extension may take (spec.takes); 17 = ChangeEverywhere.
-	API = 17,
+	API = 18,
 	-- A place's levels and fishing (ZoneData.lua): by its area id, or by its map (onMap); no id: the whole list.
 	ZoneLevels = function(id, onMap) return ns.ZoneLevels and ns.ZoneLevels(id, onMap) end,
 	RegisterExtension = RegisterExtension,

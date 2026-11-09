@@ -1420,6 +1420,7 @@ local L = {
 	PLACING_SCENE = "Conversation scene",
 
 
+	SCENE_PAD_KEYS = "Bottom button: choose · right button: leave",
 }
 
 

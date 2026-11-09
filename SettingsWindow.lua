@@ -331,7 +331,7 @@ local function ChangeMarks(frame)
 	frame.reset:SetFrameLevel(frame:GetFrameLevel() + 3)
 	frame.reset:Hide()
 	local function Hover()
-		frame.reset:SetShown(frame.changes ~= nil and (frame:IsMouseOver() or frame.reset:IsMouseOver()))
+		frame.reset:SetShown(frame.changes ~= nil and (U.Hovered(frame) or U.Hovered(frame.reset)))
 	end
 	frame:HookScript("OnEnter", Hover)
 	frame:HookScript("OnLeave", Hover)

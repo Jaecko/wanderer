@@ -402,6 +402,7 @@ local function Create()
 	local Skin = ns.Skin
 	C = Skin.COLORS
 	card = Skin.CreateWindow("WandererCard", "DIALOG")
+	if Skin.PadWindow then Skin.PadWindow(card) end
 	Skin.Closable(card, "WandererCard")
 	local look = Skin.Get(card)
 	if look then look.minOpacity = 0.97 end

@@ -1406,4 +1406,5 @@ for key, text in pairs({
 	PLACING_SCENE = "Escena de conversación",
 
 
+	SCENE_PAD_KEYS = "Botón inferior: elegir · botón derecho: salir",
 }) do L[key] = text end

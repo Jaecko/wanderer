@@ -85,9 +85,12 @@ ns.PLAYSTYLES = {
 		["cinema.enabled"] = true, ["cinema.combatOnly"] = true, ["away.enabled"] = true, ["away.style"] = "contemplation",
 		["world.cleanMinimap"] = true, ["world.cleanTracker"] = true, ["world.styledTracker"] = true,
 		["world.filterErrors"] = true, ["world.lootSparkle"] = true, ["sparkles.nodes"] = true, ["sparkles.questObjects"] = true,
-		["hands.standUp"] = true, ["hands.bagsClosed"] = true, ["fishing.splash"] = true,
+		["hands.standUp"] = true, ["fishing.splash"] = true, ["quest.skipGossip"] = true,
+		["gestures.read"] = true, ["gestures.levelUp"] = true, ["gestures.greet"] = true, ["emotes.enabled"] = true,
+		["dots.enabled"] = true, ["hots.enabled"] = true, ["social.acceptResurrect"] = true, ["social.acceptSummon"] = true,
+		["outfits.poleOnCast"] = true, ["outfits.weaponsOnMount"] = true,
 		["quests.mapGivers"] = false, ["quests.foldStory"] = true, ["maps.arrowQuiet"] = true,
-		["chat.quietChannels"] = true,
+		["chat.messagesWindow"] = true, ["chat.quietChannels"] = true,
 	}, { "scene.reader", "travel.camera", "gestures.sitAtFire", "fishing.doubleClick", "world.layer" }),
 	-- Quiet scenes, whispers as conversations, a character who greets, reads and expresses itself.
 	roleplay = Way("roleplay", "immersion", "make", "INV_Misc_Book_09", {

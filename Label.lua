@@ -1255,6 +1255,18 @@ local function StickyTarget()
 		and Clean(Safe(UnitExists, "target")) and true or false
 end
 
+-- With a controller there is no mouse to hover with: the one the game points at (its soft target: an enemy,
+-- a friend, someone to talk to) is the one you look at.
+local SOFT_UNITS = { "softenemy", "softfriend", "softinteract" }
+local function SoftUnit()
+	if not (ns.Pad and ns.Pad.On()) then return nil end
+	for _, unit in ipairs(SOFT_UNITS) do
+		if Clean(Safe(UnitExists, unit)) and not Clean(Safe(UnitIsGameObject, unit)) then return unit end
+	end
+	return nil
+end
+local function IsSoft(unit) return unit == "softenemy" or unit == "softfriend" or unit == "softinteract" end
+
 local function SetUnit(unit)
 	if unit == UNIT then return false end
 	UNIT, TARGET = unit, unit .. "target"
@@ -1277,7 +1289,7 @@ local function ShouldShow()
 		-- Your target: only while it is on screen (its nameplate shown).
 		local onScreen = UNIT ~= "target" or (U.NameplateFor(UNIT)) ~= nil
 		present = Clean(Safe(UnitExists, UNIT)) and onScreen
-			and (UNIT == "target" or not db.label.worldOnly or IsOverWorld() or clicking or OverOwnPortrait())
+			and (UNIT == "target" or IsSoft(UNIT) or not db.label.worldOnly or IsOverWorld() or clicking or OverOwnPortrait())
 	end
 	if present then
 		if UNIT == "mouseover" and not objectMode then lastHover = GetTime() end
@@ -1486,7 +1498,7 @@ local ShowSticky
 local function OnUpdate(self, elapsed)
 	-- Nothing hovered any more: your target (option); hovered again: the mouse.
 	if not objectMode then
-		local wanted = StickyTarget() and "target" or "mouseover"
+		local wanted = (not Hovering() and SoftUnit()) or (StickyTarget() and "target") or "mouseover"
 		if SetUnit(wanted) and Clean(Safe(UnitExists, UNIT)) then
 			-- The same character under another name (hovered, then your target): nothing to redo.
 			local same = current and current.guid and current.guid == Clean(Safe(UnitGUID, UNIT))
@@ -1593,6 +1605,15 @@ local function OnEvent(_, event, ...)
 		-- Your target back on screen: the label comes back on it.
 		local unit = ...
 		if StickyTarget() and Clean(Safe(UnitIsUnit, unit, "target")) and not IsLabelActive() then ShowSticky() end
+		return
+	end
+	-- (a controller: the game points at someone else; the label comes to them, even from hidden)
+	if event == "PLAYER_SOFT_ENEMY_CHANGED" or event == "PLAYER_SOFT_FRIEND_CHANGED" or event == "PLAYER_SOFT_INTERACT_CHANGED" then
+		local soft = not objectMode and not Hovering() and SoftUnit()
+		if soft then
+			SetUnit(soft)
+			if ShouldShow() and UpdateContent(true) then Show() end
+		end
 		return
 	end
 	if event == "PLAYER_TARGET_CHANGED" then
@@ -1702,6 +1723,9 @@ function ns.InitLabel()
 	frame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 	frame:RegisterEvent("INSPECT_READY")
 	frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+	for _, soft in ipairs({ "PLAYER_SOFT_ENEMY_CHANGED", "PLAYER_SOFT_FRIEND_CHANGED", "PLAYER_SOFT_INTERACT_CHANGED" }) do
+		pcall(frame.RegisterEvent, frame, soft)
+	end
 	frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 	frame:RegisterEvent("PLAYER_LOGIN")
 	frame:RegisterEvent("SKILL_LINES_CHANGED")
