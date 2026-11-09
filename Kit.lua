@@ -209,7 +209,11 @@ end
 -- place otherwise; the game places its windows again and again (another one opened, its tabs): out of sight
 -- each time. away() says when. Gives Place(), to call when that changes.
 function Skin.AsideGameWindow(frame, away)
-	local function Place() U.HideOffScreen(frame, away() and true or false) end
+	local function Place()
+		-- (a window the game protects cannot be moved in a fight: done as it ends)
+		if InCombatLockdown() and frame.IsProtected and frame:IsProtected() then return U.AfterFight(frame, Place) end
+		U.HideOffScreen(frame, away() and true or false)
+	end
 	frame:HookScript("OnShow", Place)
 	if UpdateUIPanelPositions then
 		hooksecurefunc("UpdateUIPanelPositions", function() if away() then Place() end end)

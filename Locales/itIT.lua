@@ -1407,4 +1407,6 @@ for key, text in pairs({
 
 
 	SCENE_PAD_KEYS = "Pulsante in basso: scegli · pulsante a destra: esci",
+	EXT_PROFESSIONS_SHORT = "le professioni su un banco da lavoro calmo e visivo",
+	EXT_PROFESSIONS = "Le professioni su un banco da lavoro visivo: ricette come icone, reagenti come carte, cosa creare dopo, Favore del mercante e i personaggi. Un download a parte: cerca Wanderer Professions nell'app CurseForge.",
 }) do L[key] = text end

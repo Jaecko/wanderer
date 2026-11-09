@@ -1407,4 +1407,6 @@ for key, text in pairs({
 
 
 	SCENE_PAD_KEYS = "下方按钮：选择 · 右侧按钮：离开",
+	EXT_PROFESSIONS_SHORT = "沉静直观的专业技能工作台",
+	EXT_PROFESSIONS = "在一个直观的工作台上管理专业技能：配方显示为图标，材料显示为卡片，提示接下来制作什么，还有商人恩惠和您的角色。需单独下载：在 CurseForge 应用中搜索 Wanderer Professions。",
 }) do L[key] = text end

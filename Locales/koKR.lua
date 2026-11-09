@@ -1407,4 +1407,6 @@ for key, text in pairs({
 
 
 	SCENE_PAD_KEYS = "아래 버튼: 선택 · 오른쪽 버튼: 떠나기",
+	EXT_PROFESSIONS_SHORT = "차분하고 시각적인 작업대의 전문 기술",
+	EXT_PROFESSIONS = "하나의 시각적인 작업대에서 전문 기술을 관리합니다: 아이콘으로 보는 제조법, 카드로 보는 재료, 다음에 만들 것, 상인의 호의와 캐릭터. 별도 다운로드: CurseForge 앱에서 Wanderer Professions를 검색하세요.",
 }) do L[key] = text end

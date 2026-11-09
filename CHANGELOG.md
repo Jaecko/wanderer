@@ -1,7 +1,7 @@
-# Wanderer 1.4.8
+# Wanderer 1.4.10
 
-### Changed
-- The label now goes behind the interface's windows. It stays over the world, the name plates and the unit frames.
+### New
+- Wanderer Professions, a calm and visual workbench for your professions, is offered among the other Wanderer addons.
 
 ### Fixed
-- Your damage over time no longer shows on an enemy when the spell was resisted, missed, dodged or met immunity.
+- A game window an extension sets aside now waits for the end of a fight, instead of being blocked by the game.

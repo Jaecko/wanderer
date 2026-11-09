@@ -1421,6 +1421,8 @@ local L = {
 
 
 	SCENE_PAD_KEYS = "Bottom button: choose · right button: leave",
+	EXT_PROFESSIONS_SHORT = "your professions on a calm, visual workbench",
+	EXT_PROFESSIONS = "Your professions on one visual workbench: recipes as icons, reagents as cards, what to craft next, Merchant's Favor and your characters. A separate download: search Wanderer Professions in the CurseForge app.",
 }
 
 

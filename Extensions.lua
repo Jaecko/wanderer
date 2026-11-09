@@ -29,6 +29,8 @@ ns.EXTENSION_OFFERS = {
 		url = CURSEFORGE .. "wanderer-chat" },
 	{ addon = "WandererCampfireGame", name = "Wanderer Campfire Game", icon = "Interface\\Icons\\Spell_Fire_Fire", text = "EXT_CAMPFIRE",
 		url = CURSEFORGE .. "wanderer-campfire-game" },
+	{ addon = "WandererProfessions", name = "Wanderer Professions", icon = "Interface\\Icons\\Trade_BlackSmithing", text = "EXT_PROFESSIONS",
+		url = CURSEFORGE .. "wanderer-professions" },
 }
 
 local function Installed(addon)
