@@ -11,6 +11,7 @@ local Safe, Clean = U.Safe, U.Clean
 local TICK_WINDOW = 0.45 -- seconds either side of an expected tick
 local AURA_GRACE = 0.7 -- seconds after a cast before a missing aura means the spell did not stay
 local ALIGN_EVERY = 0.25 -- seconds between two readings of a unit's auras
+local AURAS_TOLD_FOR = 120 -- seconds a reading in a fight that showed your auras vouches for an empty one
 local MISSED = 2 -- ticks in a row expected and never seen: resisted, immune, dispelled, gone
 local SAMPLES = 5 -- ticks kept to know a spell's real size
 local SENT_FOR = 10 -- seconds a cast's aim is kept until the game says it went off
@@ -128,6 +129,8 @@ function ns.NewTickTracker(spec)
 				found[data[FAMILY]] = { spell = spell, expires = Clean(aura.expirationTime), duration = Clean(aura.duration) }
 			end
 		end
+		-- (your auras shown in a fight: an empty reading now means there is none, not that the game hides them)
+		if next(found) and InCombatLockdown() then T.aurasToldAt = GetTime() end
 		return found, complete
 	end
 
@@ -154,6 +157,10 @@ function ns.NewTickTracker(spec)
 			elseif complete and not aura and entry.fromAura and now - entry.cast > AURA_GRACE then
 				-- (seen there, now gone: dispelled, pushed off; one never seen is left to its missed ticks, an
 				-- empty reading may only be the game keeping them hidden)
+				list[family] = nil
+			elseif complete and not aura and spec.confirmAura and not entry.fromAura and T.aurasToldAt and now - T.aurasToldAt < AURAS_TOLD_FOR
+				and now - entry.cast > AURA_GRACE + (spec.late and spec.late(entry, 1) or 0) then
+				-- (cast, the time to land gone by, and the game shows nothing: it did not take)
 				list[family] = nil
 			end
 		end
@@ -258,6 +265,7 @@ function ns.NewTickTracker(spec)
 		end
 		list[data[FAMILY]] = entry
 		aligned[key] = nil
+		if spec.settle then spec.settle(key) end
 		if spec.wake then spec.wake() end
 	end
 

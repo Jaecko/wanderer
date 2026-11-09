@@ -24,9 +24,13 @@ local GROWTH = { 0.5, 1, 1.5 } -- Agony: its thirds
 local SCHOOL_INDEX = { [1] = 1, [2] = 2, [4] = 3, [8] = 4, [16] = 5, [32] = 6, [64] = 7 } -- mask -> spell school
 local AIMS = { "target", "softenemy", "focus", "mouseover" } -- where a cast may have gone, by its target's name
 local LOOKED_AT = { "target", "focus" } -- units whose blows the game tells, besides the nameplates
+local REFUSED = { RESIST = true, MISS = true, DODGE = true, PARRY = true, DEFLECT = true, IMMUNE = true } -- what the game says of a spell that did not land
+local REFUSED_BEFORE = 0.4 -- seconds the game may tell it before the cast is seen
+local REFUSED_AFTER = 0.7 -- seconds after a cast (and the flight of a missile) it still speaks of that cast
 
 local tracker -- TickTracker.lua's following of your spells
 local shields = {} -- enemy's key -> when a shield ate a tick
+local refused = {} -- enemy's key -> { at, school } the last spell it shrugged off
 local points -- your combo points when the last spell was sent
 local power = {} -- spell school -> your spell power, last read out of a fight
 
@@ -196,12 +200,35 @@ local function Fits(dot, n, amount, critical)
 	return amount >= expected * low - 1 and amount <= expected * high + 1
 end
 
+-- The spell the game has just said did not land on this enemy (resisted, missed, dodged, immune): not followed.
+-- Only one that has shown nothing yet: a tick resisted later does not end a spell that took.
+local function DropRefused(key)
+	local seen, list = refused[key], tracker.active[key]
+	if not (seen and list) then return end
+	for family, dot in pairs(list) do
+		local after = seen.at - dot.cast
+		local limit = REFUSED_AFTER + (Flying(dot) and FLIGHT or 0)
+		if (not seen.school or seen.school == dot.school) and not dot.something[1] and not dot.fromAura
+			and after >= -REFUSED_BEFORE and after <= limit then
+			list[family] = nil
+			refused[key] = nil
+			break
+		end
+	end
+	if not next(list) then tracker.active[key] = nil end
+end
+
 -- A blow an enemy took (UNIT_COMBAT), told once per unit showing it.
 local function Landed(unit, action, flag, amount, school)
 	action, flag, amount, school = Clean(action), Clean(flag), Clean(amount), Clean(school)
 	if not action then return end
 	local key = KeyOf(unit)
 	local active = tracker.active
+	if key and REFUSED[action] then
+		refused[key] = { at = GetTime(), school = school }
+		DropRefused(key)
+		if action ~= "IMMUNE" then return end
+	end
 	local list = key and active[key]
 	if not list then return end
 	if action == "EVADE" then
@@ -257,7 +284,7 @@ function ns.DotsState() return tracker.active, tracker.ratios end
 function ns.InitDots()
 	tracker = ns.NewTickTracker({
 		data = ns.DOTS, family = 9, filter = "HARMFUL|PLAYER", keyOf = KeyOf, looked = LOOKED_AT, size = Size, new = New,
-		on = ns.DotsOn, flight = FLIGHT, flying = Flying,
+		on = ns.DotsOn, flight = FLIGHT, flying = Flying, confirmAura = true, settle = DropRefused,
 		late = function(dot, n) return (n == 1 and Flying(dot)) and FLIGHT or 0 end,
 		-- (a finisher's combo points are not known afterwards: never started from an aura)
 		fromAura = function(data) return not Finisher(data) end,

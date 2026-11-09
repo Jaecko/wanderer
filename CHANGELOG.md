@@ -1,7 +1,7 @@
-# Wanderer 1.4.6
+# Wanderer 1.4.8
 
 ### Changed
-- The label stays whole in a fight, as it is out of one. The option "In a fight, only the essentials" remains for those who want it.
+- The label now goes behind the interface's windows. It stays over the world, the name plates and the unit frames.
 
 ### Fixed
-- "Not yours yet" no longer shows after your first blow: the blow that starts the fight now counts.
+- Your damage over time no longer shows on an enemy when the spell was resisted, missed, dodged or met immunity.
