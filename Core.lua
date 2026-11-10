@@ -796,6 +796,8 @@ local function WatchAnswer()
 end
 
 local function HideWarning()
+	-- (with a controller, a game's popup closed from here writes the game's controller state: left to you)
+	if ns.Util.UsingPad and ns.Util.UsingPad() then return end
 	if StaticPopup_Hide then ns.Util.Safe(StaticPopup_Hide, WARNING) end
 end
 
@@ -941,11 +943,7 @@ end)
 -- found at another value than Wanderer wrote was changed meanwhile (V for the plates, the damage meter's
 -- switch, the game's options, another addon): it is yours, never written over nor "given back". Wanderer
 -- writes it again only once what it wants changes (cvarsLeft: what it wanted then, for each character).
-local function SameValue(a, b)
-	if a == b then return true end
-	local x, y = tonumber(a), tonumber(b)
-	return x ~= nil and y ~= nil and math.abs(x - y) < 0.001
-end
+local SameValue = ns.Util.SameValue
 
 -- Saved before 0.46 (no record of what Wanderer wrote): every setting found away from the value kept as yours
 -- counted as Wanderer's, so it comes back (as it did then).
@@ -1863,7 +1861,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		ns.inCombat = false
 		if pendingApply or (ns.db.enabled and (ns.db.combatEnemies or ns.db.enemyNames == "near")) then ns.Apply() end
 		if pendingProfile then ns.UpdatePlaceProfile() end
-	else -- zone changes
+	elseif event ~= "ADDON_LOADED" then -- zone changes (another addon's loading is not one)
 		UpdateZone()
 	end
 end)

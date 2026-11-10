@@ -220,6 +220,9 @@ local function ShowNext()
 			if notice.onShow then notice.onShow() end
 			slot.frame:SetAlpha(0)
 			slot.frame:Show()
+			-- (the first filled again, perhaps in its other place: the second, still shown, stands where it should)
+			local second = slots[2]
+			if slot.index == 1 and second and second.notice and second.frame:IsShown() then Place(second) end
 		end
 	end
 end

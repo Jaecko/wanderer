@@ -305,9 +305,11 @@ local function OnUpdate(self, elapsed)
 	end
 	for index, row in ipairs(rows) do
 		local target = (index - 1) * step
-		if math.abs(target - row.y) < 0.5 then row.y = target else row.y = row.y + (target - row.y) * slide end
-		row:ClearAllPoints()
-		row:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, row.y)
+		if row.y ~= target then
+			if math.abs(target - row.y) < 0.5 then row.y = target else row.y = row.y + (target - row.y) * slide end
+			row:ClearAllPoints()
+			row:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, row.y)
+		end
 	end
 	if not rows[1] and not queue[1] then self:Hide() end
 end

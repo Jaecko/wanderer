@@ -25,13 +25,7 @@ local function Entries()
 		{ key = "menu", label = "Wanderer", hint = L.BAR_MENU_HINT, gold = true,
 			run = function(self) ns.ShowMenu(self) end, right = function() ns.OpenOptions() end },
 		{ key = "todo", label = L.TODO_TITLE, run = function() ns.ToggleTodo() end,
-			summary = function()
-				local lines = {}
-				for _, item in ipairs(ns.TodoItems()) do
-					if not item.done and #lines < 3 and type(item.text) == "string" then lines[#lines + 1] = { text = item.text } end
-				end
-				return lines
-			end },
+			summary = function() return ns.TodoLines() end },
 	}
 	-- The extensions' windows (not the shopping list: it stays in the menu).
 	for _, extension in ipairs(ns.EXTENSIONS or {}) do

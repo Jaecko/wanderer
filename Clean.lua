@@ -32,6 +32,7 @@ local driver
 local since = 0
 local sinceButtons = 0
 local buttonsAlpha -- the opacity the minimap buttons were given last
+local trackerAlpha -- the opacity the tracker was given last
 local BUTTONS_AGAIN = 2 -- seconds: buttons added by other addons meanwhile take the opacity too
 local hoverMinimap, hoverTracker = 0, 1 -- current opacities of the faded parts
 local minimapTween, trackerTween = U.Tween(0), U.Tween(1)
@@ -96,7 +97,12 @@ local function OnUpdate(_, elapsed)
 	if world and world.cleanTracker and ObjectiveTrackerFrame and not TrackerTaken() then
 		local over = ns.revealing or (ObjectiveTrackerFrame:IsShown() and ns.Util.IsMouseOver(ObjectiveTrackerFrame)) or false
 		hoverTracker = trackerTween:Step(over and 1 or TRACKER_REST, elapsed, FADE_IN, FADE_OUT)
-		ObjectiveTrackerFrame:SetAlpha(hoverTracker)
+		if hoverTracker ~= trackerAlpha then
+			trackerAlpha = hoverTracker
+			ObjectiveTrackerFrame:SetAlpha(hoverTracker)
+		end
+	else
+		trackerAlpha = nil -- (left to the game or to another: written again when it comes back)
 	end
 end
 
@@ -516,6 +522,8 @@ end
 -- server; Edit Mode adds when each one shows). Wanderer never keeps a second switch for it: it opens the
 -- game's page.
 function ns.OpenGameActionBars()
+	-- (never with a controller: the game's panel opened by an addon blocks the game's own actions)
+	if U.UsingPad() then return false end
 	local GameSettings = _G.Settings -- (Settings in this file is a layout helper)
 	local id = GameSettings and GameSettings.ACTION_BAR_CATEGORY_ID
 	-- (Wanderer's own settings out of the way: the game's page in view)

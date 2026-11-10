@@ -171,8 +171,7 @@ local function ReadItemLevel(unit)
 			local level = U.ItemLevel(link)
 			if not level then return nil, true end
 			sum, worn = sum + level, worn + 1
-			local equip = select(9, Safe(GetItemInfo, link))
-			if slot == 16 and equip == "INVTYPE_2HWEAPON" and not Clean(Safe(GetInventoryItemLink, unit, 17)) then sum = sum + level end
+			if slot == 16 and U.ItemEquipKind(link) == "INVTYPE_2HWEAPON" and not Clean(Safe(GetInventoryItemLink, unit, 17)) then sum = sum + level end
 		end
 	end
 	if worn > 0 then return math.floor(sum / 16 + 0.5) end

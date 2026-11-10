@@ -281,14 +281,15 @@ function ns.RefreshMinimapLook()
 	else
 		driver:Hide()
 		info:Hide()
+		local wasOn = masked or next(kept) ~= nil
 		if masked and Minimap.SetMaskTexture then
 			Safe(Minimap.SetMaskTexture, Minimap, ROUND_MASK)
 			masked = false
 		end
 		for frame in pairs(kept) do GiveBack(frame) end
 		coords, searched = nil, 0
-		-- (the discreet minimap, when asked, hides the ring again)
-		ns.RefreshClean()
+		-- (the discreet minimap, when asked, hides the ring again; only after a look given back: this runs after every fight)
+		if wasOn then ns.RefreshClean() end
 	end
 end
 

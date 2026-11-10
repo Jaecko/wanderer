@@ -70,11 +70,7 @@ local function Originals()
 	return ns.root.sparkleCvars
 end
 
-local function Same(a, b)
-	if a == b then return true end
-	local x, y = tonumber(a), tonumber(b)
-	return x ~= nil and y ~= nil and math.abs(x - y) < 0.001
-end
+local Same = U.SameValue
 
 -- A held setting changed by you since Wanderer wrote it (the game's options): your value is the one given back.
 local function Adopt(name)

@@ -5,16 +5,12 @@ local L = ns.L
 -- button), drawn by Wanderer's own settings window (SettingsWindow.lua). Options that only matter when
 -- another one is on sit under it, greyed while it is off. Getters always read ns.db, the active profile,
 -- so switching profiles only needs a refresh.
--- Each setting is also registered with the game's settings (a proxy setting, by page), out of its panel:
--- the game's own panel shows a single page that opens Wanderer's window.
+-- The game's own panel shows a single page that opens Wanderer's window (LauncherPage, at the end): nothing
+-- else of the game's settings is built.
 
-local HAS_GAME = Settings and Settings.RegisterVerticalLayoutCategory and Settings.RegisterProxySetting and true or false
-local mainCategory -- the game's first page (never added to its panel)
-local category, layout -- the game's page being filled
-local settings = {}
 -- The pages, in order: { key, name, group ("wanderer", "extensions", "more"), rows, preview, addon }.
 -- A row: { kind ("header", "check", "slider", "dropdown", "button"), label, desc, get, set, parent, isOn,
--- yield, partial, page, section, initializer (the game's) }.
+-- yield, partial, page, section, default }.
 ns.SETTINGS_PAGES = {}
 -- Each option's words ({ label, page, order, format, choices }) by its variable and, when known, by its path in
 -- the profile ("label.scale"): "What you changed" (Changes.lua) names the settings with them.
@@ -43,32 +39,19 @@ end
 local function Header(text, options)
 	sectionName = text
 	advanced = type(options) == "table" and options.advanced and true or false
-	if layout then layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text)) end
 	return AddRow({ kind = "header", label = text })
 end
 
--- Starts a page: the home page first, then the others (folded under it in the game's settings).
+-- Starts a page: the home page first, then the others.
 local function Page(name, key, group)
 	pageName, sectionName, advanced = name, nil, false
 	page = { key = key, name = name, group = group or "wanderer", rows = {} }
 	ns.SETTINGS_PAGES[#ns.SETTINGS_PAGES + 1] = page
-	if not HAS_GAME then return page end
-	if not mainCategory then
-		category, layout = Settings.RegisterVerticalLayoutCategory(name)
-		mainCategory = category
-	elseif Settings.RegisterVerticalLayoutSubcategory then
-		category, layout = Settings.RegisterVerticalLayoutSubcategory(mainCategory, name)
-	end
 	return page
 end
 
 local function Button(label, text, tooltip, onClick)
-	local row = AddRow({ kind = "button", label = label, text = text, desc = tooltip, onClick = onClick })
-	if layout and CreateSettingsButtonInitializer then
-		row.initializer = CreateSettingsButtonInitializer(label, text, onClick, tooltip, true)
-		layout:AddInitializer(row.initializer)
-	end
-	return row
+	return AddRow({ kind = "button", label = label, text = text, desc = tooltip, onClick = onClick })
 end
 
 -- A shortcut of the home page (never found by the search, never in the game's settings): a button doing
@@ -112,24 +95,16 @@ end
 local function Under(row, parent, isOn)
 	if not (type(row) == "table" and type(parent) == "table") then return row end
 	row.parent, row.isOn = parent, isOn
-	if row.initializer and parent.initializer and row.initializer.SetParentInitializer then
-		row.initializer:SetParentInitializer(parent.initializer, isOn)
-	end
 	return row
 end
 
--- A setting changed: in every profile of this character (ns.ChangeEverywhere). Registered with the game too.
-local function Proxy(variable, varType, label, default, getter, setter)
+-- A setting changed: in every profile of this character (ns.ChangeEverywhere).
+local function Proxy(variable, label, setter)
 	local set = function(value) ns.ChangeEverywhere(function() setter(value) end) end
-	local setting
-	if HAS_GAME then
-		setting = Settings.RegisterProxySetting(category, "WANDERER_" .. variable, varType, label, default, getter, set)
-		settings[#settings + 1] = setting
-	end
 	-- (its words and page, for "What you changed": Changes.lua)
 	order = order + 1
 	ns.OPTION_WORDS.variables[variable] = { label = label, page = pageName, order = order }
-	return setting, set
+	return set
 end
 
 -- An option whose job another addon may do (Compat.lua): greyed while it does, with who does it, and found
@@ -149,28 +124,16 @@ end
 
 -- Every control returns its row (to put other options under it).
 local function Checkbox(variable, label, tooltip, default, getter, setter)
-	local setting, set = Proxy(variable, HAS_GAME and Settings.VarType.Boolean, label, default, getter, setter)
-	local row = AddRow({ kind = "check", variable = variable, label = label, desc = tooltip, get = getter, set = set })
-	if setting then row.initializer = Settings.CreateCheckbox(category, setting, tooltip) end
-	return row
+	local set = Proxy(variable, label, setter)
+	return AddRow({ kind = "check", variable = variable, label = label, desc = tooltip, get = getter, set = set, default = default })
 end
 
 -- choices: list of { value, label }, or a function returning it.
 local function Dropdown(variable, label, tooltip, default, choices, getter, setter)
-	local setting, set = Proxy(variable, HAS_GAME and Settings.VarType.String, label, default, getter, setter)
+	local set = Proxy(variable, label, setter)
 	ns.OPTION_WORDS.variables[variable].choices = choices
-	local row = AddRow({ kind = "dropdown", variable = variable, label = label, desc = tooltip, get = getter, set = set,
-		choices = choices })
-	if setting then
-		row.initializer = Settings.CreateDropdown(category, setting, function()
-			local container = Settings.CreateControlTextContainer()
-			for _, choice in ipairs(type(choices) == "function" and choices() or choices) do
-				container:Add(choice[1], choice[2])
-			end
-			return container:GetData()
-		end, tooltip)
-	end
-	return row
+	return AddRow({ kind = "dropdown", variable = variable, label = label, desc = tooltip, get = getter, set = set,
+		choices = choices, default = default })
 end
 
 -- One choice written in several settings of the profile (a dropdown with a getter): its paths named by its
@@ -195,21 +158,14 @@ local function Slider(variable, label, path, format, onChange)
 	local section, key = ns.Util.SplitPath(path)
 	local min, max, step = unpack(ns.RANGES[path])
 	local getter = function() return ns.db[section][key] end
-	local setting, set = Proxy(variable, HAS_GAME and Settings.VarType.Number, label, ns.DEFAULTS[section][key], getter,
-		function(value)
-			ns.db[section][key] = value
-			if onChange then onChange() end
-		end)
+	local set = Proxy(variable, label, function(value)
+		ns.db[section][key] = value
+		if onChange then onChange() end
+	end)
 	local words = ns.OPTION_WORDS.variables[variable]
 	words.format, ns.OPTION_WORDS.paths[path] = format, words
-	local row = AddRow({ kind = "slider", variable = variable, label = label, get = getter, set = set, min = min, max = max,
-		step = step, text = function(value) return SliderText(format, value) end })
-	if setting then
-		local options = Settings.CreateSliderOptions(min, max, step)
-		options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, row.text)
-		row.initializer = Settings.CreateSlider(category, setting, options)
-	end
-	return row
+	return AddRow({ kind = "slider", variable = variable, label = label, get = getter, set = set, min = min, max = max,
+		step = step, text = function(value) return SliderText(format, value) end, default = ns.DEFAULTS[section][key] })
 end
 
 -- Checkbox bound to a key of a sub-table of the active profile.
@@ -235,9 +191,6 @@ local function IsOn(section, key)
 end
 
 function ns.RefreshOptions()
-	for _, setting in ipairs(settings) do
-		if setting.NotifyUpdate then pcall(setting.NotifyUpdate, setting) end
-	end
 	if ns.RefreshSettingsWindow then ns.RefreshSettingsWindow() end
 end
 
@@ -284,6 +237,8 @@ end
 local function CloseSettings()
 	if ns.CloseSettingsWindow then ns.CloseSettingsWindow() end
 	if not (SettingsPanel and SettingsPanel:IsShown()) then return end
+	-- (with a controller, the game's panel closed from here writes the game's controller state: left open)
+	if ns.Util.UsingPad() then return end
 	if SettingsPanel.Close then pcall(SettingsPanel.Close, SettingsPanel)
 	elseif HideUIPanel then pcall(HideUIPanel, SettingsPanel) end
 end
@@ -331,18 +286,12 @@ end
 local function ThemesPage()
 	pageName, sectionName, advanced = L.PAGE_THEMES, nil, false
 	ns.SETTINGS_PAGES[#ns.SETTINGS_PAGES + 1] = { key = "themes", name = L.PAGE_THEMES, group = "wanderer", rows = {} }
-	if mainCategory and Settings.RegisterCanvasLayoutSubcategory then
-		Settings.RegisterCanvasLayoutSubcategory(mainCategory, CreateFrame("Frame"), L.PAGE_THEMES)
-	end
 end
 
 -- The ways to play: the cards of Playstyles.lua, drawn by the window (no rows either).
 local function PlaystylesPage()
 	pageName, sectionName, advanced = L.PAGE_PLAYSTYLES, nil, false
 	ns.SETTINGS_PAGES[#ns.SETTINGS_PAGES + 1] = { key = "playstyles", name = L.PAGE_PLAYSTYLES, group = "wanderer", rows = {} }
-	if mainCategory and Settings.RegisterCanvasLayoutSubcategory then
-		Settings.RegisterCanvasLayoutSubcategory(mainCategory, CreateFrame("Frame"), L.PAGE_PLAYSTYLES)
-	end
 end
 
 -- The names over the heads: a preset, who shows in a fight and near you; one by one; by place (folded).
@@ -722,7 +671,10 @@ local function ActionBarsPage()
 	-- (a first section named as the page: no title of its own)
 	Header(L.PAGE_ACTION_BARS)
 	-- (which bars show is the game's own option: never a second switch here, its page a click away)
-	Button(L.BARS_SHOWN_GAME, L.BARS_SHOWN_GAME_BUTTON, L.BARS_SHOWN_GAME_DESC, function() ns.OpenGameActionBars() end)
+	-- (not with a controller: the game's settings opened from an addon block the game's own actions)
+	if not ns.Util.UsingPad() then
+		Button(L.BARS_SHOWN_GAME, L.BARS_SHOWN_GAME_BUTTON, L.BARS_SHOWN_GAME_DESC, function() ns.OpenGameActionBars() end)
+	end
 	-- (Wanderer's fade dims the bars out of combat: said here, its setting one click away)
 	AddRow({ kind = "button", label = L.BARS_FADE, desc = L.BARS_FADE_DESC,
 		text = function()
@@ -964,7 +916,10 @@ local function ProfilesPage()
 			ns.SetProfile(name)
 		end)
 	end)
-	Button(L.PROFILE_COPY, L.PROFILE_COPY_BUTTON, L.PROFILE_COPY_DESC, function() ns.Skin.AskText(L.PROFILE_COPY_PROMPT, "", ns.CopyProfile) end)
+	Button(L.PROFILE_COPY, L.PROFILE_COPY_BUTTON, L.PROFILE_COPY_DESC, function()
+		-- (a name already taken: a number after it, never another profile written over)
+		ns.Skin.AskText(L.PROFILE_COPY_PROMPT, "", function(name) ns.CopyProfile(UniqueName(name)) end)
+	end)
 	-- (a character's own profile is never deleted: greyed while it is the one in use)
 	local delete = Button(L.PROFILE_DELETE, L.REMOVE, L.PROFILE_DELETE_DESC, DeleteAsk)
 	delete.usable = function() return ns.profileName ~= ns.OwnProfile() end

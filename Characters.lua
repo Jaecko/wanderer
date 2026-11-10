@@ -114,18 +114,7 @@ end
 -- nil. key: one provider for that kind of line (a new one takes its place).
 local providers = {}
 
-function ns.CharacterLine(fn, key)
-	if type(fn) ~= "function" then return end
-	if key then
-		for _, known in ipairs(providers) do
-			if known.key == key then
-				known.fn = fn
-				return
-			end
-		end
-	end
-	providers[#providers + 1] = { fn = fn, key = key }
-end
+function ns.CharacterLine(fn, key) U.Provide(providers, fn, key) end
 
 local function Provided(key)
 	for _, known in ipairs(providers) do
@@ -329,7 +318,6 @@ end
 
 local function Draw()
 	if not (window and window:IsShown()) then return end
-	Note()
 	local all = Sorted()
 	local offset = list:Clamp(#all)
 	local total = 0
@@ -414,6 +402,7 @@ local function Create()
 	window:SetSize(WIDTH, margin * 2 + 30 + 12 + list:GetHeight() + 8 + 18)
 	window:HookScript("OnShow", function(self)
 		self:SetScale(Skin.Scale())
+		Note()
 		Draw()
 	end)
 	Skin.Get(window):Layout()

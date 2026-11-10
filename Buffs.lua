@@ -70,7 +70,8 @@ local function Scan()
 		-- (who it is: its GUID; where the game hides it, instances, its token)
 		local guid = Clean(Safe(UnitGUID, unit)) or ("unit:" .. unit)
 		local alive = Clean(Safe(UnitIsConnected, unit)) ~= false and not Clean(Safe(UnitIsDeadOrGhost, unit))
-		if alive then
+		-- (too far to be seen: the game may say no aura at all, nothing has faded)
+		if alive and Clean(Safe(UnitIsVisible, unit)) ~= false then
 			present[guid] = true
 			for index = 1, MAX_AURAS do
 				local name, icon, duration = Aura(unit, index)

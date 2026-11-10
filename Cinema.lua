@@ -35,8 +35,9 @@ local FADED_FRAMES = {
 
 -- Faded only during a conversation scene (needed the rest of the time: a
 -- cast out of a fight, a vehicle to leave): the scene's panel sits there.
+-- (the controller's own bars and the list of its buttons too: always there otherwise, a controller needs them)
 local SCENE_FRAMES = { "PlayerCastingBarFrame", "CastingBarFrame", "MainMenuBarVehicleLeaveButton",
-	"MultiCastActionBarFrame" }
+	"MultiCastActionBarFrame", "GamepadMainActionBarFrame", "GamepadPersistentInputLegend" }
 local SCENE_FADE_TIME = 0.5 -- a conversation begins: out of the way quickly
 
 -- Portraits that stay fully visible while they show someone.
@@ -206,6 +207,8 @@ local function OnUpdate(_, elapsed)
 		afterScene = true
 		quietTime, calmTime = math.max(quietTime, settings.delay), math.max(calmTime, settings.delay)
 	end
+	-- (a scene begun or ended at the same level, 0: what fades with the scenes only follows all the same)
+	local sceneTurned = wasScene ~= (ns.sceneActive and true or false)
 	wasScene = ns.sceneActive and true or false
 	sinceCheck = sinceCheck + elapsed
 	if sinceCheck >= CHECK_DELAY then
@@ -229,7 +232,7 @@ local function OnUpdate(_, elapsed)
 		playerLevel = playerTween:Step(playerTarget, elapsed, FADE_IN_TIME, fadeOut)
 		changed = true
 	end
-	if changed then ApplyLevel() end
+	if changed or sceneTurned then ApplyLevel() end
 end
 
 -- Combat and a new target must never wait for the next check: what they

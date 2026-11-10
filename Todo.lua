@@ -316,6 +316,12 @@ local function CreateWindow()
 		offset = offset - delta
 		Refresh()
 	end)
+	-- (a controller's right stick: the window's own wheel is not its to find)
+	ns.Skin.PadWindow(window, { wheel = function(delta)
+		offset = offset - delta
+		Refresh()
+		return true
+	end })
 	scrollBar = ns.Skin.ScrollBar(window, function(at)
 		offset = math.floor(at + 0.5)
 		Refresh()
@@ -436,6 +442,15 @@ function ns.TodoPending()
 	local count = 0
 	for _, item in ipairs(Items()) do if not item.done then count = count + 1 end end
 	return count
+end
+
+-- The first lines left to do, three at most (the bar's and the card's hover): { { text } }.
+function ns.TodoLines()
+	local lines = {}
+	for _, item in ipairs(Items()) do
+		if not item.done and #lines < 3 and type(item.text) == "string" then lines[#lines + 1] = { text = item.text } end
+	end
+	return lines
 end
 
 -- (tests)

@@ -49,7 +49,6 @@ local function GameIcon(unit)
 	local mine = Clean(Safe(UnitIsUnit, unit, "player"))
 	return Clean(Safe(GetCVar, mine and "ReplaceMyPlayerPortrait" or "ReplaceOtherPlayerPortraits")) == "1"
 end
-ns.PortraitGameIcon = GameIcon
 
 -- What a portrait shows for a unit ("face" or "icon"): the game's choice, else the frame's exception (row).
 local function Shows(unit, row, look)
@@ -58,7 +57,6 @@ local function Shows(unit, row, look)
 	if want == "face" or want == "icon" then return want end
 	return GameIcon(unit) and "icon" or "face"
 end
-ns.PortraitShows = Shows
 
 local function ClassOf(unit)
 	local _, class = Safe(UnitClass, unit)
@@ -537,10 +535,19 @@ function ns.InitPortraits()
 		if event == "UNIT_HEALTH" then
 			for drawn, entry in pairs(byFrame) do
 				local shown = drawn and ns.UnitFrameUnit(entry)
-				if shown == unit or Clean(Safe(UnitIsUnit, shown, unit)) then Restyle(entry) end
+				if shown == unit or Clean(Safe(UnitIsUnit, shown, unit)) then
+					-- (all a health can change here: dead, tapped; a portrait is not rendered again for each blow)
+					local mark = (Clean(Safe(UnitIsDeadOrGhost, unit)) and 1 or 0) + (Clean(Safe(UnitIsTapDenied, unit)) and 2 or 0)
+					if entry.healthMark ~= mark then
+						entry.healthMark = mark
+						Restyle(entry)
+					end
+				end
 			end
 			return
 		end
+		-- (another unit may be shown now: its dead or tapped state is read again at its next health)
+		for _, entry in pairs(byFrame) do entry.healthMark = nil end
 		-- (the unit frames' look on: it draws the portraits with the bars on its own events)
 		if ns.UF_EVENTS and ns.UF_EVENTS[event] and ns.UnitFramesOn() then return end
 		Soon()

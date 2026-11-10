@@ -794,6 +794,28 @@ function Util.Signal()
 	}
 end
 
+-- A provider added to a list ({ fn, key }): one given with a key takes the place of the one before it with
+-- that key.
+function Util.Provide(list, fn, key)
+	if type(fn) ~= "function" then return end
+	if key then
+		for _, known in ipairs(list) do
+			if known.key == key then
+				known.fn = fn
+				return
+			end
+		end
+	end
+	list[#list + 1] = { fn = fn, key = key }
+end
+
+-- Two values of a game setting the same (numbers within a rounding: "1" and "1.0").
+function Util.SameValue(a, b)
+	if a == b then return true end
+	local x, y = tonumber(a), tonumber(b)
+	return x ~= nil and y ~= nil and math.abs(x - y) < 0.001
+end
+
 -- A quality's color (r, g, b).
 function Util.QualityColor(quality)
 	if C_Item and C_Item.GetItemQualityColor then
@@ -1133,8 +1155,9 @@ function Util.ChatInsert(link)
 	return true
 end
 
--- A menu of the game's (MenuUtil) at a frame; false when the game has none.
+-- A menu of the game's (MenuUtil) at a frame; false when the game has none. With a controller, a card of ours (Pad.lua).
 function Util.Menu(owner, build)
+	if ns.Pad and ns.Pad.On() then return ns.Pad.Menu(owner, build) end
 	if not (MenuUtil and MenuUtil.CreateContextMenu) then return false end
 	MenuUtil.CreateContextMenu(owner, build)
 	return true

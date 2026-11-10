@@ -181,8 +181,25 @@ end
 -- Scenes on: Wanderer listens instead of the game's windows; off: given back.
 local function SetTaken(take) taker:Take(take) end
 
--- The game's own window shows the conversation (Shift, fight...).
-local function Relay(event, ...) taker:Relay(event, ...) end
+-- A game window still open (from a fight, or Shift): Wanderer takes the
+-- events back once it closes, never in the middle of its conversation.
+local function GameWindowOpen()
+	for _, name in ipairs({ "GossipFrame", "QuestFrame" }) do
+		local window = _G[name]
+		if window and window.IsShown and window:IsShown() then return true end
+	end
+	return false
+end
+
+-- The game's own window shows the conversation (Shift, fight...). With a controller, that window opened from
+-- here would leave the game's actions blocked for the session: the conversation is closed instead.
+local function Relay(event, ...)
+	if U.UsingPad() and not GameHandlesAlone(event) and not GameWindowOpen() then
+		if event == "GOSSIP_SHOW" then Safe(Gossip.CloseGossip) else Safe(CloseQuest) end
+		return
+	end
+	taker:Relay(event, ...)
+end
 
 -- Text -------------------------------------------------------------------------------
 
@@ -923,7 +940,9 @@ local function RenderHeader(y)
 	-- The ring only when it can be cut round: never a square.
 	portraitRing:SetShown(pictured and portraitRing.round or false)
 	nameText:SetWidth(textWidth)
-	if not pcall(nameText.SetText, nameText, scene.name or "") then nameText:SetText("") end
+	local speaker = scene.name
+	if not U.IsSecret(speaker) and not speaker then speaker = "" end
+	if not pcall(nameText.SetText, nameText, speaker) then nameText:SetText("") end
 	local title = Clean(scene.title)
 	titleText:SetWidth(textWidth)
 	titleText:SetText(title and (scene.tag and (title .. "\n" .. scene.tag) or title) or "")
@@ -962,7 +981,9 @@ end
 -- The words, page by page.
 local function RenderBody(y)
 	bodyText:SetWidth(layout.inner)
-	local words = scene.back and scene.previous.text or scene.pages[scene.page] or ""
+	local words
+	if scene.back then words = scene.previous.text else words = scene.pages[scene.page] end
+	if not U.IsSecret(words) and not words then words = "" end
 	-- (Spoken reading this page: the sentence it says stands out)
 	if not scene.back and scene.voice and scene.voice.page == scene.page then words = Voiced(words, scene.voice.sentence) end
 	if not pcall(bodyText.SetText, bodyText, words) then bodyText:SetText("") end
@@ -1026,13 +1047,12 @@ local function RenderRewards(y)
 	Place(rewardsLabel, y, margin)
 	y = y + U.Measure(rewardsLabel, "GetStringHeight", 12) + SMALL_GAP
 	local column = math.floor((layout.inner - GAP) / 2)
-	local number = 0
 	for index, reward in ipairs(scene.rewards) do
 		local item = RewardItem(index)
 		local chosen
 		if reward.kind == "choice" and scene.kind == "QUEST_COMPLETE" then
-			number = number + 1
-			chosen = number
+			-- (the game's own number for it: a choice not given yet must never shift the others)
+			chosen = reward.index
 		end
 		PaintReward(item, reward, chosen)
 		item:SetSize(column, REWARD_ICON + 4)
@@ -1102,7 +1122,7 @@ local function PlaceButton(button, label, key, onClick, dim, right, y)
 		button.paper = paper
 	end
 	-- (with a controller, no key of a keyboard said: the pad's buttons are the game's)
-	local keyText = (ns.Pad and ns.Pad.Navigating()) and "" or ("   " .. Hex("keys") .. key .. "|r")
+	local keyText = ns.Pad.On() and "" or ("   " .. Hex("keys") .. key .. "|r")
 	button.text:SetText(label .. keyText)
 	local buttonWidth = U.Measure(button.text, "GetStringWidth", 80) + BUTTON_PADDING * 2
 	button:SetSize(buttonWidth, BUTTON_HEIGHT)
@@ -1155,7 +1175,9 @@ local function RenderActions(y, cost, locked)
 	elseif CanGoBack() then
 		hint = L.SCENE_KEYS_BACK
 	end
-	if ns.Pad and ns.Pad.Navigating() and not locked and hint ~= L.SCENE_KEYS_BACK then hint = L.SCENE_PAD_KEYS end
+	if ns.Pad.On() and not locked and hint ~= L.SCENE_KEYS_BACK then
+		hint = ns.Skin.PadKeys({ { "PAD1", "CHOOSE" }, { "PAD2", "LEAVE" } }) or L.SCENE_PAD_KEYS
+	end
 	keysText:SetText(hint)
 	if locked and scene.warned then Paint(keysText, "accent") end
 	keysText:SetWidth(math.max(right - margin - SMALL_GAP, 40))
@@ -1170,7 +1192,7 @@ local function RenderActions(y, cost, locked)
 		keysLink:SetSize(math.min(U.Measure(keysText, "GetStringWidth", 120), keysText:GetWidth() or 120), BUTTON_HEIGHT)
 	end
 	-- A controller: the page read again by the game's navigation, the first answer (else the main button) chosen.
-	if ns.Pad and ns.Pad.On() then
+	if ns.Pad.On() then
 		local first = last and choiceRows[1]
 		if not (first and first:IsShown()) then first = actionButtons[1] and actionButtons[1]:IsShown() and actionButtons[1] or actionButtons[2] end
 		ns.Pad.Refresh(panel, first)
@@ -1492,16 +1514,6 @@ local function Finish(closeConversation)
 	target = 0
 end
 
--- A game window still open (from a fight, or Shift): Wanderer takes the
--- events back once it closes, never in the middle of its conversation.
-local function GameWindowOpen()
-	for _, name in ipairs({ "GossipFrame", "QuestFrame" }) do
-		local window = _G[name]
-		if window and window.IsShown and window:IsShown() then return true end
-	end
-	return false
-end
-
 -- A scene that could not be drawn (a page the game says in a way Wanderer does not expect): let go, and the
 -- game's own window shows the conversation instead. Said once a session, quietly; the fault itself in the
 -- diagnostic mode.
@@ -1589,7 +1601,8 @@ end
 
 local function Wanted()
 	local db = ns.db
-	return db and db.enabled and db.scene.enabled and not InCombatLockdown() and not U.IsSkipping()
+	-- (Shift never asks for the game's window with a controller: see Relay)
+	return db and db.enabled and db.scene.enabled and not InCombatLockdown() and (U.UsingPad() or not U.IsSkipping())
 		and not ns.SceneYielded()
 end
 
@@ -1794,7 +1807,7 @@ function ns.InitScene()
 	PlacePanel(1)
 	panel:EnableMouse(true)
 	-- A controller: the game's navigation moves among the answers and buttons; its back button leaves.
-	if ns.Skin.PadWindow then ns.Skin.PadWindow(panel, { close = function() Leave() end }) end
+	ns.Skin.PadWindow(panel, { close = function() Leave() end })
 	-- (only a click begun on the panel: a camera drag ending over it neither turns the page nor accepts)
 	panel:SetScript("OnMouseDown", function(self, button) self.pressed = button end)
 	panel:SetScript("OnMouseUp", function(self, button)

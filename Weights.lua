@@ -92,6 +92,7 @@ local function Row(index)
 	row.highlight:SetColorTexture(1, 0.82, 0, 0.06)
 	row.highlight:Hide()
 	row:SetScript("OnMouseWheel", function(self, delta) Change(self.stat, delta) end)
+	row.padAdjust = function(self, delta) Change(self.stat, delta) end -- (a controller: left and right of the cross)
 	row:SetScript("OnEnter", function(self) self.highlight:Show() end)
 	row:SetScript("OnLeave", function(self) self.highlight:Hide() end)
 	rows[index] = row

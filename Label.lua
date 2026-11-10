@@ -886,14 +886,17 @@ local function AnalyzeUnit()
 		a.lines = ReadUnitTooltipLines()
 		local clean = {}
 		for _, line in ipairs(a.lines) do if line.text then clean[#clean + 1] = line end end
-		a.action = db.showProfessions and DetectProfessionAction(clean) or nil
+		-- (the name and the role say nothing of what can be done: a "Herbalism Trainer" gathers no herb)
+		local role, below = DetectRole(clean), {}
+		for index = role and 3 or 2, #clean do below[#below + 1] = clean[index] end
+		a.action = db.showProfessions and DetectProfessionAction(below) or nil
 		a.quests = db.showQuests and DetectQuests(clean) or nil
 		if db.showQuests then
 			local protected = false
 			for _, line in ipairs(a.lines) do if line.secret then protected = true end end
 			a.quests = WithDrops(guid, RememberedQuests(guid, a.quests, protected))
 		end
-		a.role = db.showNPCRole and DetectRole(clean) or nil
+		a.role = db.showNPCRole and role or nil
 		a.innkeeper = IsInnkeeper(clean)
 		local classification = Clean(Safe(UnitClassification, UNIT))
 		a.rank = classification and CLASSIFICATIONS[classification] or nil
@@ -1259,7 +1262,7 @@ end
 -- a friend, someone to talk to) is the one you look at.
 local SOFT_UNITS = { "softenemy", "softfriend", "softinteract" }
 local function SoftUnit()
-	if not (ns.Pad and ns.Pad.On()) then return nil end
+	if not ns.Pad.On() then return nil end
 	for _, unit in ipairs(SOFT_UNITS) do
 		if Clean(Safe(UnitExists, unit)) and not Clean(Safe(UnitIsGameObject, unit)) then return unit end
 	end
@@ -1441,6 +1444,9 @@ end
 local decided = setmetatable({}, { __mode = "k" }) -- tooltip -> hidden or not, as last decided
 
 local function TooltipWanted(tooltip)
+	-- (the button the controller has chosen: its tooltip, wherever the game believes the cursor is)
+	local chosen = ns.Pad.Current()
+	if chosen and tooltip.IsOwned and Clean(Safe(tooltip.IsOwned, tooltip, chosen)) == true then return false end
 	local name = tooltip.GetName and Clean(Safe(tooltip.GetName, tooltip))
 	-- A fight with the label hidden (option): no tooltip over characters either.
 	local db = ns.db

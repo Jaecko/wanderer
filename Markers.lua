@@ -89,7 +89,8 @@ end
 
 local function Place(frame)
 	local x, y = GetCursorPosition()
-	local scale = UIParent:GetEffectiveScale()
+	-- (a point's offsets are in the frame's own scale: the wheel has one)
+	local scale = frame:GetEffectiveScale()
 	frame:ClearAllPoints()
 	frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / scale, y / scale)
 end

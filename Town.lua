@@ -29,18 +29,7 @@ local lastRepair = -REPAIR_AGAIN
 
 -- fn() -> { text, onClick, hint } or nil: a line of the card. key: one provider for that line (a new one takes
 -- its place, an extension's over Wanderer's own).
-function ns.TownLine(fn, key)
-	if type(fn) ~= "function" then return end
-	if key then
-		for _, known in ipairs(providers) do
-			if known.key == key then
-				known.fn = fn
-				return
-			end
-		end
-	end
-	providers[#providers + 1] = { fn = fn, key = key }
-end
+function ns.TownLine(fn, key) U.Provide(providers, fn, key) end
 
 function ns.TownCardOn()
 	local db = ns.db

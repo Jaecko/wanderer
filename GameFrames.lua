@@ -7,8 +7,7 @@ local _, ns = ...
 -- windows without the game's title bar are not dragged. A window already
 -- open stays where it is when another opens or closes (the game would push
 -- it aside), with a title bar or not, known by name or not. Switched off,
--- the bags go back where the game puts them at once, the other windows when
--- they open next.
+-- they go back where the game puts them when they open next.
 --
 -- Every window shares the map's layer (Skin.Front), the option on or off:
 -- the one opened or clicked last is in front, the map like the others,
@@ -116,9 +115,12 @@ end
 local function Take(window)
 	if taken[window] or not (window.HookScript and window.GetNumPoints) or MapLeftToOther(window) then return end
 	taken[window] = true
-	window:HookScript("OnShow", function() Place(window) end)
-	-- Closed: it opens next time where the game (or you) put it.
-	window:HookScript("OnHide", function() held[window] = nil end)
+	-- Opening again: where it stood before is forgotten, it opens where the game (or you) put it. (Never a hook
+	-- on the hiding of a game's window: the controller interface hooks it too, and does protected work there.)
+	window:HookScript("OnShow", function()
+		held[window] = nil
+		Place(window)
+	end)
 	if window:IsShown() and not held[window] then Hold(window) end
 	-- The map's title bar is on a frame of its own.
 	local chrome = type(window.BorderFrame) == "table" and window.BorderFrame or window
@@ -206,32 +208,31 @@ local function LayerAll()
 					Beside(true)
 					if watch then watch:Cancel() end
 					-- (every 2 s, never in a fight: the windows opened by the game are caught by its own hooks)
-					watch = C_Timer.NewTicker(2, function() if not InCombatLockdown() then Beside() end end)
-				end)
-				window:HookScript("OnHide", function()
-					if watch then watch:Cancel() end
-					watch = nil
+					watch = C_Timer.NewTicker(2, function()
+						if not window:IsShown() then
+							watch:Cancel()
+							watch = nil
+						elseif not InCombatLockdown() then
+							Beside()
+						end
+					end)
 				end)
 			end
 		end
 	end
 end
 
-local waiting = false -- turned off during a fight: done after it
 local Install
 
 function ns.RefreshGameFrames()
-	waiting = false
 	if On() then
 		Install()
 		TakeAll()
 		PlaceAll()
-	elseif InCombatLockdown() then
-		waiting = true
-	else
-		-- Back where the game puts them: the windows when they open next, the bags now.
-		if UpdateContainerFrameAnchors then pcall(UpdateContainerFrameAnchors) end
 	end
+	-- (Off: back where the game puts them when they open next, the bags too. Never by calling the game's placing
+	-- from here: its first run builds the game's list of bags, and built by an addon that list blocks the game's
+	-- own actions in the controller interface.)
 end
 
 -- Any window the game opens as a panel (not only those of the list): in front, and while the option is on,
@@ -264,17 +265,12 @@ end
 function ns.InitGameFrames()
 	local events = CreateFrame("Frame")
 	events:RegisterEvent("ADDON_LOADED")
-	events:RegisterEvent("PLAYER_REGEN_ENABLED")
 	pcall(events.RegisterEvent, events, "GLOBAL_MOUSE_DOWN")
 	events:SetScript("OnEvent", function(_, event)
 		if event == "GLOBAL_MOUSE_DOWN" then
 			-- (a click on a window, or on the map: in front)
 			local window = Clicked()
 			if window and window ~= ns.Skin.InFront() then ns.Skin.Front(window) end
-			return
-		end
-		if event == "PLAYER_REGEN_ENABLED" then
-			if waiting then ns.RefreshGameFrames() end
 			return
 		end
 		LayerAll()

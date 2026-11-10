@@ -148,9 +148,10 @@ function ns.InitIcons()
 	empty:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -8)
 	empty:SetText(L.ICONS_EMPTY)
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererIconDrawer") end
-	-- Closes by itself once the mouse has left it a moment.
+	ns.Skin.PadWindow(drawer)
+	-- Closes by itself once the mouse has left it a moment (never while a controller is in it).
 	drawer:SetScript("OnUpdate", function(self, elapsed)
-		if U.IsMouseOver(self) then
+		if U.IsMouseOver(self) or ns.Skin.PadHolds(self) then
 			outside = 0
 		else
 			outside = outside + elapsed

@@ -12,7 +12,6 @@ local L = {
 	PRESET_ALL = "Show everything",
 	PRESET_CUSTOM = "Custom",
 	RESTORE = "Restore",
-	RESTORE_DESC = "Switches Wanderer off and gives back everything it changed, as the game draws it. Its settings are kept for when you turn it on again.",
 	MINIMAP_BUTTON = "Minimap button",
 	MINIMAP_PRESET = "Preset: %s",
 	MINIMAP_HINT = "Left click: Wanderer's card. Right click: the settings. Drag: move.",
@@ -1423,6 +1422,16 @@ local L = {
 	SCENE_PAD_KEYS = "Bottom button: choose · right button: leave",
 	EXT_PROFESSIONS_SHORT = "your professions on a calm, visual workbench",
 	EXT_PROFESSIONS = "Your professions on one visual workbench: recipes as icons, reagents as cards, what to craft next, Merchant's Favor and your characters. A separate download: search Wanderer Professions in the CurseForge app.",
+	PAD_SWITCH_HINT = "Triggers: switch window",
+	PAD_ALT_HINT = "Left button: more choices",
+	PAD_DO_SWITCH = "Switch window",
+	PAD_DO_MORE = "More choices",
+	PAD_DO_CHOOSE = "Choose",
+	PAD_DO_LEAVE = "Leave",
+	PAD_DO_BACK = "Back",
+	PAD_DO_MAP = "Map",
+	PAD_DO_ZOOM = "Zoom",
+	PAD_DO_NOTE = "Note",
 }
 
 

@@ -95,7 +95,7 @@ local HANDLERS = {
 		HidePopup("PARTY_INVITE")
 	end,
 	RESURRECT_REQUEST = function(db)
-		if not db.acceptResurrect or Fighting() or U.IsSkipping() then return end
+		if not db.acceptResurrect or Fighting() then return end
 		-- (in a raid, the choice stays the player's, as the game leaves it: the raid may want you to wait)
 		local _, kind = Safe(IsInInstance)
 		if Clean(Safe(IsInRaid)) or Clean(kind) == "raid" then return end
@@ -114,7 +114,8 @@ function ns.InitSocial()
 	for event in pairs(HANDLERS) do frame:RegisterEvent(event) end
 	frame:SetScript("OnEvent", function(_, event, ...)
 		local db = ns.db
-		if not (db and db.enabled) then return end
+		-- (Shift held: nothing answered for you; a whisper is not a window to answer, it would be lost)
+		if not (db and db.enabled) or (U.IsSkipping() and event ~= "CHAT_MSG_WHISPER") then return end
 		HANDLERS[event](db.social, ...)
 	end)
 end

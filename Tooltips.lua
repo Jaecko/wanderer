@@ -155,7 +155,7 @@ local POWER_REFRESH = 0.2
 
 local function UpdateTooltipPower()
 	if not powerBar then return end
-	local unit = GameTooltip:IsShown() and select(2, Safe(GameTooltip.GetUnit, GameTooltip))
+	local unit = GameTooltip:IsShown() and Clean(select(2, Safe(GameTooltip.GetUnit, GameTooltip)))
 	local health = _G.GameTooltipStatusBar
 	local on = unit and ns.db and ns.db.enabled and ns.db.label.showPower and health and health:IsShown()
 	powerBar:SetShown(on and U.FillPowerBar(powerBar, unit) or false)

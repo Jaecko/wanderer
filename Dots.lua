@@ -303,6 +303,10 @@ function ns.InitDots()
 			for key, at in pairs(shields) do
 				if now - at > SHIELD_FOR then shields[key] = nil end
 			end
+			-- (every enemy that dodged or resisted anything: kept only as long as it can speak of a cast)
+			for key, seen in pairs(refused) do
+				if now - seen.at > REFUSED_AFTER + FLIGHT then refused[key] = nil end
+			end
 		end,
 		aura = function(unit)
 			-- (an enemy shown whose auras changed: read again now, and drawn if asleep)

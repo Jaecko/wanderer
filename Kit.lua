@@ -753,7 +753,6 @@ function Skin.Resizable(window, opts)
 		if keep then keep(window) end
 	end)
 	if opts.onSizing then window:HookScript("OnSizeChanged", function() if sizing then opts.onSizing() end end) end
-	function grip:IsSizing() return sizing end
 	window.grip = grip
 	return grip
 end
@@ -819,7 +818,9 @@ local function AskWindow()
 	-- shown, so the first is let go unanswered.
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererAsk") end
 	Skin.CloseButton(ask, function() ask.no:Click() end)
-	ask:HookScript("OnHide", function()
+	ask:HookScript("OnHide", function(self)
+		-- (hidden with the whole interface: still asked, shown again with it)
+		if self:IsShown() then return end
 		local open = question
 		question = nil
 		if open and open.refuse then open.refuse() end
@@ -869,7 +870,8 @@ local function Open(open)
 	window:SetFrameStrata(open.strata or "DIALOG")
 	Layout(window)
 	if window:IsShown() then if window.Raise then window:Raise() end else window:Show() end
-	if open.input then
+	-- (with a controller, no key to write with: the box would keep the game's keys)
+	if open.input and not (U.UsingPad and U.UsingPad()) then
 		window.input:SetFocus()
 		window.input:HighlightText()
 	end
@@ -940,6 +942,7 @@ function Skin.Table(parent, spec)
 	list:SetSize(spec.width, top + spec.rows * rowHeight)
 	list:EnableMouseWheel(true)
 	list.offset, list.rows, list.count, list.total = 0, {}, spec.rows, 0
+	list.padStep = 1 / 3 -- (a controller goes one row at a time, the wheel three)
 	list:SetScript("OnMouseWheel", function(self, delta)
 		self.offset = math.max(0, self.offset - delta * 3)
 		spec.onDraw()
@@ -1709,12 +1712,14 @@ do
 	end
 
 	-- Keys while it is open: 1 to 9 choose a tile, Escape closes, every other key goes on to the game. Never in a
-	-- fight (the game keeps the keys then): the mouse, and Escape through the game's own list of windows.
-	local function Keys(card, on)
+	-- fight (the game keeps the keys then): the mouse, and Escape through the game's own list of windows. (Also
+	-- Wanderer's own card, Card.lua.)
+	function Skin.CardKeys(card, on)
 		on = on and not InCombatLockdown()
 		if card.EnableKeyboard then pcall(card.EnableKeyboard, card, on and true or false) end
 		if on and card.SetPropagateKeyboardInput then pcall(card.SetPropagateKeyboardInput, card, true) end
 	end
+	local Keys = Skin.CardKeys
 
 	local function OnKey(card, key)
 		-- (a key that could not be kept from the game does nothing here: never a spell and a choice at once)

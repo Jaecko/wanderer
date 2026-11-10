@@ -320,8 +320,8 @@ local function OnEvent(_, event, ...)
 	if event == "ITEM_TEXT_BEGIN" then
 		if window:IsShown() then Close() end
 		-- Shift held: the game's own window, for this one (never in a fight: the game refuses to open it for
-		-- an addon then, so Wanderer's window reads it).
-		if U.IsSkipping() and not InCombatLockdown() then
+		-- an addon then, so Wanderer's window reads it; never with a controller: opened from here, it blocks the game).
+		if U.IsSkipping() and not InCombatLockdown() and not U.UsingPad() then
 			reading = { relay = true }
 			return Relay(event, ...)
 		end
@@ -353,8 +353,8 @@ local function OnEvent(_, event, ...)
 		-- A page Wanderer could not lay out: the game's own window reads the book (out of a fight).
 		Close()
 		if ns.debug then ns.Print(tostring(problem)) end
-		-- (in a fight the game's window cannot open: the book closed, never left open with nothing shown)
-		if InCombatLockdown() then return Safe(CloseItemText) end
+		-- (in a fight, or with a controller, the game's window cannot open from here: the book closed, never left open with nothing shown)
+		if InCombatLockdown() or U.UsingPad() then return Safe(CloseItemText) end
 		reading = { relay = true }
 		Relay("ITEM_TEXT_BEGIN")
 		return Relay(event, ...)
@@ -402,6 +402,12 @@ function ns.InitReader()
 		SetOffset(offset - delta * WHEEL_STEP)
 		Remember()
 	end)
+	-- (a controller's right stick: nothing to choose in here, the window's own wheel)
+	Skin.PadWindow(window, { wheel = function(delta)
+		SetOffset(offset - delta * WHEEL_STEP)
+		Remember()
+		return true
+	end })
 	-- A right click closes it, as the cross and Escape do.
 	window:SetScript("OnMouseUp", function(self, button) if button == "RightButton" then self:Hide() end end)
 	-- Closed here: the game's reading ends too (walking away closes it from the game's side). Hidden only

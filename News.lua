@@ -171,6 +171,8 @@ function ns.ShowNews(onlyNew)
 	if not sections[1] then return end
 	if not window then CreateWindow() end
 	Layout(sections)
+	-- (came by itself after an update: it never takes the controller away, it waits to be chosen)
+	window.quiet = onlyNew and true or nil
 	window:Show()
 end
 

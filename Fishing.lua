@@ -85,7 +85,6 @@ local function RememberSpot()
 	spots[#spots + 1] = { x, y, continent }
 	while #spots > SPOTS_KEPT do table.remove(spots, 1) end
 end
-ns.FishingNearSpot = function() return NearSpot(SPOT_REACH) end
 ns.FishingRememberSpot = RememberSpot
 
 -- A character under the cursor (an NPC to talk to, a corpse to skin): a click on it never asks for the pole.

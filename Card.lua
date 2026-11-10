@@ -38,10 +38,7 @@ end
 
 -- The reminders' first lines left to do (their hover).
 local function TodoLines()
-	local lines = {}
-	for _, item in ipairs(ns.TodoItems and ns.TodoItems() or {}) do
-		if not item.done and #lines < 3 and type(item.text) == "string" then lines[#lines + 1] = { text = item.text } end
-	end
+	local lines = ns.TodoLines()
 	if not lines[1] then lines[1] = { text = L.TODO_EMPTY_SHORT, role = "muted" } end
 	return lines
 end
@@ -378,11 +375,7 @@ end
 
 -- Keys while it is open, out of a fight: 1 to 9 open the tiles, Escape closes it; every other key goes on to
 -- the game.
-local function Keys(on)
-	on = on and not InCombatLockdown()
-	if card.EnableKeyboard then pcall(card.EnableKeyboard, card, on and true or false) end
-	if on and card.SetPropagateKeyboardInput then pcall(card.SetPropagateKeyboardInput, card, true) end
-end
+local function Keys(on) ns.Skin.CardKeys(card, on) end
 
 local function OnKey(self, key)
 	if InCombatLockdown() then return end
@@ -402,7 +395,7 @@ local function Create()
 	local Skin = ns.Skin
 	C = Skin.COLORS
 	card = Skin.CreateWindow("WandererCard", "DIALOG")
-	if Skin.PadWindow then Skin.PadWindow(card) end
+	Skin.PadWindow(card)
 	Skin.Closable(card, "WandererCard")
 	local look = Skin.Get(card)
 	if look then look.minOpacity = 0.97 end

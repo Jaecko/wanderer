@@ -85,8 +85,8 @@ end
 
 -- The bar comes in while the mouse is near, out of a fight; goes out slowly otherwise.
 local function Watch(self, elapsed)
-	-- (shown a moment when it comes, so you know where it waits)
-	local near = not InCombatLockdown() and (self:IsMouseOver(NEAR, -NEAR, -NEAR, NEAR) or GetTime() < (self.showUntil or 0))
+	-- (shown a moment when it comes, so you know where it waits; with a controller, no mouse to bring it: it stays)
+	local near = not InCombatLockdown() and (self:IsMouseOver(NEAR, -NEAR, -NEAR, NEAR) or GetTime() < (self.showUntil or 0) or U.UsingPad())
 	local alpha = ns.Skin.Fade(self, near and 1 or 0, elapsed, FADE_IN, FADE_OUT)
 	-- (clicks taken only once it is seen: an emote never goes from a bar still out of sight)
 	local usable = (alpha or 0) > USABLE_ALPHA

@@ -47,7 +47,6 @@ end
 -- The extensions' sections, their addon, and the defaults they register (known before they are installed).
 local EXTENSION_ADDON = { quests = "WandererQuests", training = "WandererTraining", maps = "WandererMaps",
 	outfits = "WandererOutfits", chat = "WandererChat", bags = "WandererBags", auction = "WandererAuction" }
-ns.PLAYSTYLE_EXTENSION_ADDON = EXTENSION_ADDON
 ns.PLAYSTYLE_EXT_DEFAULTS = {}
 for _, entry in ipairs(BASE_LIST) do
 	local section = U.SplitPath(entry[1])

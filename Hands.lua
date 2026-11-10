@@ -77,7 +77,8 @@ function ns.InitHands()
 	-- The game opens the bags for its windows through one call, with the window asking (your key gives none):
 	-- closed again right after, within the same frame. Nothing of the game's is replaced.
 	local function CloseAgain(frame)
-		if frame and Wanted("bagsClosed") and CloseAllBags then Safe(CloseAllBags, frame) end
+		-- (never with a controller: the game's bags closed by an addon block the game's own actions)
+		if frame and Wanted("bagsClosed") and CloseAllBags and not ns.Pad.On() then Safe(CloseAllBags, frame) end
 	end
 	for _, name in ipairs({ "OpenAllBagsMatchingContext", "OpenAllBags" }) do
 		if type(_G[name]) == "function" then hooksecurefunc(name, CloseAgain) end

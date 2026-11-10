@@ -89,7 +89,6 @@ function ns.NewTickTracker(spec)
 		end
 		return seen[key] == true
 	end
-	function T.SeeAgain() seenAt = nil end
 
 	-- The ticks passed while the unit was in sight with nothing landing: counted, so a spell resisted, a unit
 	-- immune or a dispel lets it go (at any time); the ticks passed while you looked elsewhere count for nothing.
@@ -181,17 +180,9 @@ function ns.NewTickTracker(spec)
 
 	-- A key now standing for another unit (a nameplate token given to the next enemy shown, a new target, a
 	-- group token given to someone else): what was followed under it, and when it was read, belonged to the
-	-- one before. prefix: every key starting so.
-	function T.Forget(key, prefix)
-		if not prefix then
-			active[key], aligned[key] = nil, nil
-			return
-		end
-		for _, list in ipairs({ active, aligned }) do
-			for known in pairs(list) do
-				if known:sub(1, #key) == key then list[known] = nil end
-			end
-		end
+	-- one before.
+	function T.Forget(key)
+		active[key], aligned[key] = nil, nil
 	end
 
 	-- The spells over by now let go (on units no longer seen too).

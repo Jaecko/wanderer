@@ -152,8 +152,8 @@ local function OnEvent(_, event)
 		if Clean(Safe(QuestGetAutoAccept)) then
 			Safe(AcknowledgeAutoAcceptQuest)
 			acted = true
-		elseif not IsTrivialDetail() then
-			-- Grey (trivial) quests stay for the player to decide, as in the gossip window.
+		elseif not IsTrivialDetail() and not IsRepeatableDetail() then
+			-- Grey (trivial) and repeatable quests stay for the player to decide, as in the gossip window.
 			Safe(AcceptQuest)
 			acted = true
 		end

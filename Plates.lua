@@ -332,7 +332,7 @@ function ns.DumpPlates()
 			"nameplateMinAlphaDistance", "nameplateMaxAlphaDistance", "nameplateMaxDistance", "nameplateShowEnemyMinus" }) do
 			cvars[#cvars + 1] = name:gsub("nameplate", "") .. "=" .. tostring(Clean(Safe(GetCVar, name)))
 		end
-		out[#out + 1] = ("t=%d v=%s fight=%s on=%s count=%d | %s"):format(at, tostring(ns.VERSION or (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("Wanderer", "Version"))), tostring(ns.inCombat), tostring(On()), count, table.concat(cvars, " "))
+		out[#out + 1] = ("t=%d v=%s fight=%s on=%s count=%d | %s"):format(at, tostring(C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("Wanderer", "Version")), tostring(ns.inCombat), tostring(On()), count, table.concat(cvars, " "))
 		for _, plate in ipairs(C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}) do
 			local drawn = Drawn(plate)
 			local unit = plate.namePlateUnitToken or (drawn and drawn.unit)

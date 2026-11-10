@@ -112,7 +112,6 @@ local function PresetOf(key)
 		if preset.key == key then return preset end
 	end
 end
-ns.UnitFramesPresetOf = PresetOf
 
 -- The engine-side gradient (the game colours a hidden health itself): offered only when the game has it.
 local curve
@@ -399,6 +398,16 @@ local function Walk(node, ...)
 end
 ns.UnitFramesWalk = Walk
 
+-- The values given, the missing ones left out (a list with a hole stops ipairs there).
+function ns.UnitFramesPresent(...)
+	local list = {}
+	for index = 1, select("#", ...) do
+		local value = select(index, ...)
+		if value ~= nil then list[#list + 1] = value end
+	end
+	return list
+end
+
 local function IsBar(bar)
 	return type(bar) == "table" and not IsSecret(bar) and type(bar.GetStatusBarTexture) == "function" and bar or nil
 end
@@ -425,15 +434,15 @@ local function Parts(entry)
 		parts.cast = IsBar(_G.PlayerCastingBarFrame) or IsBar(_G.CastingBarFrame)
 		parts.trail = IsBar(Walk(frame, "PlayerFrameContent", "PlayerFrameContentMain", "HealthBarsContainer", "PlayerFrameHealthBarAnimatedLoss"))
 			or IsBar(_G.PlayerFrameHealthBarAnimatedLoss)
-		parts.art = { Walk(frame, "PlayerFrameContainer", "FrameTexture"), Walk(frame, "PlayerFrameContainer", "AlternatePowerFrameTexture"),
+		parts.art = ns.UnitFramesPresent(Walk(frame, "PlayerFrameContainer", "FrameTexture"), Walk(frame, "PlayerFrameContainer", "AlternatePowerFrameTexture"),
 			Walk(frame, "PlayerFrameContainer", "VehicleFrameTexture"), Walk(frame, "PlayerFrameContainer", "FrameFlash"),
-			Walk(frame, "PlayerFrameContent", "PlayerFrameContentMain", "StatusTexture") }
+			Walk(frame, "PlayerFrameContent", "PlayerFrameContentMain", "StatusTexture"))
 	elseif entry.kind == "target" or entry.kind == "boss" then
 		parts.cast = IsBar(Walk(frame, "spellbar"))
-		parts.art = { Walk(frame, "TargetFrameContainer", "FrameTexture"), Walk(frame, "TargetFrameContainer", "Flash"),
-			Walk(frame, "TargetFrameContent", "TargetFrameContentMain", "ReputationColor") }
+		parts.art = ns.UnitFramesPresent(Walk(frame, "TargetFrameContainer", "FrameTexture"), Walk(frame, "TargetFrameContainer", "Flash"),
+			Walk(frame, "TargetFrameContent", "TargetFrameContentMain", "ReputationColor"))
 	else
-		parts.art = { Walk(frame, "FrameTexture"), Walk(frame, "Texture"), Walk(frame, "PetFrameTexture"), Walk(frame, "Flash") }
+		parts.art = ns.UnitFramesPresent(Walk(frame, "FrameTexture"), Walk(frame, "Texture"), Walk(frame, "PetFrameTexture"), Walk(frame, "Flash"))
 	end
 	return parts
 end
@@ -595,7 +604,7 @@ local function ValueSize(bar)
 end
 
 local function BarTexts(bar)
-	return { Walk(bar, "TextString"), Walk(bar, "LeftText"), Walk(bar, "RightText") }
+	return ns.UnitFramesPresent(Walk(bar, "TextString"), Walk(bar, "LeftText"), Walk(bar, "RightText"))
 end
 
 -- Texts of Wanderer's own: short numbers (More settings), or the power's values on the block's own power bar
@@ -643,7 +652,11 @@ local function OwnText(bar, game, value, _, most)
 	local parent = host or bar
 	if mine.parent ~= parent then
 		if mine.text then mine.text:Hide() end
-		mine.text, mine.parent = parent:CreateFontString(nil, "OVERLAY"), parent
+		-- (one string per parent, made once: the power's parent changes with each target without power, and a font
+		-- string can never be freed)
+		mine.strings = mine.strings or {}
+		mine.strings[parent] = mine.strings[parent] or parent:CreateFontString(nil, "OVERLAY")
+		mine.text, mine.parent = mine.strings[parent], parent
 	end
 	local text = mine.text
 	mine.active = false
@@ -748,6 +761,9 @@ local function RestoreBar(bar)
 	local state = dressed[bar]
 	-- (a power bar kept unseen for a character without power is given back even when never dressed)
 	if state and not state.on then Unmirror(bar, state) end
+	-- (a cast bar given back stays so until DressCast asks again: the hook on the game's next cast must not dress it)
+	local wasCast = state and state.cast
+	if wasCast then state.cast = nil end
 	if not (state and state.on) then return end
 	Unmirror(bar, state)
 	state.on = false
@@ -757,7 +773,8 @@ local function RestoreBar(bar)
 		elseif state.file then pcall(texture.SetTexture, texture, state.file) end
 	end
 	coloring = true
-	bar:SetStatusBarColor(unpack(state.color))
+	-- (a group frame's colour was never Wanderer's: the one kept may be another member's, and the game writes it only when it changes)
+	if not state.compact then bar:SetStatusBarColor(unpack(state.color)) end
 	if type(texture) == "table" and texture.SetVertexColor and state.health ~= nil then pcall(texture.SetVertexColor, texture, unpack(state.vertex or { 1, 1, 1 })) end
 	coloring = false
 	if state.ground then state.ground:Hide() end
@@ -780,6 +797,10 @@ local function RestoreBar(bar)
 		end
 	end
 	for _, region in ipairs(state.art or {}) do ShowArt(region) end
+	if wasCast then
+		local name = IsText(Walk(bar, "Text"))
+		if name then Undress(name) end
+	end
 end
 
 -- A bar's ground (made once) and, while asked, its quarter marks (A and C: no ink line of its own).
@@ -817,9 +838,6 @@ local function Threat(status)
 	return unpack(status >= 2 and THREAT_EDGE or WARY_EDGE)
 end
 
-local function EdgeColor(entry, unit)
-	return ns.UnitFramesEdgeColor(entry, unit)
-end
 -- (Portraits.lua tints the medallion's border the same way)
 function ns.UnitFramesEdgeColor(entry, unit)
 	if entry.key == "player" then
@@ -1262,7 +1280,7 @@ local function Block(entry, health, upper, lower, look)
 	block:Show()
 	block.Place(true)
 	block.Marks(look.quarterMarks and true or false)
-	block.Color(EdgeColor(entry, UnitOf(entry)))
+	block.Color(ns.UnitFramesEdgeColor(entry, UnitOf(entry)))
 	if state.line then state.line:Hide() end
 	Link(entry, block, upper)
 end
@@ -1288,7 +1306,7 @@ local CAST_KINDS = { standard = "cast", channel = "channel", uninterruptable = "
 	empowered = "channel" }
 
 local function CastArt(bar)
-	return { Walk(bar, "Border"), Walk(bar, "TextBorder") }
+	return ns.UnitFramesPresent(Walk(bar, "Border"), Walk(bar, "TextBorder"))
 end
 
 -- A cast bar's icon in Ink lines: cropped to its square, a 1 px ink frame around it; given back otherwise.
@@ -1654,7 +1672,7 @@ local function Extras(entry, parts, anchor, look, edged)
 	-- Your points (the player's block only).
 	if entry.key == "player" then
 		local count, most = Points()
-		mine.comboArt = { _G.ComboFrame, _G.ComboPointPlayerFrame, Walk(entry.frame, "classPowerBar") }
+		mine.comboArt = ns.UnitFramesPresent(_G.ComboFrame, _G.ComboPointPlayerFrame, Walk(entry.frame, "classPowerBar"))
 		for _, region in ipairs(mine.comboArt) do HideArt(region) end
 		if PointsWorth(count) then
 			mine.points = mine.points or PointsRow(entry)
@@ -1732,8 +1750,10 @@ for _, event in ipairs({ "UNIT_POWER_FREQUENT", "UNIT_POWER_UPDATE", "UPDATE_SHA
 	"PLAYER_REGEN_ENABLED" }) do
 	pcall(pointsWatch.RegisterEvent, pointsWatch, event)
 end
-pointsWatch:SetScript("OnEvent", function(_, event, unit)
+pointsWatch:SetScript("OnEvent", function(_, event, unit, power)
 	if (event == "UNIT_POWER_FREQUENT" or event == "UNIT_POWER_UPDATE") and Clean(unit) ~= "player" then return end
+	-- (energy, many times a second, changes no point: the pips are not laid again for it)
+	if event == "UNIT_POWER_FREQUENT" and type(Clean(power)) == "string" and Clean(power) ~= "COMBO_POINTS" then return end
 	if not Lines() then return end
 	local frame = _G.PlayerFrame
 	local mine = type(frame) == "table" and extras[frame]
@@ -2090,7 +2110,7 @@ local function StyleCompact(frame)
 		if bar then
 			local state = State(bar)
 			Fill(bar, state, TexturePath(look))
-			state.on = true
+			state.on, state.compact = true, true
 		end
 	end
 	if background then
@@ -2193,8 +2213,11 @@ local function HookGame()
 		if type(frame) == "table" then compact[frame] = true end
 		if On() then StyleCompact(frame) end
 	end)
-	After("CompactUnitFrame_SetUnit", function(frame)
+	After("CompactUnitFrame_SetUnit", function(frame, unit)
 		if type(frame) ~= "table" then return end
+		-- (the nameplates are these frames too, and leave with no unit at all: never taken for the group's)
+		unit = Clean(unit)
+		if not compact[frame] and (type(unit) ~= "string" or unit:find("^nameplate")) then return end
 		compact[frame] = true
 		if On() then StyleCompact(frame) end
 	end)
@@ -2396,7 +2419,6 @@ local function Sample(parent, height)
 	end
 	return sample
 end
-ns.UnitFramesSample = Sample
 
 -- The cards: options.withGame (the game's frames as a fourth card), options.cardHeight, options.onPick(key).
 function ns.UnitFramesCards(parent, options)
@@ -2498,6 +2520,8 @@ local function Colorize(words) return ns.Skin.Colorize(words, "label") end
 local STATUS_TEXT = { NUMERIC = "UF_VALUES_NUMERIC", PERCENT = "UF_VALUES_PERCENT", BOTH = "UF_VALUES_BOTH", NONE = "UF_VALUES_NONE" }
 
 local function OpenGameOptions()
+	-- (never with a controller: the game's panel opened by an addon blocks the game's own actions)
+	if U.UsingPad() then return end
 	if ns.CloseSettings then ns.CloseSettings() end
 	local settings = _G.Settings
 	if settings and settings.OpenToCategory and settings.INTERFACE_CATEGORY_ID and pcall(settings.OpenToCategory, settings.INTERFACE_CATEGORY_ID) then return end
@@ -2550,6 +2574,7 @@ function ns.UnitFramesGameCard(canvas)
 	end
 	function card:Refresh()
 		local values, icons = ns.UnitFramesGameWords()
+		self.button:SetShown(not U.UsingPad())
 		self.lines[1]:SetText(Colorize(L.UF_GAME_VALUES) .. "  " .. values)
 		self.lines[2]:SetText(Colorize(L.UF_GAME_ICONS) .. "  " .. icons)
 		self.lines[3]:SetText(Colorize(L.UF_GAME_SIZES) .. "  " .. L.UF_GAME_SIZES_EDIT)
