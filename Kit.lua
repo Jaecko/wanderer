@@ -13,12 +13,34 @@ local Skin, U = ns.Skin, ns.Util
 -- Colors ------------------------------------------------------------------------------------------------
 
 -- The colors, by role.
+-- The family's one palette: every addon draws its words and accents from these roles (never its own numbers), so
+-- every window reads as one hand. Against the windows' dark ground, even at its 0.9 opacity over a bright world, the
+-- word roles hold at least 4.5:1, and the hint roles (muted, done) at least 3:1 (done stays a step under objective).
+--   gold: titles, the chosen, the main accent        kicker: small capitals over a section, the scroll rails
+--   label: a line's name beside its value           text: what is read; soft: what is read second
+--   muted: hints, what steps back                   good / bad / warn / blue: done, lost or danger, care, a link
+--   goldDeep: the ground of the main button, a switch on (onGold: its words)
+--   title / objective / done: the objectives' list (a quest's name, what it asks, what is done)
 Skin.COLORS = {
 	gold = { 1, 0.82, 0 }, kicker = { 0.85, 0.75, 0.5 }, label = { 0.75, 0.68, 0.5 }, text = { 0.9, 0.88, 0.82 },
-	soft = { 0.81, 0.78, 0.72 }, muted = { 0.56, 0.53, 0.46 }, good = { 0.56, 0.88, 0.64 }, bad = { 0.95, 0.54, 0.49 },
+	soft = { 0.81, 0.78, 0.72 }, muted = { 0.64, 0.6, 0.52 }, good = { 0.56, 0.88, 0.64 }, bad = { 0.95, 0.54, 0.49 },
 	warn = { 0.88, 0.63, 0.25 }, blue = { 0.61, 0.78, 0.96 },
+	goldDeep = { 0.48, 0.38, 0.06 }, onGold = { 1, 0.96, 0.84 },
+	title = { 0.88, 0.85, 0.77 }, objective = { 0.7, 0.66, 0.58 }, done = { 0.6, 0.57, 0.5 },
 }
+-- A row's tint under the mouse, and the chosen one's (gold): the same in every list.
+Skin.HOVER, Skin.CHOSEN = 0.05, 0.1
 local COLORS = Skin.COLORS
+-- (Util's plain separator, in the palette's quiet color now that it is known)
+U.SEPARATOR = "  " .. U.Colorize("\194\183", COLORS.muted[1], COLORS.muted[2], COLORS.muted[3]) .. "  "
+
+-- A role's color as numbers (r, g, b; then alpha when given), for the calls that take them: the last arguments
+-- of SetColorTexture, SetVertexColor, Skin.Edges, Skin.CreateText...
+function Skin.RGB(role, alpha)
+	local c = COLORS[role] or COLORS.text
+	if alpha then return c[1], c[2], c[3], alpha end
+	return c[1], c[2], c[3]
+end
 
 -- Words in a role's color.
 function Skin.Colorize(text, role)
@@ -38,9 +60,9 @@ function Skin.Play(kind) U.PlaySound(Skin.SOUNDS[kind] or Skin.SOUNDS.click) end
 
 -- A chip's tones: its ground (r, g, b, a), its words (r, g, b).
 local TONES = {
-	gold = { 1, 0.82, 0, 0.12, 0.95, 0.81, 0.42 }, red = { 0.94, 0.54, 0.49, 0.15, 0.95, 0.63, 0.58 },
+	gold = { 1, 0.82, 0, 0.12, 0.95, 0.81, 0.42 }, red = { 0.94, 0.54, 0.49, 0.15, 1, 0.7, 0.65 },
 	green = { 0.31, 0.78, 0.43, 0.15, 0.56, 0.88, 0.64 }, blue = { 0.31, 0.59, 0.9, 0.16, 0.61, 0.78, 0.96 },
-	grey = { 1, 1, 1, 0.07, 0.69, 0.66, 0.6 },
+	grey = { 1, 1, 1, 0.07, 0.78, 0.75, 0.69 },
 }
 
 -- Glyphs ----------------------------------------------------------------------------------------------------
@@ -127,7 +149,7 @@ end
 -- A thin golden rule, across or down (placed by its owner).
 function Skin.Rule(parent, vertical, alpha)
 	local rule = parent:CreateTexture(nil, "ARTWORK")
-	rule:SetColorTexture(1, 0.82, 0, alpha or 0.16)
+	rule:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], alpha or 0.16)
 	if vertical then rule:SetWidth(1) else rule:SetHeight(1) end
 	return rule
 end
@@ -199,10 +221,79 @@ function Skin.ShowTip(owner, lines, anchor)
 	return true
 end
 
+-- Where something opened by a click should stand, in the screen's own units (as GetCursorPosition): the mouse's
+-- place, or under a controller the chosen button's corner. nil, nil when neither is known.
+function Skin.CursorPoint()
+	if ns.Pad and ns.Pad.Point then return ns.Pad.Point() end
+	if GetCursorPosition then return GetCursorPosition() end
+	return nil, nil
+end
+
 -- A few words under the mouse (Skin.ShowTip's lines), gone when it leaves.
 function Skin.Tooltip(frame, text, anchor)
 	frame:HookScript("OnEnter", function(self) Skin.ShowTip(self, text, anchor) end)
 	frame:HookScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+-- A sheet beside a window (a quest's, a creature's): on the window's right when the screen has room, else on its
+-- left; room on neither (a 1080p screen, the window in the middle): the window slides aside for this time only
+-- (its kept place comes back next time), the sheet on its right. As tall as the window, unless height is given
+-- (then that tall, from the window's top). Returns whether it went on the left.
+-- opts: { still (the window never moves: no room on either side of it, the sheet goes to the left of
+-- opts.holder when there is room there, else in the screen's middle), holder (the frame the window itself
+-- stands beside) }. Given opts, it returns the side instead: "right", "left" or "center".
+function Skin.Beside(sheet, owner, width, gap, height, opts)
+	if not (sheet and owner) then return opts and "right" or false end
+	gap = gap or 4
+	sheet:ClearAllPoints()
+	-- (on the screen's scale: the window's edges, the sheet's width, the screen's)
+	local scale = owner:GetEffectiveScale()
+	local left, right = (owner:GetLeft() or 0) * scale, (owner:GetRight() or 0) * scale
+	local screen = (UIParent:GetRight() or 0) * UIParent:GetEffectiveScale()
+	local need = (gap + width) * scale
+	local side, anchor = "right", owner
+	if right + need > screen then
+		if left - need >= 0 then
+			side = "left"
+		elseif type(opts) == "table" and opts.still then
+			-- (the window stays: left of what it stands beside when there is room, else in the middle)
+			local holder = opts.holder
+			local holderLeft = holder and holder.GetLeft and holder:GetLeft()
+			if holderLeft and holderLeft * holder:GetEffectiveScale() - need >= 0 then
+				side, anchor = "left", holder
+			else
+				side = "center"
+			end
+		elseif scale > 0 and owner:GetTop() then
+			local top = owner:GetTop()
+			owner:ClearAllPoints()
+			owner:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", math.max(0, screen - need - (right - left)) / scale, top)
+		end
+	end
+	if side == "center" then
+		sheet:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+		sheet:SetHeight(height or owner:GetHeight() or 0)
+	elseif side == "left" then
+		if anchor ~= owner then
+			-- (beside the holder, level with the window's top: the gap between both tops, on the sheet's scale)
+			local sheetScale = sheet:GetEffectiveScale()
+			local drop = ((owner:GetTop() or 0) * scale - (anchor:GetTop() or 0) * anchor:GetEffectiveScale())
+				/ (sheetScale > 0 and sheetScale or 1)
+			sheet:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -gap, drop)
+			sheet:SetHeight(height or owner:GetHeight() or 0)
+		else
+			sheet:SetPoint("TOPRIGHT", owner, "TOPLEFT", -gap, 0)
+		end
+		if anchor == owner and not height then
+			sheet:SetPoint("BOTTOMRIGHT", owner, "BOTTOMLEFT", -gap, 0)
+		end
+	else
+		sheet:SetPoint("TOPLEFT", owner, "TOPRIGHT", gap, 0)
+		if not height then sheet:SetPoint("BOTTOMLEFT", owner, "BOTTOMRIGHT", gap, 0) end
+	end
+	if height then sheet:SetHeight(height) end
+	if type(opts) == "table" then return side end
+	return side == "left"
 end
 
 -- The game's window out of sight while Wanderer's is used in its place (still open under it), back in its
@@ -316,17 +407,17 @@ function Skin.Button(parent, text, onClick, kind, minimum)
 	button.caption:SetPoint("CENTER")
 	button:SetFontString(button.caption)
 	if kind == "main" then
-		button.ground:SetColorTexture(0.54, 0.43, 0.07, 1)
+		button.ground:SetColorTexture(COLORS.goldDeep[1], COLORS.goldDeep[2], COLORS.goldDeep[3], 1)
 		Skin.Edges(button, 0.79, 0.64, 0.15, 1)
-		button.caption:SetTextColor(1, 0.96, 0.84)
+		button.caption:SetTextColor(COLORS.onGold[1], COLORS.onGold[2], COLORS.onGold[3])
 	else
 		button.ground:SetColorTexture(1, 1, 1, 0.04)
-		Skin.Edges(button, 1, 0.82, 0, 0.3)
-		button.caption:SetTextColor(0.85, 0.75, 0.5)
+		Skin.Edges(button, Skin.RGB("gold", 0.3))
+		button.caption:SetTextColor(COLORS.kicker[1], COLORS.kicker[2], COLORS.kicker[3])
 	end
 	local hover = button:CreateTexture(nil, "HIGHLIGHT")
 	hover:SetAllPoints()
-	hover:SetColorTexture(1, 1, 1, 0.06)
+	hover:SetColorTexture(1, 1, 1, Skin.HOVER)
 	button:SetText(text)
 	function button:Fit()
 		self:SetWidth(math.max(minimum or 0, U.Measure(self.caption, "GetStringWidth", 60) + 28))
@@ -370,7 +461,8 @@ function Skin.Check(parent, label, get, set, tip)
 	function check:Refresh() self.mark:SetShown(get() and true or false) end
 	function check:SetLabel(text)
 		self.text:SetText(text)
-		self:SetWidth(21 + U.Measure(self.text, "GetStringWidth", 160))
+		-- (no words: the box alone takes the click, not the row it sits on)
+		self:SetWidth(text == "" and 16 or 21 + U.Measure(self.text, "GetStringWidth", 160))
 	end
 	check:SetScript("OnMouseDown", function(self) self.box:SetPoint("LEFT", 1, -1) end)
 	check:SetScript("OnMouseUp", function(self) self.box:SetPoint("LEFT", 0, 0) end)
@@ -393,7 +485,7 @@ function Skin.Switch(parent, onClick, size)
 	switch:SetSize(small and 28 or 36, small and 14 or 18)
 	switch.track = switch:CreateTexture(nil, "BACKGROUND")
 	switch.track:SetAllPoints()
-	switch.edges = Skin.Edges(switch, 1, 0.82, 0, 0.3)
+	switch.edges = Skin.Edges(switch, Skin.RGB("gold", 0.3))
 	switch.knob = switch:CreateTexture(nil, "ARTWORK")
 	switch.knob:SetSize(small and 10 or 12, small and 10 or 12)
 	local inset = small and 2 or 3
@@ -401,14 +493,14 @@ function Skin.Switch(parent, onClick, size)
 		self.on = on and true or false
 		self.knob:ClearAllPoints()
 		if self.on then
-			self.track:SetColorTexture(0.54, 0.43, 0.07, 1)
+			self.track:SetColorTexture(COLORS.goldDeep[1], COLORS.goldDeep[2], COLORS.goldDeep[3], 1)
 			self.edges.Color(0.79, 0.64, 0.15, 1)
 			self.knob:SetColorTexture(1, 0.96, 0.84, 1)
 			self.knob:SetPoint("RIGHT", self, "RIGHT", -inset, 0)
 		else
 			self.track:SetColorTexture(0, 0, 0, 0.45)
-			self.edges.Color(0.85, 0.75, 0.5, 0.35)
-			self.knob:SetColorTexture(0.56, 0.53, 0.46, 1)
+			self.edges.Color(Skin.RGB("kicker", 0.35))
+			self.knob:SetColorTexture(COLORS.muted[1], COLORS.muted[2], COLORS.muted[3], 1)
 			self.knob:SetPoint("LEFT", self, "LEFT", inset, 0)
 		end
 	end
@@ -433,11 +525,16 @@ end
 
 -- A quiet button made of one glyph (a cog, an undo...): in the label's color, gold under the mouse, its
 -- tooltip (a line, lines, or a function giving them). size: the glyph's (the button a little larger).
-function Skin.GlyphButton(parent, name, size, tooltip, onClick)
+-- rightWord: only when its right click does something else than its left one (the pad's top button then, said
+-- with that word); a caller may also set button.padRight (and padRightWord) itself.
+function Skin.GlyphButton(parent, name, size, tooltip, onClick, rightWord)
 	local button = CreateFrame("Button", nil, parent)
 	size = size or 14
 	button:SetSize(size + 6, size + 6)
-	button:RegisterForClicks("LeftButtonUp", "RightButtonUp") button.padRight = true
+	if rightWord then
+		button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		button.padRight, button.padRightWord = true, rightWord ~= true and rightWord or nil
+	end
 	button.glyph = Skin.Glyph(button, name, size)
 	button.glyph:SetPoint("CENTER")
 	function button:Tint(role)
@@ -581,7 +678,7 @@ function Skin.Choices(parent, list, onPick, height)
 		for _, button in ipairs(self.buttons) do
 			local on = button.key == key
 			button.ground:SetColorTexture(on and 0.16 or 0, on and 0.14 or 0, on and 0.06 or 0, on and 1 or 0)
-			button.text:SetTextColor(on and 1 or 0.72, on and 0.82 or 0.68, on and 0 or 0.61)
+			button.text:SetTextColor(Skin.RGB(on and "gold" or "soft"))
 		end
 	end
 	local labels = {}
@@ -691,7 +788,7 @@ function Skin.Header(window, kickerText, titleText, extra, titleTemplate)
 	local margin = Skin.Margin() + (extra or 8)
 	local kicker = Skin.CreateKicker(window, kickerText or "Wanderer")
 	kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
-	local title = Skin.CreateText(window, titleTemplate or "GameTooltipHeaderText", 1, 0.82, 0)
+	local title = Skin.CreateText(window, titleTemplate or "GameTooltipHeaderText", Skin.RGB("gold"))
 	title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
 	if titleText then title:SetText(titleText) end
 	return kicker, title, margin
@@ -814,6 +911,20 @@ local function AskWindow()
 	})
 	ask.input:SetWidth(340)
 	ask.input:Hide()
+	-- (with a controller: words are written with a keyboard)
+	ask.padNote = Skin.Text(ask, "GameTooltipTextSmall", "muted")
+	ask.padNote:SetJustifyH("CENTER")
+	ask.padNote:SetWidth(340)
+	ask.padNote:Hide()
+	-- A choice under the question (opts.check), read and written by the one asking.
+	ask.check = Skin.Check(ask, "", function()
+		local check = question and question.check
+		return check and check.get and check.get() or false
+	end, function(on)
+		local check = question and question.check
+		if check and check.set then check.set(on) end
+	end)
+	ask.check:Hide()
 	-- Closed otherwise (Escape, the cross): as if refused, once. One asked in its place keeps the window
 	-- shown, so the first is let go unanswered.
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererAsk") end
@@ -832,13 +943,25 @@ end
 local function Layout(window)
 	local margin = Skin.Margin() + 10
 	local input = window.input:IsShown() and 34 or 0
+	local note = window.padNote:IsShown() and 20 or 0
+	local check = window.check:IsShown() and 28 or 0
 	local height = U.Measure(window.words, "GetStringHeight", 14)
-	window:SetSize(340 + margin * 2, margin + height + 14 + input + 36 + margin)
+	window:SetSize(340 + margin * 2, margin + height + 14 + input + note + check + 36 + margin)
 	window.words:ClearAllPoints()
 	window.words:SetPoint("TOP", window, "TOP", 0, -margin)
 	window.input:ClearAllPoints()
 	window.input:SetPoint("TOP", window.words, "BOTTOM", 0, -10)
 	local anchor = window.input:IsShown() and window.input or window.words
+	window.padNote:ClearAllPoints()
+	if note > 0 then
+		window.padNote:SetPoint("TOP", anchor, "BOTTOM", 0, -6)
+		anchor = window.padNote
+	end
+	window.check:ClearAllPoints()
+	if check > 0 then
+		window.check:SetPoint("TOP", anchor, "BOTTOM", 0, -10)
+		anchor = window.check
+	end
 	window.yes:ClearAllPoints()
 	window.no:ClearAllPoints()
 	if window.no:IsShown() then
@@ -855,6 +978,15 @@ local function Open(open)
 	question = open
 	window.words:SetText(open.text or "")
 	window.input:SetShown(open.input ~= nil)
+	local note = open.input ~= nil and not open.copy and U.UsingPad and U.UsingPad() and ns.L.ASK_TYPE_PAD
+	window.padNote:SetText(note or "")
+	window.padNote:SetShown(note and true or false)
+	local check = type(open.check) == "table" and open.check or nil
+	window.check:SetShown(check ~= nil)
+	if check then
+		window.check:SetLabel(check.label or "")
+		window.check:Refresh()
+	end
 	window.no:SetShown(not open.copy)
 	window.yes:SetText(open.yesText or YES or "Yes")
 	window.no:SetText(open.noText or NO or "No")
@@ -878,10 +1010,14 @@ local function Open(open)
 end
 
 -- A question before acting: yes does it, no lets it go. Another one asked in its place does not answer
--- the first. Returns the question (to put away later: Skin.CancelAsk). opts: { strata } (a layer over the
--- dialogs' one, for that question only).
+-- the first. Returns the question (to put away later: Skin.CancelAsk). opts: { strata (a layer over the
+-- dialogs' one, for that question only), check = { label, get(), set(on) } (a box under the question) };
+-- given in refuse's place (Skin.Ask(text, yes, opts)) it is read as opts.
 function Skin.Ask(text, accept, refuse, opts)
-	local open = { text = text, accept = accept, refuse = refuse, strata = type(opts) == "table" and opts.strata or nil }
+	if type(refuse) == "table" and opts == nil then refuse, opts = nil, refuse end
+	opts = type(opts) == "table" and opts or {}
+	local open = { text = text, accept = accept, refuse = refuse, strata = opts.strata,
+		check = type(opts.check) == "table" and opts.check or nil }
 	Open(open)
 	return open
 end
@@ -927,7 +1063,8 @@ end
 -- or a section's title (entry.header). The wheel scrolls it, a thin bar beside shows where you are.
 -- spec: { width, rows (the most shown), rowHeight, columns = { { key, title, width, justify, sort } },
 --   titles (false: none), icon (false: none), nameTitle, nameSort, action (a button's width),
---   onClick(entry, mouse), onDraw(), onSort(sort) }.
+--   onClick(entry, mouse), onDraw(), onSort(sort), padRight (its right click is its own: the pad's top button),
+--   padRightWord }.
 -- table.offset, table.rows (those shown: table.count), table:Clamp(total), table:Fit(height),
 -- table:SetSort(sort), table.empty (a text for an empty table);
 -- row:Fill(entry, chosen, values, chip, tone, actionText, actionFn).
@@ -994,7 +1131,7 @@ function Skin.Table(parent, spec)
 	list.titles = titles
 	-- The column sorted by, in gold with an arrow (down unless descending is false: up).
 	list.sortArrow = Skin.Glyph(list, "down", 9, "OVERLAY")
-	list.sortArrow:SetVertexColor(1, 0.82, 0)
+	list.sortArrow:SetVertexColor(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3])
 	list.sortArrow:Hide()
 	function list:SetSort(sort, descending)
 		self.sortArrow:Hide()
@@ -1022,11 +1159,11 @@ function Skin.Table(parent, spec)
 		row:SetPoint("RIGHT", list, "RIGHT", -BAR, 0)
 		row.chosen = row:CreateTexture(nil, "BACKGROUND")
 		row.chosen:SetAllPoints()
-		row.chosen:SetColorTexture(1, 0.82, 0, 0.08)
-		row.chosenEdges = Skin.Edges(row, 1, 0.82, 0, 0)
+		row.chosen:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], Skin.CHOSEN)
+		row.chosenEdges = Skin.Edges(row, Skin.RGB("gold", 0))
 		row.hover = row:CreateTexture(nil, "BACKGROUND", nil, 1)
 		row.hover:SetAllPoints()
-		row.hover:SetColorTexture(1, 1, 1, 0.04)
+		row.hover:SetColorTexture(1, 1, 1, Skin.HOVER)
 		row.hover:Hide()
 		if iconSize > 0 then
 			row.icon = Skin.Icon(row, iconSize)
@@ -1059,7 +1196,7 @@ function Skin.Table(parent, spec)
 			row.more:SetAlpha(0.8)
 			row.more:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 		end
-		row:RegisterForClicks("LeftButtonUp", "RightButtonUp") row.padRight = true
+		row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		row:SetScript("OnClick", function(self, mouse)
 			if self.entry and not self.entry.header then
 				Skin.Play("click")
@@ -1092,6 +1229,10 @@ function Skin.Table(parent, spec)
 		function row:Fill(entry, chosen, values, chip, tone, actionText, actionFn)
 			self.entry = entry
 			self:SetShown(entry ~= nil and index <= list.count)
+			-- (the pad's top button only where the table's right click does something of its own: spec.padRight;
+			-- never on a heading or a spacer)
+			local menu = spec.padRight and entry ~= nil and not entry.header
+			self.padRight, self.padRightWord = menu or nil, menu and spec.padRightWord or nil
 			if self.action then
 				self.action:SetShown(entry ~= nil and not entry.header and actionText ~= nil)
 				self.action:SetText(actionText or "")
@@ -1103,7 +1244,7 @@ function Skin.Table(parent, spec)
 			if self.icon then self.icon:SetShown(not header) end
 			self.name:SetShown(not header)
 			self.chosen:SetShown(chosen and not header or false)
-			self.chosenEdges.Color(1, 0.82, 0, chosen and not header and 0.3 or 0)
+			self.chosenEdges.Color(Skin.RGB("gold", chosen and not header and 0.3 or 0))
 			for key, cell in pairs(self.cells) do
 				cell:SetShown(not header)
 				cell:SetText(values and values[key] or "")
@@ -1169,7 +1310,7 @@ function Skin.ScrollBar(parent, onOffset)
 	local bar = CreateFrame("Button", nil, parent)
 	bar:SetWidth(BAR - 2)
 	local rail = bar:CreateTexture(nil, "BACKGROUND")
-	rail:SetColorTexture(0.85, 0.75, 0.5, 0.22)
+	rail:SetColorTexture(COLORS.kicker[1], COLORS.kicker[2], COLORS.kicker[3], 0.22)
 	rail:SetWidth(2)
 	rail:SetPoint("TOP")
 	rail:SetPoint("BOTTOM")
@@ -1177,7 +1318,7 @@ function Skin.ScrollBar(parent, onOffset)
 	thumb:SetWidth(BAR - 4)
 	thumb.fill = thumb:CreateTexture(nil, "ARTWORK")
 	thumb.fill:SetAllPoints()
-	thumb.fill:SetColorTexture(0.85, 0.75, 0.5, 0.5)
+	thumb.fill:SetColorTexture(COLORS.kicker[1], COLORS.kicker[2], COLORS.kicker[3], 0.5)
 	bar.thumb = thumb
 	bar.total, bar.shown, bar.offset = 0, 0, 0
 	-- (a mouse's bar: a controller scrolls with its right stick, Pad.lua)
@@ -1215,8 +1356,8 @@ function Skin.ScrollBar(parent, onOffset)
 		end)
 	end)
 	thumb:SetScript("OnMouseUp", function(self) self:SetScript("OnUpdate", nil) end)
-	thumb:SetScript("OnEnter", function(self) self.fill:SetColorTexture(1, 0.82, 0, 0.75) end)
-	thumb:SetScript("OnLeave", function(self) self.fill:SetColorTexture(0.85, 0.75, 0.5, 0.5) end)
+	thumb:SetScript("OnEnter", function(self) self.fill:SetColorTexture(Skin.RGB("gold", 0.75)) end)
+	thumb:SetScript("OnLeave", function(self) self.fill:SetColorTexture(COLORS.kicker[1], COLORS.kicker[2], COLORS.kicker[3], 0.5) end)
 	bar:SetScript("OnClick", function(self)
 		local below = CursorTop() > (self:GetTop() or 0) - (thumb:GetTop() or 0) + thumb:GetHeight()
 		onOffset(math.max(0, math.min(Range(), self.offset + (below and self.shown or -self.shown))))
@@ -1241,7 +1382,7 @@ function Skin.Tabs(parent, list, onPick)
 		tab.badge = Skin.Chip(tab)
 		tab.badge:SetPoint("LEFT", tab.text, "RIGHT", 7, 0)
 		tab.line = tab:CreateTexture(nil, "ARTWORK")
-		tab.line:SetColorTexture(1, 0.82, 0, 1)
+		tab.line:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], 1)
 		tab.line:SetHeight(2)
 		tab.line:SetPoint("BOTTOMLEFT", tab, "BOTTOMLEFT", 0, -1)
 		tab.line:SetPoint("BOTTOMRIGHT", tab, "BOTTOMRIGHT", 0, -1)
@@ -1424,7 +1565,7 @@ function Skin.CardRow(parent)
 	row:RegisterForClicks("LeftButtonUp")
 	row.hover = row:CreateTexture(nil, "BACKGROUND")
 	row.hover:SetAllPoints()
-	row.hover:SetColorTexture(1, 0.82, 0, 0.08)
+	row.hover:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], Skin.CHOSEN)
 	row.hover:Hide()
 	row.glyph = Skin.Glyph(row, "chevron", 14)
 	row.glyph:SetPoint("LEFT", row, "LEFT", 6, 0)
@@ -1546,7 +1687,7 @@ function Skin.ActionCard(owner, spec)
 	card:ClearAllPoints()
 	local x, cy
 	-- (opened from a controller: beside the button chosen)
-	if ns.Pad then x, cy = ns.Pad.Point() elseif GetCursorPosition then x, cy = GetCursorPosition() end
+	x, cy = Skin.CursorPoint()
 	local scale = card:GetEffectiveScale() or 1
 	if (spec.atCursor or not owner) and x and cy and scale > 0 then
 		card:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale + 4, cy / scale - 4)
@@ -1574,7 +1715,7 @@ do
 		local on, over, off = tile.on, tile:IsMouseOver(), tile.disabled
 		local gold, soft = Skin.COLORS.gold, Skin.COLORS.soft
 		if on then
-			tile.ground:SetColorTexture(gold[1], gold[2], gold[3], 0.13)
+			tile.ground:SetColorTexture(gold[1], gold[2], gold[3], Skin.CHOSEN)
 			tile.edges.Color(gold[1], gold[2], gold[3], 0.85)
 			tile.word:SetTextColor(gold[1], gold[2], gold[3])
 		else
@@ -1656,7 +1797,7 @@ do
 			local spec = self.spec
 			if not spec then return nil end
 			local lines = { spec.label }
-			if spec.tip then lines[2] = { spec.tip, 0.9, 0.88, 0.82 } end
+			if spec.tip then lines[2] = { spec.tip, Skin.RGB("text") } end
 			return lines
 		end, "ANCHOR_BOTTOM")
 		return tile
@@ -1669,7 +1810,7 @@ do
 		row:SetHeight(ROW_HEIGHT)
 		local hover = row:CreateTexture(nil, "HIGHLIGHT")
 		hover:SetAllPoints()
-		hover:SetColorTexture(1, 1, 1, 0.05)
+		hover:SetColorTexture(1, 1, 1, Skin.HOVER)
 		row.text = Skin.Text(row, "GameTooltipTextSmall", "label")
 		row.lead = Skin.Glyph(row, "back", 10)
 		row.lead:SetPoint("LEFT", row, "LEFT", 6, 0)
@@ -1862,6 +2003,8 @@ do
 				tile.spec, tile.on, tile.disabled = tileSpec, tileSpec.on and true or false, tileSpec.disabled and true or false
 				SetSign(tile, tileSpec.sign)
 				tile.word:SetText(tileSpec.label or "")
+				-- (the number keys mean nothing on a controller)
+				tile.key:SetShown(not (U.UsingPad and U.UsingPad()))
 				tile:ClearAllPoints()
 				local column, line = (index - 1) % perRow, math.floor((index - 1) / perRow)
 				tile:SetPoint("TOPLEFT", self, "TOPLEFT", m + column * (TILE_WIDTH + TILE_GAP), -(y + line * (TILE_HEIGHT + TILE_GAP)))
@@ -1912,11 +2055,14 @@ do
 			end
 			for index = used + 1, #self.rows do self.rows[index]:Hide() end
 			-- (the keys' line as wide as the card, as tall as its words: long in some languages, it wraps inside)
-			self.keys:SetText(spec.keys or "")
+			-- (under the controller, its own keys instead of the keyboard's: choose and back)
+			local keys = spec.keys
+			if (keys or "") ~= "" and U.UsingPad and U.UsingPad() then keys = Skin.PadKeys and Skin.PadKeys({ { "PAD1", "CHOOSE" }, { "PAD2", "BACK" } }) or "" end
+			self.keys:SetText(keys or "")
 			self.keys:SetWidth(width)
 			self.keys:ClearAllPoints()
 			self.keys:SetPoint("TOPLEFT", self, "TOPLEFT", m, -(y + 8))
-			local keysHeight = (spec.keys or "") ~= "" and U.Measure(self.keys, "GetStringHeight", 12) or 12
+			local keysHeight = (keys or "") ~= "" and U.Measure(self.keys, "GetStringHeight", 12) or 12
 			self:SetSize(width + m * 2, y + 8 + keysHeight + m)
 			Skin.Get(self):Layout()
 		end
@@ -1929,7 +2075,7 @@ do
 				Anchor(self, owner)
 			else
 				local x, y
-				if ns.Pad then x, y = ns.Pad.Point() else x, y = GetCursorPosition() end
+				x, y = Skin.CursorPoint()
 				local scale = self:GetEffectiveScale()
 				scale = type(scale) == "number" and scale > 0 and scale or 1
 				self:ClearAllPoints()
@@ -1978,14 +2124,14 @@ Skin.HELP_HEADING = true
 -- right click does, for those who do not know it. It stands in its own column at the row's right end, or left
 -- of a piece there (before): Skin.ROW_MORE wide, which the row keeps free for it. paper: on parchment (ink colors).
 -- opts: { manual (its owner shows and hides it: a row chosen keeps it), below (its tooltip under it), tip (other
--- words for its tooltip) }.
+-- words for its tooltip), tipPad (its words under a controller; else tip) }: a "⋯" that is not on a row says its own.
 Skin.ROW_MORE = 26
 local MORE_SIZE, MORE_DOTS = 20, { -6, 0, 6 }
 function Skin.RowMore(row, onClick, before, paper, opts)
 	opts = opts or {}
 	local more = CreateFrame("Button", nil, row)
 	more:SetSize(MORE_SIZE, MORE_SIZE)
-	more:RegisterForClicks("LeftButtonUp", "RightButtonUp") more.padRight = true
+	more:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	more.dots = {}
 	for index, x in ipairs(MORE_DOTS) do
 		local dot = Skin.Glyph(more, "dot", 10)
@@ -2005,9 +2151,9 @@ function Skin.RowMore(row, onClick, before, paper, opts)
 	end
 	more:SetScript("OnEnter", function(self)
 		Tint("gold")
-		GameTooltip:SetOwner(self, opts.below and "ANCHOR_BOTTOM" or "ANCHOR_RIGHT")
-		GameTooltip:AddLine(opts.tip or ns.L.ROW_MORE, 1, 1, 1, true)
-		GameTooltip:Show()
+		local pad = U.UsingPad and U.UsingPad()
+		local words = pad and (opts.tipPad or opts.tip or ns.L.ROW_MORE_PAD) or opts.tip or ns.L.ROW_MORE
+		Skin.ShowTip(self, words, opts.below and "ANCHOR_BOTTOM" or "ANCHOR_RIGHT")
 	end)
 	more:SetScript("OnLeave", function()
 		Tint("label")
@@ -2036,9 +2182,10 @@ local SHADE = { 0.24, 0.15, 0.06 } -- the darker sides
 local INK_EDGE = { 0.28, 0.18, 0.08 }
 
 Skin.INK = {
-	gold = { 0.45, 0.22, 0.04 }, kicker = { 0.42, 0.3, 0.14 }, label = { 0.38, 0.28, 0.15 }, text = { 0.2, 0.13, 0.07 },
-	soft = { 0.28, 0.2, 0.11 }, muted = { 0.44, 0.36, 0.26 }, good = { 0.1, 0.4, 0.12 }, bad = { 0.6, 0.13, 0.08 },
-	warn = { 0.55, 0.3, 0.05 }, blue = { 0.12, 0.27, 0.5 },
+	gold = { 0.4, 0.19, 0.03 }, kicker = { 0.32, 0.22, 0.08 }, label = { 0.33, 0.24, 0.12 }, text = { 0.2, 0.13, 0.07 },
+	soft = { 0.28, 0.2, 0.11 }, muted = { 0.36, 0.29, 0.2 }, good = { 0.05, 0.3, 0.07 }, bad = { 0.5, 0.1, 0.06 },
+	warn = { 0.4, 0.2, 0.02 }, blue = { 0.1, 0.24, 0.46 },
+	title = { 0.22, 0.14, 0.07 }, objective = { 0.3, 0.22, 0.12 }, done = { 0.38, 0.31, 0.22 },
 }
 
 -- A role's color on either ground: r, g, b.

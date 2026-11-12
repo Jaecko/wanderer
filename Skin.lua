@@ -303,7 +303,7 @@ end
 
 -- The small golden heading over a window ("REMINDERS"), placed by its owner.
 function Skin.CreateKicker(parent, text)
-	local kicker = Skin.CreateText(parent, "GameTooltipTextSmall", 0.85, 0.75, 0.5)
+	local kicker = Skin.CreateText(parent, "GameTooltipTextSmall", Skin.RGB("kicker"))
 	if text then kicker:SetText(U.Upper(text)) end
 	return kicker
 end
@@ -494,13 +494,13 @@ function Skin.CreateInput(parent, name, maxLetters, opts)
 	input.background = input:CreateTexture(nil, "BACKGROUND")
 	input.background:SetAllPoints()
 	input.background:SetColorTexture(0, 0, 0, 0.35)
-	input.edges = Skin.Edges(input, 1, 0.82, 0, 0.12)
+	input.edges = Skin.Edges(input, Skin.RGB("gold", 0.12))
 	input:HookScript("OnEditFocusGained", function(self)
-		self.edges.Color(1, 0.82, 0, 0.55)
+		self.edges.Color(Skin.RGB("gold", 0.55))
 		self.background:SetColorTexture(0, 0, 0, 0.45)
 	end)
 	input:HookScript("OnEditFocusLost", function(self)
-		self.edges.Color(1, 0.82, 0, 0.12)
+		self.edges.Color(Skin.RGB("gold", 0.12))
 		self.background:SetColorTexture(0, 0, 0, 0.35)
 	end)
 	if not opts then return input end
@@ -621,7 +621,7 @@ function Skin.RoundPortrait(owner, size)
 	ring:SetSize(size + 3, size + 3)
 	ring:SetPoint("CENTER", texture, "CENTER")
 	ring:SetTexture("Interface\\Buttons\\WHITE8X8")
-	ring:SetVertexColor(1, 0.82, 0, 0.5)
+	ring:SetVertexColor(Skin.RGB("gold", 0.5))
 	Skin.RoundMask(owner, texture)
 	texture.ring = ring
 	texture.ringShown = Skin.RoundMask(owner, ring)
@@ -648,6 +648,7 @@ end
 
 -- A small text link, gold when hovered (its tooltip under it, if any);
 -- link:SetLabel(text) changes its words and its width.
+-- (the kit's label and gold: Kit.lua loads after this file, so the same numbers)
 local LINK_COLOR, LINK_HOVER = { 0.75, 0.68, 0.5 }, { 1, 0.82, 0 }
 function Skin.CreateLink(parent, text, onClick, tooltip)
 	local link = CreateFrame("Button", nil, parent)
@@ -664,11 +665,7 @@ function Skin.CreateLink(parent, text, onClick, tooltip)
 	link:SetScript("OnMouseUp", function(self) self.text:SetPoint("CENTER", 0, 0) end)
 	link:SetScript("OnEnter", function(self)
 		self.text:SetTextColor(LINK_HOVER[1], LINK_HOVER[2], LINK_HOVER[3])
-		if tooltip then
-			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-			GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-			GameTooltip:Show()
-		end
+		if tooltip then Skin.ShowTip(self, tooltip, "ANCHOR_BOTTOM") end
 	end)
 	link:SetScript("OnLeave", function(self)
 		self.text:SetTextColor(LINK_COLOR[1], LINK_COLOR[2], LINK_COLOR[3])

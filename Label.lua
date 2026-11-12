@@ -67,6 +67,8 @@ local SEPARATOR = ns.Util.SEPARATOR
 local U = ns.Util
 local Safe, Clean, IsSecret = U.Safe, U.Clean, U.IsSecret
 local Measure, IsOverWorld, HasAtlas = U.Measure, U.IsOverWorld, U.HasAtlas
+-- Words in one of the family's colors (its role).
+local function Paint(text, role) return ns.Skin.Colorize(text, role) end
 
 -- The game draws a text a little wider than it measures it (more so at some
 -- interface scales): the label keeps a margin, so nothing ever overflows.
@@ -88,7 +90,7 @@ local REACTION_COLORS = {
 local QUEST_STYLES = {
 	turnin = { atlas = "QuestTurnin", texture = "Interface\\GossipFrame\\ActiveQuestIcon", text = "QUEST_TURNIN", color = "ffffd100" },
 	giver = { atlas = "QuestNormal", texture = "Interface\\GossipFrame\\AvailableQuestIcon", text = "QUEST_GIVER", color = "ffffd100" },
-	objective = { atlas = nil, texture = "Interface\\TargetingFrame\\PortraitQuestBadge", text = "QUEST_OBJECTIVE", color = "ffffee66" },
+	objective = { atlas = nil, texture = "Interface\\TargetingFrame\\PortraitQuestBadge", text = "QUEST_OBJECTIVE", role = "gold" },
 }
 
 local FACTIONS = {
@@ -196,13 +198,13 @@ local function FormatProfessionAction(action)
 	if action.possible and prof then
 		local verb = L[ACTION_KEYS[prof.skillLine] or ""] or prof.name
 		local icon = prof.icon and ("|T%s:14:14:0:0|t "):format(prof.icon) or ""
-		return ("%s|cffffd100%s|r  |cffaaaaaa(%s %d)|r"):format(icon, verb, prof.name, prof.rank)
+		return icon .. Paint(verb, "gold") .. "  " .. Paint(("(%s %d)"):format(prof.name, prof.rank), "muted")
 	end
 	-- Shown, but not highlighted: the player lacks the profession or the skill.
 	if action.required and prof then
-		return ("|cffff6060%s|r"):format(L.PROFESSION_TOO_LOW:format(prof.name, action.required, prof.rank))
+		return Paint(L.PROFESSION_TOO_LOW:format(prof.name, action.required, prof.rank), "bad")
 	end
-	return "|cffff6060" .. action.text .. "|r"
+	return Paint(action.text, "bad")
 end
 
 -- Tooltip reading ------------------------------------------------------------
@@ -345,7 +347,7 @@ local function HearthLine()
 	start, duration = Clean(start), Clean(duration)
 	local left = start and duration and duration > 2 and (start + duration - GetTime()) or 0
 	local stone = left > 0 and L.HEARTH_WAIT:format(Safe(SecondsToTime, left, true) or "") or L.HEARTH_READY
-	return ("|T%s:14:14:0:0|t |cffffd100%s|r  |cffa8a8a8%s|r"):format(HEARTH_ICON, text, stone)
+	return ("|T%s:14:14:0:0|t "):format(HEARTH_ICON) .. Paint(text, "gold") .. "  " .. Paint(stone, "muted")
 end
 
 -- Total RP 3 ------------------------------------------------------------------
@@ -440,7 +442,7 @@ local function BuildIdentityLine(a)
 		parts[#parts + 1] = ("|c%s%s|r"):format(a.rank.color, L[a.rank.key .. "_TAG"])
 	end
 	if a.tameable then
-		parts[#parts + 1] = ("|T%s:14:14:0:0|t |cff9de04a%s|r"):format(TAME_ICON, L.TAMEABLE)
+		parts[#parts + 1] = ("|T%s:14:14:0:0|t %s"):format(TAME_ICON, Paint(L.TAMEABLE, "good"))
 	end
 	return table.concat(parts, " · ")
 end
@@ -456,9 +458,9 @@ end
 local function BuildStatus(isPlayer, rpPlayer, relation)
 	local parts = {}
 	if Clean(Safe(UnitIsGhost, UNIT)) then
-		parts[#parts + 1] = "|cffaaaaaa" .. L.STATUS_GHOST .. "|r"
+		parts[#parts + 1] = Paint(L.STATUS_GHOST, "muted")
 	elseif Clean(Safe(UnitIsDead, UNIT)) then
-		parts[#parts + 1] = "|cffaaaaaa" .. L.STATUS_DEAD .. "|r"
+		parts[#parts + 1] = Paint(L.STATUS_DEAD, "muted")
 	end
 	if isPlayer then
 		if relation then
@@ -466,16 +468,16 @@ local function BuildStatus(isPlayer, rpPlayer, relation)
 			parts[#parts + 1] = ColorCode(color[1], color[2], color[3]) .. L["RELATION_" .. relation:upper()] .. "|r"
 		end
 		if Clean(Safe(UnitIsAFK, UNIT)) then
-			parts[#parts + 1] = "|cffffd100" .. L.STATUS_AFK .. "|r"
+			parts[#parts + 1] = Paint(L.STATUS_AFK, "gold")
 		elseif Clean(Safe(UnitIsDND, UNIT)) then
-			parts[#parts + 1] = "|cffff8040" .. L.STATUS_DND .. "|r"
+			parts[#parts + 1] = Paint(L.STATUS_DND, "warn")
 		end
 		if Clean(Safe(UnitIsPVP, UNIT)) then
-			parts[#parts + 1] = "|cffff4a4a" .. L.STATUS_PVP .. "|r"
+			parts[#parts + 1] = Paint(L.STATUS_PVP, "bad")
 		end
 		if rpPlayer and ns.db.rp.showStatus then
 			local inCharacter = Clean(Safe(rpPlayer.IsInCharacter, rpPlayer))
-			parts[#parts + 1] = inCharacter and ("|cff66ff66" .. L.STATUS_IC .. "|r") or ("|cffff6666" .. L.STATUS_OOC .. "|r")
+			parts[#parts + 1] = inCharacter and Paint(L.STATUS_IC, "good") or Paint(L.STATUS_OOC, "bad")
 		end
 	end
 	return parts
@@ -498,7 +500,7 @@ local function BuildDetailLine(a)
 	end
 	if not isPlayer and db.showXP and Clean(Safe(UnitCanAttack, "player", UNIT)) then
 		local kills = World.KillsToLevel(a.name, Clean(Safe(UnitLevel, UNIT)))
-		if kills then parts[#parts + 1] = "|cff9fb4ff" .. L.XP_KILLS:format(kills) .. "|r" end
+		if kills then parts[#parts + 1] = Paint(L.XP_KILLS:format(kills), "blue") end
 	end
 	if isPlayer and db.showGuild then
 		local guild = Clean(Safe(GetGuildInfo, UNIT))
@@ -539,7 +541,19 @@ end
 
 -- The closer look, while Shift is held over a player: role, talents, item
 -- level, rank in the guild. Waits for the inspection, says why when it cannot come.
+-- A creature's notes from the extensions (Wanderer Bestiary: "Killed ×12"): fn(guid) -> a short line or nil.
+local unitNotes = {}
+function ns.UnitNote(fn) if type(fn) == "function" then unitNotes[#unitNotes + 1] = fn end end
+
 local function BuildMoreLines(a)
+	if not a.isPlayer then
+		local notes = {}
+		for _, fn in ipairs(unitNotes) do
+			local ok, line = pcall(fn, a.guid)
+			if ok and type(line) == "string" and line ~= "" then notes[#notes + 1] = line end
+		end
+		return table.concat(notes, "\n")
+	end
 	if not (a.isPlayer and ns.db.label.shiftDetails and (shiftDown or OverOwnPortrait())) then return "" end
 	local talents, itemLevel, yours = Inspect.Known(UNIT, true)
 	local lines = {}
@@ -548,12 +562,12 @@ local function BuildMoreLines(a)
 	local second = {}
 	if itemLevel then second[#second + 1] = Inspect.ItemLevelText(itemLevel) end
 	local guild, rank = Safe(GetGuildInfo, UNIT)
-	if Clean(guild) and Clean(rank) then second[#second + 1] = "|cffd0c090" .. L.DETAILS_RANK .. "|r  " .. rank end
+	if Clean(guild) and Clean(rank) then second[#second + 1] = Paint(L.DETAILS_RANK, "label") .. "  " .. rank end
 	if #second > 0 then lines[#lines + 1] = table.concat(second, SEPARATOR) end
 	-- Nothing known yet: why.
 	if not (talentLine or itemLevel or yours) then
 		local why = InCombatLockdown() and L.DETAILS_COMBAT or (not Inspect.InReach(UNIT) and L.DETAILS_FAR) or L.DETAILS_WAIT
-		lines[#lines + 1] = "|cff808080" .. why .. "|r"
+		lines[#lines + 1] = Paint(why, "muted")
 	end
 	return table.concat(lines, "\n")
 end
@@ -571,7 +585,7 @@ local function KnownDetails(unit)
 end
 
 local function TargetPrefix()
-	return "|cff808080" .. L.TARGET_PREFIX .. "|r "
+	return Paint(L.TARGET_PREFIX, "muted") .. " "
 end
 
 -- What the unit targets (you, or someone else): portrait, "Target: Name",
@@ -584,7 +598,7 @@ local function UpdateTargetLine()
 	local isPlayer = Clean(Safe(UnitIsPlayer, TARGET)) and true or false
 	local shown = false
 	if Clean(Safe(UnitIsUnit, TARGET, "player")) then
-		targetText:SetText(TargetPrefix() .. "|cffff8080" .. L.TARGET_YOU .. "|r")
+		targetText:SetText(TargetPrefix() .. Paint(L.TARGET_YOU, "bad"))
 		shown = true
 	else
 		local name = Safe(UnitName, TARGET)
@@ -687,11 +701,13 @@ local function MeasureLines()
 	end
 	local iconSpace = rankIcon:IsShown() and (RANK_ICON_SIZE + 4) or 0
 	local width = TextWidth(nameText, FALLBACK_WIDTH) + iconSpace
-	local height = math.max(Measure(nameText, "GetStringHeight", FALLBACK_HEIGHT), iconSpace > 0 and RANK_ICON_SIZE or 0)
+	nameText.measured = Measure(nameText, "GetStringHeight", FALLBACK_HEIGHT)
+	local height = math.max(nameText.measured, iconSpace > 0 and RANK_ICON_SIZE or 0)
 	for _, line in ipairs(LINES) do
 		if line:IsShown() then
 			width = math.max(width, TextWidth(line, FALLBACK_WIDTH))
-			height = height + LINE_GAP + Measure(line, "GetStringHeight", 10)
+			line.measured = Measure(line, "GetStringHeight", 10)
+			height = height + LINE_GAP + line.measured
 		end
 	end
 	return width, height, iconSpace
@@ -842,6 +858,13 @@ function Layout()
 	local top, bottom = margin + insetTop, margin + insetBottom
 	width = math.max(width, skin:MinWidth())
 	local previous, offset = PlaceColumn(width - portraitSpace, portraitSpace, iconSpace, top, margin, castHeight)
+	-- (a line the game wraps once its width is set, a long quest line above all: the label grows with it, so its
+	-- target and bars never spill under the frame)
+	local grown = math.max(0, Measure(nameText, "GetStringHeight", FALLBACK_HEIGHT) - (nameText.measured or 0))
+	for _, line in ipairs(LINES) do
+		if line:IsShown() and line.measured then grown = grown + math.max(0, Measure(line, "GetStringHeight", 10) - line.measured) end
+	end
+	height = height + grown
 	PlaceTarget(previous, offset, block, info, bar, power, margin)
 	frame:SetSize(width + margin * 2, height + top + bottom)
 	skin:Layout()
@@ -924,7 +947,7 @@ local function RenderActions(a)
 	if a.innkeeper then parts[#parts + 1] = HearthLine() end
 	local profession = FormatProfessionAction(a.action)
 	if profession then parts[#parts + 1] = profession end
-	if a.loot then parts[#parts + 1] = ("|T%s:14:14:0:0|t |cffffd100%s|r"):format(LOOT_ICON, L.ACTION_LOOT) end
+	if a.loot then parts[#parts + 1] = ("|T%s:14:14:0:0|t "):format(LOOT_ICON) .. Paint(L.ACTION_LOOT, "gold") end
 	if a.interactable and not profession then
 		parts[#parts + 1] = ("|T%s:16:16:0:0|t |cff8cd1ff%s|r"):format(INTERACT_ICON, L.ACTION_INTERACT)
 	end
@@ -934,11 +957,11 @@ local function RenderActions(a)
 	local style = a.questStatus and QUEST_STYLES[a.questStatus]
 	if style then
 		skin:SetTopBadge(style.texture, style.atlas, false)
-		questStatusText:SetText(("|c%s%s|r"):format(style.color, L[style.text]))
+		questStatusText:SetText(style.role and Paint(L[style.text], style.role) or ("|c%s%s|r"):format(style.color, L[style.text]))
 	end
 	local quests = {}
 	for _, quest in ipairs(a.quests or {}) do
-		local color = quest.complete and "|cff808080" or "|cffffee66"
+		local color = quest.complete and U.ColorCode(ns.Skin.RGB("muted")) or U.ColorCode(ns.Skin.RGB("gold"))
 		-- In a group: whose objective it is, in their class's color.
 		local who = quest.who and ("|c%s%s|r"):format(MemberColorCode(quest.who), L.QUEST_WHO:format(quest.who)) or ""
 		quests[#quests + 1] = ("%s %s%s%s|r"):format(IconMarkup(nil, QUEST_STYLES.objective.texture, 12), who, color, quest.text)
@@ -952,8 +975,8 @@ local function RefreshDynamic()
 	a.threat = IsThreat(a.isPlayer)
 	-- At the top: a player who can attack you, or a monster not yours yet.
 	local untagged = not a.isPlayer and ns.IsUntaggedOnYou(UNIT)
-	alertText:SetText(a.threat and ("|cffff3030" .. L.THREAT_LINE .. "|r")
-		or untagged and ("|cffff9933" .. L.UNTAGGED_STATUS .. "|r") or "")
+	alertText:SetText(a.threat and Paint(L.THREAT_LINE, "bad")
+		or untagged and Paint(L.UNTAGGED_STATUS, "warn") or "")
 	detailText:SetText(BuildDetailLine(a))
 	moreText:SetText(BuildMoreLines(a))
 	targetText.forceShow = UpdateTargetLine()
@@ -987,9 +1010,9 @@ local function UpdateContent(full)
 		end
 		local title = rp and ns.db.rp.showTitle and Clean(Safe(rp.GetFullTitle, rp))
 		if title then
-			titleText:SetText("|cffffd100" .. L.RP_TITLE_QUOTED:format(title) .. "|r")
+			titleText:SetText(Paint(L.RP_TITLE_QUOTED:format(title), "gold"))
 		elseif current.role then
-			titleText:SetText("|cffd0c090" .. current.role .. "|r")
+			titleText:SetText(Paint(current.role, "label"))
 		end
 		identityText:SetText(BuildIdentityLine(current))
 		if Content().showPortrait then
@@ -1024,7 +1047,7 @@ local function RenderFishing()
 	local words = ns.FishingWords()
 	if not words then return false end
 	local status = ns.FishingStatus()
-	cast.text:SetText("|cffffd100" .. words .. "|r")
+	cast.text:SetText(Paint(words, "gold"))
 	cast.icon:SetTexture(FISH_ICON)
 	cast.icon.wanted = true
 	cast.bar:SetStatusBarColor(0.35, 0.7, 1)
@@ -1034,7 +1057,7 @@ local function RenderFishing()
 	cast:Tick()
 	local details = {}
 	if status.catches > 0 then details[#details + 1] = L.FISH_COUNT:format(status.catches) end
-	if status.noLure then details[#details + 1] = "|cff999999" .. L.FISH_NO_LURE .. "|r" end
+	if status.noLure then details[#details + 1] = Paint(L.FISH_NO_LURE, "muted") end
 	detailText:SetText(table.concat(details, SEPARATOR))
 	return true
 end
@@ -1116,8 +1139,8 @@ local function DebugReport(anchor)
 	-- Where the label is, where it is asked to be, and what the game says of the nameplate.
 	local _, plate = U.NameplateFor(UNIT)
 	local plates = C_NamePlate and Safe(C_NamePlate.GetNamePlates) or {}
-	ns.Print(("|cffffd100%s|r %s  (%s: %s [%s, %s, %d], %s: %s)"):format(
-		a.kind == "object" and L.DEBUG_OBJECT or L.DEBUG_UNIT, DebugText(a.name),
+	ns.Print(("%s %s  (%s: %s [%s, %s, %d], %s: %s)"):format(
+		Paint(a.kind == "object" and L.DEBUG_OBJECT or L.DEBUG_UNIT, "gold"), DebugText(a.name),
 		L.DEBUG_ANCHOR, anchor or "-", ns.db.label.anchor, plate, type(plates) == "table" and #plates or 0,
 		L.DEBUG_ZONE, DebugText(ns.zone)))
 	local texts = {}
@@ -1148,7 +1171,7 @@ local function DebugReport(anchor)
 end
 
 function ns.DebugEnvironment()
-	local function has(v) return v and ("|cff66ff66" .. L.DEBUG_YES .. "|r") or ("|cffff6060" .. L.DEBUG_MISSING .. "|r") end
+	local function has(v) return v and Paint(L.DEBUG_YES, "good") or Paint(L.DEBUG_MISSING, "bad") end
 	ns.Print(("%s %s | %s %s | %s %s"):format(L.DEBUG_ZONE, DebugText(ns.zone), L.DEBUG_COMBAT, ns.inCombat and L.DEBUG_YES or L.DEBUG_NO,
 		L.DEBUG_PROFILE, DebugText(ns.profileName)))
 	local names = {}
@@ -1163,7 +1186,7 @@ function ns.DebugEnvironment()
 		local report = owner and ns.Skin.Get(owner) and ns.Skin.Get(owner):Report()
 		if not report then return "-" end
 		if not report.active then return L.DEBUG_DRAWN_OFF end
-		if report.wanderer and report.game then return "|cffff6060" .. L.DEBUG_DRAWN_BOTH .. "|r" end
+		if report.wanderer and report.game then return Paint(L.DEBUG_DRAWN_BOTH, "bad") end
 		return report.game and L.DEBUG_DRAWN_GAME or (report.wanderer and L.DEBUG_DRAWN_WANDERER or "?")
 	end
 	ns.Print(("%s %s | %s %s | %s %s"):format(L.DEBUG_STYLE, ns.db.label.style,
@@ -1537,7 +1560,7 @@ local function OnUpdate(self, elapsed)
 		return
 	end
 	-- Shift pressed or released over a character: the closer look at once.
-	local shift = not objectMode and ns.db.label.shiftDetails and IsShiftKeyDown() and true or false
+	local shift = not objectMode and ns.db.label.shiftDetails and U.PadShiftDown() and true or false
 	if shift ~= shiftDown then
 		shiftDown = shift
 		sinceRefresh = REFRESH_DELAY
@@ -1689,7 +1712,7 @@ function ns.InitLabel()
 	rankIcon:SetSize(RANK_ICON_SIZE, RANK_ICON_SIZE)
 	rankIcon:Hide()
 
-	nameText = CreateLine("GameTooltipHeaderText", 1, 0.82, 0)
+	nameText = CreateLine("GameTooltipHeaderText", ns.Skin.RGB("gold"))
 	rankIcon:SetPoint("RIGHT", nameText, "LEFT", -4, 0)
 	alertText = CreateLine("GameTooltipText")
 	titleText = CreateLine("GameTooltipText")
@@ -1714,7 +1737,7 @@ function ns.InitLabel()
 	-- The target block (laid out on its own, after the lines).
 	target.line = frame:CreateTexture(nil, "ARTWORK")
 	target.line:SetHeight(1)
-	target.line:SetColorTexture(1, 0.82, 0, 0.25)
+	target.line:SetColorTexture(ns.Skin.RGB("gold", 0.25))
 	target.portrait = ns.Skin.RoundPortrait(frame, TARGET_PORTRAIT)
 	targetText = CreateLine("GameTooltipTextSmall", 0.8, 0.8, 0.8)
 	target.info = CreateLine("GameTooltipTextSmall", 0.65, 0.65, 0.65)

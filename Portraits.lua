@@ -14,7 +14,7 @@ local Safe, Clean, IsSecret = U.Safe, U.Clean, U.IsSecret
 local RING = "Interface\\AddOns\\Wanderer\\Media\\PortraitRing"
 local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local CIRCLES = "Interface\\TargetingFrame\\UI-Classes-Circles"
-local INK_TINT = { 0.85, 0.75, 0.5 } -- the kit's kicker: an icon engraved on the dark look
+local INK_TINT = ns.Skin.COLORS.kicker -- the kit's kicker: an icon engraved on the dark look
 local GOLD = { 0.78, 0.68, 0.42 } -- your ring: a quiet, desaturated gold
 local RING_ALPHA, DIM_ALPHA = 0.8, 0.3
 local GREY = 0.6
@@ -200,7 +200,7 @@ local SQUARE = "Interface\\AddOns\\Wanderer\\Media\\PortraitSquare"
 local NARROW = "Fonts\\ARIALN.TTF"
 local TAB_GROUND = { 0.055, 0.059, 0.071, 0.92 }
 local LEVEL_COLOR = { 0.95, 0.93, 0.9 }
-local REST_COLOR = { 1, 0.82, 0 }
+local REST_COLOR = ns.Skin.COLORS.gold
 local REST_WORDS = "Zz"
 local ELITE_EDGE, RARE_EDGE = { 0.78, 0.62, 0.25, 1 }, { 0.7, 0.72, 0.76, 1 }
 local medals = setmetatable({}, { __mode = "k" }) -- a unit frame -> its medallion

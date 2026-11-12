@@ -185,13 +185,13 @@ local function MakeInfo()
 	info:SetAlpha(REST)
 	info:SetScript("OnEnter", function(self)
 		self:SetAlpha(NEAR)
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-		GameTooltip:AddLine(Clean(Safe(GetZoneText)) or "", 1, 0.82, 0)
+		local lines = { Clean(Safe(GetZoneText)) or "" }
 		local sub = Clean(Safe(GetSubZoneText))
-		if sub and sub ~= "" then GameTooltip:AddLine(sub, 1, 1, 1) end
-		ns.AddLayerLine(GameTooltip)
-		GameTooltip:AddLine(L.MINIMAP_INFO_HINT, 0.55, 0.53, 0.46, true)
-		GameTooltip:Show()
+		if sub and sub ~= "" then lines[#lines + 1] = sub end
+		-- (the layer's line, gathered with the others)
+		ns.AddLayerLine({ AddLine = function(_, text) lines[#lines + 1] = { text, C.muted[1], C.muted[2], C.muted[3] } end })
+		lines[#lines + 1] = { L.MINIMAP_INFO_HINT, C.muted[1], C.muted[2], C.muted[3] }
+		ns.Skin.ShowTip(self, lines, "ANCHOR_BOTTOM")
 	end)
 	info:SetScript("OnLeave", function(self)
 		self:SetAlpha(REST)

@@ -118,7 +118,7 @@ function ns.InitThreat()
 	alert:SetAlpha(0)
 	alert:Hide()
 	if alert.SetIgnoreParentAlpha then alert:SetIgnoreParentAlpha(true) end
-	alertText = ns.Skin.CreateText(alert, "GameFontNormalLarge", 1, 0.45, 0.3)
+	alertText = ns.Skin.CreateText(alert, "GameFontNormalLarge", ns.Skin.RGB("bad"))
 	alertText:SetPoint("CENTER")
 	alertText:SetJustifyH("CENTER")
 

@@ -71,17 +71,20 @@ local function Gather(button)
 	local points = {}
 	for index = 1, (button:GetNumPoints() or 0) do points[index] = { button:GetPoint(index) } end
 	saved[button] = { parent = button:GetParent(), points = points, level = button:GetFrameLevel(),
-		setPoint = rawget(button, "SetPoint"), clear = rawget(button, "ClearAllPoints") }
+		setPoint = rawget(button, "SetPoint"), clear = rawget(button, "ClearAllPoints"), padRight = rawget(button, "padRight") }
 	button:SetParent(drawer)
 	button:SetFrameLevel(drawer:GetFrameLevel() + 5)
 	-- The addon may place its button again (dragging, minimap shape): not here.
 	button.SetPoint, button.ClearAllPoints = Mute, Mute
+	-- (its right click, the addon's own options most often: the controller's top button)
+	button.padRight = true
 	order[#order + 1] = button
 end
 
 local function Release(button)
 	local was = saved[button]
 	button.SetPoint, button.ClearAllPoints = was.setPoint, was.clear
+	button.padRight = was.padRight
 	button:SetParent(was.parent)
 	button:SetFrameLevel(was.level or 1)
 	ClearAllPoints(button)
@@ -144,7 +147,7 @@ function ns.InitIcons()
 	drawer:SetClampedToScreen(true)
 	kicker = ns.Skin.CreateKicker(drawer, L.ICONS_TITLE)
 	kicker:SetPoint("TOPLEFT", drawer, "TOPLEFT", ns.Skin.Margin() + 6, -(ns.Skin.Margin() + 4))
-	empty = ns.Skin.CreateText(drawer, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
+	empty = ns.Skin.Text(drawer, "GameTooltipTextSmall", "muted")
 	empty:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -8)
 	empty:SetText(L.ICONS_EMPTY)
 	if UISpecialFrames then table.insert(UISpecialFrames, "WandererIconDrawer") end

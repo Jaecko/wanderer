@@ -101,7 +101,8 @@ function ns.IsPhotoMode() return reasons.photo == true end -- (tests)
 function ns.TogglePhotoMode()
 	if InCombatLockdown() then return end
 	SetReason("photo", not reasons.photo)
-	if reasons.photo then ns.Print(L.MSG_PHOTO_ON) end
+	-- (a controller: its menu button opens the game menu, which brings everything back)
+	if reasons.photo then ns.Print((U.UsingPad and U.UsingPad()) and L.MSG_PHOTO_ON_PAD or L.MSG_PHOTO_ON) end
 end
 
 function Wanderer_TogglePhoto() ns.TogglePhotoMode() end
@@ -177,16 +178,37 @@ local function OverHiddenMinimap()
 	return minimapHidden and (U.IsMouseOver(_G.Minimap) or U.IsMouseOver(_G.MinimapCluster)) or false
 end
 
+-- The game's panels (character, spellbook, map...), opened by key or by the controller.
+local PANEL_SLOTS = { "left", "center", "doublewide", "fullscreen" }
+
+-- A window open (one Escape closes, the destination's card aside), a game panel, or a controller moving in one.
+local function WindowInUse()
+	if ns.Pad and ns.Pad.Current and ns.Pad.Current() then return true end
+	for _, name in ipairs(UISpecialFrames or {}) do
+		local window = _G[name]
+		if window and window ~= card and window.IsShown and window:IsShown() then return true end
+	end
+	local getPanel = _G.GetUIPanel
+	if getPanel then
+		for _, slot in ipairs(PANEL_SLOTS) do
+			local panel = Safe(getPanel, slot)
+			if panel and panel.IsShown and panel:IsShown() then return true end
+		end
+	end
+	return false
+end
+ns.CurtainWindowInUse = WindowInUse -- (tests)
+
 local function OnUpdate(self, elapsed)
 	-- During a flight the interface stays away, whatever the mouse does, and
-	-- comes back only while the mouse is over one of its parts (invisible, they
-	-- still answer the mouse), a moment longer after.
+	-- comes back while the mouse is over one of its parts (invisible, they
+	-- still answer the mouse) or a window is open, a moment longer after.
 	sinceCheck = sinceCheck + elapsed
 	if sinceCheck >= CHECK_EVERY then
 		sinceCheck = 0
 		-- (or while you type: the chat's line is never written blind)
 		-- (the minimap stepped out once faded: its place under the mouse brings everything back, as the other parts)
-		if reasons.travel and not reasons.photo and (not U.IsOverWorld() or Typing() or OverHiddenMinimap()) then
+		if reasons.travel and not reasons.photo and (not U.IsOverWorld() or Typing() or OverHiddenMinimap() or WindowInUse()) then
 			peekUntil = GetTime() + PEEK_TIME
 		end
 		target = Wanted()
@@ -234,7 +256,7 @@ function ns.InitCurtain()
 	card.kicker = ns.Skin.CreateKicker(card, L.TRAVEL_KICKER)
 	card.kicker:SetPoint("TOP", card, "TOP", 0, -(ns.Skin.Margin() + 10))
 	card.kicker:SetJustifyH("CENTER")
-	cardText = ns.Skin.CreateText(card, "GameFontNormalHuge", 1, 0.82, 0)
+	cardText = ns.Skin.CreateText(card, "GameFontNormalHuge", ns.Skin.RGB("gold"))
 	cardText:SetPoint("TOP", card.kicker, "BOTTOM", 0, -6)
 	cardText:SetJustifyH("CENTER")
 	if cardText.SetWordWrap then cardText:SetWordWrap(false) end

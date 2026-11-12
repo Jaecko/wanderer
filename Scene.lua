@@ -67,16 +67,17 @@ local QUEST_ICONS = {
 
 -- Colors on the dark look and on parchment, by role.
 local DARK = {
-	text = { 0.95, 0.92, 0.85 }, name = { 1, 0.82, 0 }, title = { 0.9, 0.8, 0.55 }, label = { 0.75, 0.68, 0.5 },
-	muted = { 0.62, 0.6, 0.54 }, keys = { 0.7, 0.7, 0.7 }, price = { 0.7, 0.7, 0.7 }, accent = { 1, 0.82, 0 },
-	unusable = { 1, 0.32, 0.32 }, done = { 0.4, 0.87, 0.4 }, open = { 0.93, 0.93, 0.93 },
-	rule = { 1, 0.82, 0, 0.25 }, hover = { 1, 0.82, 0, 0.07 }, picked = { 1, 0.82, 0, 0.14 }, mark = { 1, 0.82, 0, 0.9 },
-	ring = { 1, 0.82, 0, 0.55 },
+	text = ns.Skin.COLORS.text, name = ns.Skin.COLORS.gold, title = ns.Skin.COLORS.kicker, label = ns.Skin.COLORS.label,
+	muted = ns.Skin.COLORS.muted, keys = ns.Skin.COLORS.muted, price = ns.Skin.COLORS.muted, accent = ns.Skin.COLORS.gold,
+	unusable = ns.Skin.COLORS.bad, done = ns.Skin.COLORS.good, open = ns.Skin.COLORS.text,
+	rule = { ns.Skin.RGB("gold", 0.25) }, hover = { ns.Skin.RGB("gold", ns.Skin.HOVER) },
+	picked = { ns.Skin.RGB("gold", ns.Skin.CHOSEN) }, mark = { ns.Skin.RGB("gold", 0.9) }, ring = { ns.Skin.RGB("gold", 0.55) },
 }
+local INK = ns.Skin.INK
 local PAPER = {
-	text = { 0.2, 0.13, 0.07 }, name = { 0.42, 0.15, 0.05 }, title = { 0.34, 0.22, 0.1 }, label = { 0.38, 0.28, 0.15 },
-	muted = { 0.45, 0.37, 0.27 }, keys = { 0.42, 0.35, 0.26 }, price = { 0.36, 0.28, 0.18 }, accent = { 0.5, 0.27, 0.03 },
-	unusable = { 0.62, 0.12, 0.08 }, done = { 0.1, 0.4, 0.12 }, open = { 0.2, 0.13, 0.07 },
+	text = INK.text, name = INK.gold, title = INK.kicker, label = INK.label,
+	muted = INK.muted, keys = INK.muted, price = INK.soft, accent = INK.gold,
+	unusable = INK.bad, done = INK.good, open = INK.text,
 	rule = { 0.35, 0.22, 0.08, 0.35 }, hover = { 0.35, 0.2, 0.05, 0.08 }, picked = { 0.45, 0.26, 0.05, 0.16 },
 	mark = { 0.45, 0.26, 0.05, 0.85 }, ring = { 0.3, 0.19, 0.07, 0.75 },
 }
@@ -136,7 +137,7 @@ local function Paint(text, role)
 end
 -- A color of the game (a quest's level) as ink on parchment: darker.
 local function Tone(r, g, b)
-	if paper then return r * 0.55, g * 0.55, b * 0.55 end
+	if paper then return r * 0.3, g * 0.3, b * 0.3 end
 	return r, g, b
 end
 
@@ -709,7 +710,7 @@ local function ChoiceRow(index)
 	if row then return row end
 	-- (a Button: picked only when pressed and released on it, never by a camera drag ending over it)
 	row = CreateFrame("Button", nil, panel)
-	row:RegisterForClicks("LeftButtonUp", "RightButtonUp") row.padRight = true
+	row:RegisterForClicks("LeftButtonUp", "RightButtonUp") -- (right: leaves, as B does under the pad)
 	row.hover = row:CreateTexture(nil, "BACKGROUND")
 	row.hover:SetAllPoints()
 	row.hover:Hide()
@@ -721,7 +722,7 @@ local function ChoiceRow(index)
 	row.icon = row:CreateTexture(nil, "ARTWORK")
 	row.icon:SetSize(16, 16)
 	row.icon:SetPoint("LEFT", row, "LEFT", 10, 0)
-	row.text = ns.Skin.CreateText(row, "GameTooltipText", 0.95, 0.92, 0.85)
+	row.text = ns.Skin.CreateText(row, "GameTooltipText", ns.Skin.RGB("text"))
 	row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
 	row.text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 	row.text:SetJustifyH("LEFT")
@@ -740,11 +741,11 @@ end
 ShowRewardTip = function(item)
 	GameTooltip:SetOwner(item, "ANCHOR_RIGHT")
 	Safe(GameTooltip.SetQuestItem, GameTooltip, item.kind, item.index)
-	if item.isBest then GameTooltip:AddLine(L.SCENE_BEST_VALUE, 1, 0.82, 0) end
+	if item.isBest then GameTooltip:AddLine(L.SCENE_BEST_VALUE, ns.Skin.RGB("gold")) end
 	if item.compare and item.compare > 0 then
-		GameTooltip:AddLine(L.SCENE_UPGRADE:format(item.compare), 0.4, 1, 0.4)
+		GameTooltip:AddLine(L.SCENE_UPGRADE:format(item.compare), ns.Skin.RGB("good"))
 	elseif item.compare and item.compare < 0 then
-		GameTooltip:AddLine(L.SCENE_DOWNGRADE:format(-item.compare), 1, 0.4, 0.4)
+		GameTooltip:AddLine(L.SCENE_DOWNGRADE:format(-item.compare), ns.Skin.RGB("bad"))
 	end
 	GameTooltip:Show()
 end
@@ -756,7 +757,7 @@ local function RewardItem(index)
 	local item = rewardItems[index]
 	if item then return item end
 	item = CreateFrame("Button", nil, panel)
-	item:RegisterForClicks("LeftButtonUp", "RightButtonUp") item.padRight = true
+	item:RegisterForClicks("LeftButtonUp", "RightButtonUp") -- (right: leaves, as B does under the pad)
 	item.picked = item:CreateTexture(nil, "BACKGROUND")
 	item.picked:SetAllPoints()
 	item.picked:Hide()
@@ -779,10 +780,10 @@ local function RewardItem(index)
 	item.arrow = item:CreateTexture(nil, "OVERLAY")
 	item.arrow:SetSize(14, 14)
 	item.arrow:SetPoint("BOTTOMLEFT", item.border, "BOTTOMLEFT", -4, -4)
-	item.price = ns.Skin.CreateText(item, "GameTooltipTextSmall", 0.7, 0.7, 0.7)
+	item.price = ns.Skin.CreateText(item, "GameTooltipTextSmall", ns.Skin.RGB("muted"))
 	item.price:SetJustifyH("RIGHT")
 	item.price:SetPoint("RIGHT", item, "RIGHT", -6, 0)
-	item.text = ns.Skin.CreateText(item, "GameTooltipTextSmall", 0.95, 0.92, 0.85)
+	item.text = ns.Skin.CreateText(item, "GameTooltipTextSmall", ns.Skin.RGB("text"))
 	item.text:SetPoint("LEFT", item.border, "RIGHT", 8, 0)
 	item.text:SetPoint("RIGHT", item.price, "LEFT", -6, 0)
 	if item.text.SetWordWrap then item.text:SetWordWrap(false) end
@@ -829,7 +830,7 @@ local function ActionButton(index)
 	local window, buttonSkin = ns.Skin.CreateWindow(nil, nil, panel, nil, "Button")
 	button = window
 	button.skin = buttonSkin
-	button.text = ns.Skin.CreateText(button, "GameTooltipText", 0.95, 0.92, 0.85)
+	button.text = ns.Skin.CreateText(button, "GameTooltipText", ns.Skin.RGB("text"))
 	button.text:SetPoint("CENTER")
 	button.text:SetJustifyH("CENTER")
 	button:SetScript("OnEnter", function(self) ButtonLook(self, true) end)
@@ -1009,7 +1010,7 @@ local function PaintReward(item, reward, number)
 	item.compare = reward.compare
 	if reward.compare and reward.compare ~= 0 then
 		item.arrow:SetTexture(reward.compare > 0 and UP_TEXTURE or DOWN_TEXTURE)
-		if reward.compare > 0 then item.arrow:SetVertexColor(0.3, 1, 0.3) else item.arrow:SetVertexColor(1, 0.3, 0.3) end
+		item.arrow:SetVertexColor(ns.Skin.InkColor(reward.compare > 0 and "good" or "bad", paper))
 		item.arrow:Show()
 	else
 		item.arrow:Hide()
@@ -1167,7 +1168,7 @@ local function RenderActions(y, cost, locked)
 		nil, right, y)
 	local hint = ""
 	if locked then
-		hint = L.SCENE_KEYS_GOLD
+		hint = ns.Pad.On() and L.SCENE_KEYS_GOLD_PAD or L.SCENE_KEYS_GOLD
 	elseif picking then
 		hint = scene.selected and L.SCENE_KEYS_TAKE or L.SCENE_KEYS_REWARD
 	elseif last and scene.choices[1] ~= nil then
@@ -1175,7 +1176,11 @@ local function RenderActions(y, cost, locked)
 	elseif CanGoBack() then
 		hint = L.SCENE_KEYS_BACK
 	end
-	if ns.Pad.On() and not locked and hint ~= L.SCENE_KEYS_BACK then
+	-- (what was said before: its line chosen and clicked under the controller too)
+	local backHint = hint == L.SCENE_KEYS_BACK
+	if ns.Pad.On() and backHint then
+		hint = L.SCENE_KEYS_BACK_PAD
+	elseif ns.Pad.On() and not locked then
 		hint = ns.Skin.PadKeys({ { "PAD1", "CHOOSE" }, { "PAD2", "LEAVE" } }) or L.SCENE_PAD_KEYS
 	end
 	keysText:SetText(hint)
@@ -1184,7 +1189,6 @@ local function RenderActions(y, cost, locked)
 	keysText:ClearAllPoints()
 	keysText:SetPoint("LEFT", panel, "TOPLEFT", margin, -(y + BUTTON_HEIGHT / 2))
 	-- (saying what was said before: a click on it goes back too)
-	local backHint = hint == L.SCENE_KEYS_BACK
 	keysLink:SetShown(backHint)
 	if backHint then
 		keysLink:ClearAllPoints()
@@ -1831,32 +1835,30 @@ function ns.InitScene()
 	-- A white file tinted gold, cut round by a mask texture (the game's
 	-- current way: masks only cut texture files, never plain colors).
 	portraitRing:SetTexture(RING_TEXTURE)
-	portraitRing:SetVertexColor(1, 0.82, 0, 0.55)
+	portraitRing:SetVertexColor(ns.Skin.RGB("gold", 0.55))
 	portraitRing.round = ns.Skin.RoundMask(panel, portraitRing)
 	portrait.round = ns.Skin.RoundMask(panel, portrait)
-	nameText = ns.Skin.CreateText(panel, "GameTooltipHeaderText", 1, 0.82, 0)
-	titleText = ns.Skin.CreateText(panel, "GameTooltipText", 0.9, 0.8, 0.55)
+	nameText = ns.Skin.CreateText(panel, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
+	titleText = ns.Skin.CreateText(panel, "GameTooltipText", ns.Skin.RGB("kicker"))
 	rule = panel:CreateTexture(nil, "ARTWORK")
-	rule:SetColorTexture(1, 0.82, 0, 0.25)
+	rule:SetColorTexture(ns.Skin.RGB("gold", 0.25))
 	rule:SetHeight(1)
-	saidText = ns.Skin.CreateText(panel, "GameTooltipText", 0.62, 0.6, 0.54)
+	saidText = ns.Skin.CreateText(panel, "GameTooltipText", ns.Skin.RGB("muted"))
 	saidText:Hide()
-	bodyText = ns.Skin.CreateText(panel, "GameTooltipText", 0.95, 0.92, 0.85)
-	rewardsLabel = ns.Skin.CreateText(panel, "GameTooltipTextSmall", 0.75, 0.68, 0.5)
-	moneyText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", 0.95, 0.92, 0.85)
-	keysText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", 0.55, 0.55, 0.55)
+	bodyText = ns.Skin.CreateText(panel, "GameTooltipText", ns.Skin.RGB("text"))
+	rewardsLabel = ns.Skin.CreateText(panel, "GameTooltipTextSmall", ns.Skin.RGB("label"))
+	moneyText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", ns.Skin.RGB("text"))
+	keysText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", ns.Skin.RGB("muted"))
 	if keysText.SetWordWrap then keysText:SetWordWrap(false) end
 	-- Spoken's own reading of the quest, again (its slash command, as its key binding does).
 	replayLink = CreateFrame("Button", nil, panel)
 	replayLink:SetHeight(18)
-	replayLink.text = ns.Skin.CreateText(replayLink, "GameTooltipTextSmall", 0.75, 0.68, 0.5)
+	replayLink.text = ns.Skin.CreateText(replayLink, "GameTooltipTextSmall", ns.Skin.RGB("label"))
 	replayLink.text:SetPoint("RIGHT")
 	replayLink.text:SetText(L.SCENE_SPOKEN_REPLAY)
 	replayLink:SetScript("OnEnter", function(self)
 		Paint(self.text, "accent")
-		GameTooltip:SetOwner(self, "ANCHOR_TOP")
-		GameTooltip:SetText(L.SCENE_SPOKEN_REPLAY_DESC, 1, 1, 1, 1, true)
-		GameTooltip:Show()
+		ns.Skin.ShowTip(self, L.SCENE_SPOKEN_REPLAY_DESC, "ANCHOR_TOP")
 	end)
 	replayLink:SetScript("OnLeave", function(self)
 		Paint(self.text, "label")

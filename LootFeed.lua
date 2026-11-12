@@ -13,7 +13,7 @@ local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
 
 local WIDTH = 250
-local ROW_HEIGHT = 36
+local ROW_HEIGHT = ns.Skin.ROW.normal
 local ROW_GAP = 4
 local ICON_SIZE = 26
 local MAX_SHOWN = 6 -- lines at most (a newer one sends the oldest away early)
@@ -176,14 +176,9 @@ local function Enter(row)
 	local entry = row.entry
 	if not entry then return end
 	row.hovered = true
-	GameTooltip:SetOwner(row, "ANCHOR_LEFT")
-	if entry.link then
-		GameTooltip:SetHyperlink(entry.link)
-	else
-		GameTooltip:AddLine(L.LOOT_FEED_MONEY_LOOTED, 1, 0.82, 0)
-		GameTooltip:AddLine(U.Coins(entry.copper), 1, 1, 1)
-	end
-	GameTooltip:Show()
+	-- (an item: its own tooltip, by Skin.ItemTooltip on the row)
+	if entry.link then return end
+	ns.Skin.ShowTip(row, { L.LOOT_FEED_MONEY_LOOTED, U.Coins(entry.copper) }, "ANCHOR_LEFT")
 end
 
 local function Click(row)
@@ -220,6 +215,7 @@ local function NewRow()
 	row:SetScript("OnEnter", Enter)
 	row:SetScript("OnLeave", Leave)
 	row:SetScript("OnClick", Click)
+	ns.Skin.ItemTooltip(row, function(self) return self.entry and self.entry.link end, "ANCHOR_LEFT")
 	return row
 end
 

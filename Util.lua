@@ -267,7 +267,8 @@ function Util.FillPowerBar(bar, unit)
 end
 
 -- Between the parts of a line ("Mage  ·  Level 30").
-Util.SEPARATOR = "  |cff808080·|r  "
+-- (plain here: Kit.lua colors it from the palette as soon as it loads)
+Util.SEPARATOR = "  \194\183  "
 
 -- A chat line as plain text: links keep their visible words, colors, icons and atlases go.
 function Util.PlainText(text)
@@ -351,10 +352,20 @@ function Util.TooltipLines(dataLines, keepSecret)
 	return lines
 end
 
+-- Shift held, on the keyboard or as the gamepad's own Shift (the button the game lends it).
+function Util.PadShiftDown()
+	if IsShiftKeyDown and Util.Safe(IsShiftKeyDown) then return true end
+	local isDown = _G.IsGamePadButtonDown
+	if not (GetCVar and isDown) then return false end
+	local button = Util.Safe(GetCVar, "GamePadEmulateShift")
+	if type(button) ~= "string" or button == "" or button == "NONE" then return false end
+	return Util.Safe(isDown, button) and true or false
+end
+
 -- Holding Shift keeps the hand: no automatic action this time (merchants,
 -- quests, dialogues...).
 function Util.IsSkipping()
-	return IsShiftKeyDown ~= nil and IsShiftKeyDown() and true or false
+	return Util.PadShiftDown()
 end
 
 -- Soft transitions: a value goes from where it is to where it is asked,
@@ -761,6 +772,44 @@ function Util.PlainName(name)
 	return (name:gsub("%s*%b()", ""):gsub("^%s+", ""):gsub("%s+$", ""):lower())
 end
 
+-- The game's map of an area (a zone of the old world's data, by its area id): found by its name among the
+-- zones of the continents (the same name, else the closest one inside the other), once; nil when none.
+local zoneMaps
+local mapOfArea = {}
+function Util.MapOfArea(area)
+	if not area then return nil end
+	if mapOfArea[area] ~= nil then return mapOfArea[area] or nil end
+	if not zoneMaps then
+		zoneMaps = {}
+		local zone = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+		local seen = {}
+		for _, root in ipairs({ 947, 1414, 1415 }) do
+			local children = C_Map and Util.Safe(C_Map.GetMapChildrenInfo, root, nil, true)
+			for _, info in ipairs(type(children) == "table" and children or {}) do
+				local name, id = Util.Clean(info.name), Util.Clean(info.mapID)
+				if name and id and not seen[id] and (Util.Clean(info.mapType) or zone) <= zone then
+					seen[id] = true
+					zoneMaps[#zoneMaps + 1] = { Util.PlainName(name), id }
+				end
+			end
+		end
+	end
+	local name = Util.PlainName(Util.AreaName(area))
+	local found
+	if name then
+		local best
+		for _, map in ipairs(zoneMaps) do
+			if map[1] == name then found = map[2] break end
+			if map[1] ~= "" and (name:find(map[1], 1, true) or map[1]:find(name, 1, true)) and (not best or #map[1] > #best[1]) then
+				best = map
+			end
+		end
+		found = found or (best and best[2])
+	end
+	mapOfArea[area] = found or false
+	return found
+end
+
 -- From a link: the item's id, its name.
 function Util.ItemID(link) return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil end
 function Util.LinkName(link) return type(link) == "string" and link:match("%[(.-)%]") or nil end
@@ -832,8 +881,10 @@ function Util.Colorize(text, r, g, b) return Util.ColorCode(r, g, b) .. tostring
 
 -- How many you carry of how many are needed: "3/8", green once enough.
 function Util.HaveNeed(have, need)
-	local color = have >= need and "|cff66dd66" or "|cffb0a080"
-	return color .. math.min(have, need) .. "/" .. need .. "|r"
+	local words = math.min(have, need) .. "/" .. need
+	local skin = ns.Skin
+	if not (skin and skin.Colorize) then return words end
+	return skin.Colorize(words, have >= need and "good" or "label")
 end
 
 -- Each item of your bags: fn(bag, slot, info) (info: the game's, its values cleaned when read).

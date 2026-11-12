@@ -128,8 +128,8 @@ end
 function ns.ReagentLine(item)
 	local parts = {}
 	for _, use in ipairs(ns.ReagentUses(item)) do
-		parts[#parts + 1] = use.count > 0 and ("|cffffd100%s (%d)|r"):format(use.name, use.count)
-			or (use.mine and ("|cffffd100%s|r"):format(use.name) or use.name)
+		parts[#parts + 1] = use.count > 0 and ns.Skin.Colorize(("%s (%d)"):format(use.name, use.count), "gold")
+			or (use.mine and ns.Skin.Colorize(use.name, "gold") or use.name)
 	end
 	if not parts[1] then return nil end
 	return L.REAGENT_USED_IN:format(table.concat(parts, ", "))
@@ -158,7 +158,7 @@ function ns.InitReagents()
 		local line = ns.ReagentLine(type(data) == "table" and Clean(data.id))
 		if not line then return false end
 		added[tooltip] = true
-		tooltip:AddLine(line, 0.62, 0.74, 0.86, true)
+		tooltip:AddLine(line, ns.Skin.COLORS.blue[1], ns.Skin.COLORS.blue[2], ns.Skin.COLORS.blue[3], true)
 		return true
 	end
 	-- A new item shown: its line not added yet.

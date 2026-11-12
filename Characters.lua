@@ -312,7 +312,7 @@ local function Overview(who)
 		tip[#tip + 1] = Skin.Colorize(words, "warn")
 		if leaves - now <= LETTERS_SOON then chip = L.CHARACTERS_CHIP_LETTERS end
 	end
-	tip[#tip + 1] = Skin.Colorize(L.CHARACTERS_MAIN_TIP, "muted")
+	tip[#tip + 1] = Skin.Colorize(U.UsingPad() and L.CHARACTERS_MAIN_TIP_PAD or L.CHARACTERS_MAIN_TIP, "muted")
 	return tip, chip
 end
 
@@ -372,6 +372,7 @@ local function Create()
 	Skin.Sounds(window, Skin.SOUNDS.open, Skin.SOUNDS.close)
 	Skin.Dress(window, { "CENTER", UIParent, "CENTER", 0, 40 }, "charactersPos")
 	local _, title, margin = Skin.Header(window, "Wanderer", ns.L.CHARACTERS_TITLE, { settings = "profiles" })
+	Skin.Help(window, ns.L.CHARACTERS_HELP, "HEADING")
 	list = Skin.Table(window, {
 		width = WIDTH - margin * 2, rows = ROWS, icon = false, nameTitle = ns.L.CHARACTERS_COL_NAME,
 		columns = {
@@ -390,6 +391,8 @@ local function Create()
 			if mouse == "RightButton" and row then CharacterCard(row, entry.who) end
 		end,
 		onDraw = Draw,
+		-- (its right click: the character's card, the pad's top button)
+		padRight = true,
 	})
 	for _, row in ipairs(list.rows) do
 		Skin.RowMore(row, function(owner) if owner.entry and owner.entry.who then CharacterCard(owner, owner.entry.who) end end)

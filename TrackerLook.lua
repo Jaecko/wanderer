@@ -17,10 +17,9 @@ local MODULES = { "QuestObjectiveTracker", "CampaignQuestObjectiveTracker", "Sce
 	"AchievementObjectiveTracker", "BonusObjectiveTracker", "WorldQuestObjectiveTracker",
 	"ProfessionsRecipeTracker", "MonthlyActivitiesObjectiveTracker", "AdventureObjectiveTracker" }
 ns.TRACKER_MODULES = MODULES
-local TITLE = { 0.88, 0.85, 0.77 }
-local OBJECTIVE = { 0.66, 0.62, 0.55 }
-local DONE = { 0.42, 0.4, 0.36 }
-local COUNT = "|cffe0d6bc" -- an objective's count, brighter
+local TITLE = ns.Skin.COLORS.title
+local OBJECTIVE = ns.Skin.COLORS.objective
+local DONE = ns.Skin.COLORS.done
 local FOLD_REST = 0.45 -- the fold buttons, at rest
 
 local rules = {} -- header -> its golden rule
@@ -109,7 +108,7 @@ local function Objective(text, dash)
 	local done = have and tonumber(have) >= tonumber(need)
 	Ink(text, done and DONE or OBJECTIVE)
 	if have and not done and not words:find("|c", 1, true) then
-		text:SetText((words:gsub("(%d+%s*/%s*%d+)", COUNT .. "%1|r", 1)))
+		text:SetText((words:gsub("(%d+%s*/%s*%d+)", function(count) return ns.Skin.Colorize(count, "title") end, 1)))
 	end
 	-- (the dash before it: a quiet golden mark)
 	if dash and dash.SetTextColor then

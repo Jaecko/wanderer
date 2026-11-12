@@ -86,7 +86,7 @@ local function Point(index)
 	local point = {}
 	point.mark = window:CreateTexture(nil, "ARTWORK")
 	point.mark:SetSize(5, 5)
-	point.mark:SetColorTexture(1, 0.82, 0, 0.8)
+	point.mark:SetColorTexture(ns.Skin.RGB("gold", 0.8))
 	point.text = ns.Skin.Text(window, "GameTooltipText", "text")
 	if point.text.SetMaxLines then point.text:SetMaxLines(2) end
 	points[index] = point
@@ -144,7 +144,7 @@ local function CreateWindow()
 	icon:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
 	icon:SetTexture(ICON)
 	Skin.RoundMask(window, icon)
-	window.title = Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
+	window.title = Skin.CreateText(window, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
 	window.title:SetPoint("LEFT", icon, "RIGHT", 12, 0)
 	window.title:SetPoint("RIGHT", window, "RIGHT", -40, 0)
 	if window.title.SetWordWrap then window.title:SetWordWrap(false) end

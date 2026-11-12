@@ -9,8 +9,8 @@ local L = ns.L
 -- else of the game's settings is built.
 
 -- The pages, in order: { key, name, group ("wanderer", "extensions", "more"), rows, preview, addon }.
--- A row: { kind ("header", "check", "slider", "dropdown", "button"), label, desc, get, set, parent, isOn,
--- yield, partial, page, section, default }.
+-- A row: { kind ("header", "check", "slider", "dropdown", "button"), label, desc, descPad (its words with a
+-- controller, when they differ), get, set, parent, isOn, yield, partial, page, section, default }.
 ns.SETTINGS_PAGES = {}
 -- Each option's words ({ label, page, order, format, choices }) by its variable and, when known, by its path in
 -- the profile ("label.scale"): "What you changed" (Changes.lua) names the settings with them.
@@ -83,6 +83,7 @@ local function LinkMirrors()
 						row[field] = source[field]
 					end
 					row.label, row.desc = row.label or source.label, row.desc or source.desc
+					row.descPad, row.hidden = row.descPad or source.descPad, row.hidden or source.hidden
 				else
 					table.remove(each.rows, index)
 				end
@@ -257,14 +258,16 @@ local function HomePage()
 	Shortcut(L.PAGE_PLAYSTYLES, function() return ns.PlaystyleWords() end, L.START_PLAYSTYLE_DESC, function() ns.OpenOptions("playstyles") end)
 	Mirror("PRESET", L.SECTION_NAMES, L.PRESET_DESC)
 	TableCheckbox("world", "bar", L.BAR_SHOW, L.BAR_SHOW_DESC, function() ns.SetBarShown(ns.db.world.bar) end)
-	Checkbox("MINIMAP", L.MINIMAP_BUTTON, L.MINIMAP_HINT, true,
+	local minimap = Checkbox("MINIMAP", L.MINIMAP_BUTTON, L.MINIMAP_HINT, true,
 		function() return ns.IsMinimapButtonShown() end,
 		function(value) ns.SetMinimapButtonShown(value) end)
+	minimap.descPad = L.MINIMAP_HINT_PAD -- (the button is the mouse's)
 	Mirror("WORLD_MOVEFRAMES")
+	-- (placing is the mouse's: not offered under the controller)
 	Shortcut(L.PLACING_TITLE, L.PLACING_BUTTON, L.START_PLACE_DESC, function()
 		CloseSettings()
 		ns.PlaceMode()
-	end)
+	end).hidden = function() return ns.Util.UsingPad() end
 	Button(L.WELCOME_SHOW, L.WELCOME_SHOW_BUTTON, L.WELCOME_SHOW_DESC, function()
 		-- (the settings step aside: the welcome screen takes their place)
 		CloseSettings()
@@ -388,6 +391,7 @@ local function LabelPage()
 	page.preview = true
 	local labelOn = IsOn("label", "enabled")
 	local enabled = LabelCheckbox("enabled", L.LABEL_ENABLE, L.LABEL_ENABLE_DESC)
+	enabled.descPad = L.LABEL_ENABLE_DESC_PAD
 	-- Three levels; the lines, for whoever wants to set them one by one, under the fold.
 	local levels = {}
 	for _, level in ipairs(ns.LABEL_CONTENT_ORDER) do levels[#levels + 1] = { level, L["LABEL_CONTENT_" .. level:upper()] } end
@@ -523,7 +527,9 @@ end
 local function InterfacePage()
 	Page(L.PAGE_INTERFACE, "interface")
 	Header(L.SECTION_GAME_WINDOWS)
-	Yield(TableCheckbox("world", "moveFrames", L.MOVE_FRAMES, L.MOVE_FRAMES_DESC, ns.RefreshGameFrames), "mapSize", true)
+	local moveFrames = TableCheckbox("world", "moveFrames", L.MOVE_FRAMES, L.MOVE_FRAMES_DESC, ns.RefreshGameFrames)
+	moveFrames.descPad = L.MOVE_FRAMES_DESC_PAD -- (dragging is the mouse's)
+	Yield(moveFrames, "mapSize", true)
 	TableCheckbox("world", "hideTalkingHead", L.WORLD_TALKING_HEAD, L.WORLD_TALKING_HEAD_DESC)
 	Yield(TableCheckbox("world", "filterErrors", L.WORLD_ERRORS, L.WORLD_ERRORS_DESC, ns.RefreshScreen), "errors")
 
@@ -672,9 +678,8 @@ local function ActionBarsPage()
 	Header(L.PAGE_ACTION_BARS)
 	-- (which bars show is the game's own option: never a second switch here, its page a click away)
 	-- (not with a controller: the game's settings opened from an addon block the game's own actions)
-	if not ns.Util.UsingPad() then
-		Button(L.BARS_SHOWN_GAME, L.BARS_SHOWN_GAME_BUTTON, L.BARS_SHOWN_GAME_DESC, function() ns.OpenGameActionBars() end)
-	end
+	Button(L.BARS_SHOWN_GAME, L.BARS_SHOWN_GAME_BUTTON, L.BARS_SHOWN_GAME_DESC, function() ns.OpenGameActionBars() end).hidden =
+		function() return ns.Util.UsingPad() end
 	-- (Wanderer's fade dims the bars out of combat: said here, its setting one click away)
 	AddRow({ kind = "button", label = L.BARS_FADE, desc = L.BARS_FADE_DESC,
 		text = function()
@@ -709,8 +714,10 @@ local function ConversationsPage()
 	Page(L.PAGE_CONVERSATIONS, "conversations")
 	-- (another addon showing the conversations: the scene, its camera and its hush are left to it)
 	-- (Spoken installed: the scenes follow its voice, said where the scenes are switched on)
-	local sceneDesc = ns.SpokenLoaded and ns.SpokenLoaded() and (L.SCENE_ENABLE_DESC .. "\n\n" .. L.SCENE_SPOKEN_HINT) or L.SCENE_ENABLE_DESC
+	local spoken = ns.SpokenLoaded and ns.SpokenLoaded()
+	local sceneDesc = spoken and (L.SCENE_ENABLE_DESC .. "\n\n" .. L.SCENE_SPOKEN_HINT) or L.SCENE_ENABLE_DESC
 	local scene = Yield(TableCheckbox("scene", "enabled", L.SCENE_ENABLE, sceneDesc, ns.RefreshScene), "scenes")
+	scene.descPad = spoken and (L.SCENE_ENABLE_DESC_PAD .. "\n\n" .. L.SCENE_SPOKEN_HINT) or L.SCENE_ENABLE_DESC_PAD
 	Under(Yield(Slider("SCENE_TEXT_SIZE", L.SCENE_TEXT_SIZE, "scene.textSize", "%d"), "scenes"), scene, IsOn("scene", "enabled"))
 	Under(Yield(Slider("SCENE_BG_OPACITY", L.SCENE_BG_OPACITY, "scene.bgOpacity", "%d %%", ns.RefreshScene), "scenes"), scene,
 		IsOn("scene", "enabled"))
@@ -739,6 +746,7 @@ local function ImmersionPage()
 	-- (an extension naming the flight itself, Wanderer Maps: the card's title is its, the fade and the camera stay)
 	local travel = Yield(TableCheckbox("travel", "enabled", L.TRAVEL_ENABLE, L.TRAVEL_ENABLE_DESC,
 		function() ns.RefreshCurtain() end), "flightCard", true)
+	travel.descPad = L.TRAVEL_ENABLE_DESC_PAD
 	Under(Yield(TableCheckbox("travel", "camera", L.TRAVEL_CAMERA, L.TRAVEL_CAMERA_DESC), "camera"), travel,
 		IsOn("travel", "enabled"))
 	local away = Yield(TableCheckbox("away", "enabled", L.AWAY_ENABLE, L.AWAY_ENABLE_DESC, ns.RefreshAway), "away")
@@ -757,16 +765,18 @@ local function ImmersionPage()
 		CloseSettings()
 		ns.GoAway()
 	end)
-	Button(L.PHOTO, L.PHOTO_BUTTON, L.PHOTO_DESC, function()
+	local photo = Button(L.PHOTO, L.PHOTO_BUTTON, L.PHOTO_DESC, function()
 		CloseSettings()
 		ns.TogglePhotoMode()
 	end)
+	photo.descPad = L.PHOTO_DESC_PAD
 	Yield(TableCheckbox("world", "actionCam", L.WORLD_ACTION_CAM, L.WORLD_ACTION_CAM_DESC, ns.RefreshAll), "camera")
 	TableCheckbox("world", "calmMotion", L.WORLD_CALM_MOTION, L.WORLD_CALM_MOTION_DESC)
-	TableCheckbox("emotes", "enabled", L.EMOTES_BAR, L.EMOTES_BAR_DESC, ns.RefreshEmotes)
+	local emotes = TableCheckbox("emotes", "enabled", L.EMOTES_BAR, L.EMOTES_BAR_DESC, ns.RefreshEmotes)
+	emotes.descPad = L.EMOTES_BAR_DESC_PAD
 
 	Header(L.SECTION_GESTURES)
-	TableCheckbox("gestures", "sitAtFire", L.GESTURES_SIT_FIRE, L.GESTURES_SIT_FIRE_DESC)
+	TableCheckbox("gestures", "sitAtFire", L.GESTURES_SIT_FIRE, L.GESTURES_SIT_FIRE_DESC).descPad = L.GESTURES_SIT_FIRE_DESC_PAD
 	TableCheckbox("gestures", "read", L.GESTURES_READ, L.GESTURES_READ_DESC)
 	TableCheckbox("gestures", "levelUp", L.GESTURES_LEVEL, L.GESTURES_LEVEL_DESC)
 	TableCheckbox("gestures", "greet", L.GESTURES_GREET, L.GESTURES_GREET_DESC)
@@ -795,6 +805,7 @@ local function PracticalPage()
 	Yield(TableCheckbox("loot", "fast", L.LOOT_FAST, L.LOOT_FAST_DESC), "fastLoot")
 	-- The loot feed (LootFeed.lua): what you pick up, one line each.
 	local feed = Yield(TableCheckbox("loot", "feed", L.LOOT_FEED, L.LOOT_FEED_DESC, ns.RefreshLootFeed), "lootFeed")
+	feed.descPad = L.LOOT_FEED_DESC_PAD -- (without the mouse's Shift click)
 	local feedOn = IsOn("loot", "feed")
 	local qualities = {}
 	for quality = 0, 4 do qualities[#qualities + 1] = { tostring(quality), L["LOOT_FEED_QUALITY_" .. quality] } end
@@ -806,7 +817,7 @@ local function PracticalPage()
 	Under(Slider("LOOT_FEED_TIME", L.LOOT_FEED_TIME, "loot.feedTime", "%d s"), feed, feedOn)
 
 	Header(L.SECTION_CRAFTS)
-	TableCheckbox("fishing", "doubleClick", L.FISHING_DOUBLE_CLICK, L.FISHING_DOUBLE_CLICK_DESC)
+	TableCheckbox("fishing", "doubleClick", L.FISHING_DOUBLE_CLICK, L.FISHING_DOUBLE_CLICK_DESC).descPad = L.FISHING_DOUBLE_CLICK_DESC_PAD
 	-- (Wanderer Outfits' pole, taken and given back by this double click: shown here too when it is installed)
 	Mirror("OUTFITS_POLEONCAST")
 	Mirror("OUTFITS_WEAPONSONMOUNT")
@@ -825,7 +836,7 @@ local function PracticalPage()
 	-- The kinds of notices silenced for good on this character (a right click on one): taken back here; the
 	-- reminders. One quiet section for both.
 	Header(L.SECTION_NOTICES_REMINDERS, { advanced = true })
-	AddRow({ kind = "button", label = L.NOTICES_SILENCED, desc = L.NOTICES_SILENCED_DESC,
+	AddRow({ kind = "button", label = L.NOTICES_SILENCED, desc = L.NOTICES_SILENCED_DESC, descPad = L.NOTICES_SILENCED_DESC_PAD,
 		text = function() local count = #ns.SilencedNotices() return count > 0 and L.NOTICES_MANAGE:format(count) or L.NOTICES_NONE end,
 		onClick = function(owner) ns.ShowSilencedNotices(owner) end, usable = function() return ns.SilencedNotices()[1] ~= nil end })
 	Button(L.TODO_TITLE, L.OPEN, L.TODO_OPEN_DESC, function()
@@ -959,7 +970,7 @@ local function LauncherPage()
 	local frame = CreateFrame("Frame")
 	local kicker = Skin.CreateKicker(frame, L.ADDON_TITLE)
 	kicker:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -24)
-	local title = Skin.CreateText(frame, "GameFontNormalHuge", 1, 0.82, 0)
+	local title = Skin.CreateText(frame, "GameFontNormalHuge", ns.Skin.RGB("gold"))
 	title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -6)
 	title:SetText(L.SETTINGS_TITLE)
 	local text = Skin.Text(frame, "GameTooltipText", "soft")
@@ -974,6 +985,13 @@ local function LauncherPage()
 	local hint = Skin.Text(frame, "GameTooltipTextSmall", "muted")
 	hint:SetPoint("TOPLEFT", open, "BOTTOMLEFT", 0, -12)
 	hint:SetText(L.SETTINGS_LAUNCHER_HINT)
+	-- (its words follow the hands: on show, and when the controller is taken or left while it is open)
+	local function Hint()
+		local pad = ns.Util.UsingPad and ns.Util.UsingPad()
+		hint:SetText(pad and L.SETTINGS_LAUNCHER_HINT_PAD or L.SETTINGS_LAUNCHER_HINT)
+	end
+	frame:HookScript("OnShow", Hint)
+	ns.RefreshLauncherHint = function() if frame:IsShown() then Hint() end end
 	local launcher = Settings.RegisterCanvasLayoutCategory(frame, L.ADDON_TITLE)
 	if launcher and launcher.AddSearchTags then pcall(launcher.AddSearchTags, launcher, "Wanderer") end
 	Settings.RegisterAddOnCategory(launcher)

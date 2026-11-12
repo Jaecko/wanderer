@@ -252,7 +252,7 @@ local function RoleIcons(role)
 	if role == "FERAL" then return RoleIcons("TANK") .. RoleIcons("DAMAGER") end
 	local atlas = ROLE_ICONS[role]
 	if atlas and HasAtlas(atlas) then return ("|A:%s:14:14|a"):format(atlas) end
-	return "|cffc8c8c8" .. (_G[role] or role) .. "|r "
+	return ns.Skin.Colorize(_G[role] or role, "soft") .. " "
 end
 
 -- The role the main branch gives, by class and branch order: the branch holding the most points decides
@@ -282,9 +282,9 @@ local function TalentLine(talents, unit)
 	local role = Role(talents, unit)
 	local parts = {}
 	for index, tree in ipairs(spent) do
-		parts[#parts + 1] = (index == 1 and "|cffffffff%s %d|r" or "|cffa8a8a8%s %d|r"):format(tree.name, tree.points)
+		parts[#parts + 1] = ns.Skin.Colorize(("%s %d"):format(tree.name, tree.points), index == 1 and "text" or "muted")
 	end
-	return "|cffd0c090" .. L.DETAILS_TALENTS .. "|r  " .. (role and (RoleIcons(role) .. " ") or "") .. table.concat(parts, SEPARATOR)
+	return ns.Skin.Colorize(L.DETAILS_TALENTS, "label") .. "  " .. (role and (RoleIcons(role) .. " ") or "") .. table.concat(parts, SEPARATOR)
 end
 
 -- Talents and item level of a player: you, read live; the others from their
@@ -305,7 +305,7 @@ local function Known(unit, ask)
 end
 
 local function ItemLevelText(itemLevel)
-	return "|cffd0c090" .. L.DETAILS_ITEM_LEVEL .. "|r  |cffffffff" .. itemLevel .. "|r"
+	return ns.Skin.Colorize(L.DETAILS_ITEM_LEVEL, "label") .. "  " .. ns.Skin.Colorize(tostring(itemLevel), "text")
 end
 
 -- INSPECT_READY: the answer for this unit, if it was the one asked.

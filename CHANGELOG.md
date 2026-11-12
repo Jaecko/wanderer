@@ -1,23 +1,19 @@
-# Wanderer 1.4.39
+# Wanderer 1.4.55
 
 ### New
-- Controller support: Wanderer now works with the game's controller interface. In every Wanderer window, the cross moves from button to button (a gold frame shows the choice, hold to repeat), the bottom button clicks, the right button closes, the top button acts as a right click and the right stick scrolls.
-- The triggers (L2, R2) switch between the open windows, the game's own included; "Triggers: switch window" is written under the window when it applies. Closing a window brings you back where you were in the previous one.
-- With the controller, menus become Wanderer cards.
-- The touchpad (top left button) takes you into Wanderer's bar at the top of the screen, from which every addon opens; the same button leaves it. Without the bar, it opens Wanderer's card.
-- The item chosen with the controller keeps its tooltip, even when someone passes under the cursor.
-- In a fight, every key goes back to the game.
-- With a controller, the left button does what Alt + click does on the button chosen, the same in every Wanderer addon, and the touchpad goes first to a notice shown beside the chat (its buttons and its cross), then to Wanderer's bar.
-- Controller hints show the buttons with the game's own icons, the symbols of the controller plugged in.
+- Wanderer Bestiary joins the family: the creatures of the world and your hunting log, offered among the other addons.
 
 ### Changed
-- Cinematic fade with a controller: its action bars and its list of buttons stay shown and fade only during conversations. The game's swing timers are hidden while the controller interface is on.
-- Shift now skips every automatic answer (summons, invites, duel decline), not only resurrection. Whispers are still answered.
-- Repeatable quests are no longer accepted for you.
-- Lighter: only one page stays in the game's AddOns settings, the one that opens Wanderer's settings, and several watchers rest while nothing changes.
+- A finer look across the family: one palette for every color, clearer contrast on dark windows and on parchment, the same words in every language.
+- Controller: no keyboard numbers or mouse words shown where the controller has its own way; settings that need a mouse or a keyboard say so.
+- Switching between the mouse and the controller: the open settings page, Wanderer's card and the game's settings page follow at once (their words, the rows shown).
+- The settings search also finds the words shown under the controller.
+- Travel fade during a flight: the interface comes back while a window is open (yours or the game's), with the mouse or the controller.
+- A question asking for words says, under the controller, that it is written with a keyboard.
+- Unit frames, notices, threat and reward arrows use the shared palette.
 
 ### Fixed
-- "Wanderer has been blocked" no longer appears after using the controller's radial wheel. Wanderer no longer touches the game's own controller system: the game's windows, bags, map and menus keep working with the controller.
-- Copying a profile under a name already taken no longer writes over it.
-- Unit frames and portraits: power texts in a fight, the cast bar font and group colors restored, dead or tapped portraits shown right.
-- Smaller fixes: the quest reward you choose is always the one taken; a profession trainer no longer shows a gathering mark on the label; a group member too far away no longer shows buffs as faded.
+- In dungeons and raids, the enemies' health bars are shown again, even when your own setting had them off outside (the V key there stays yours).
+- The target's mana no longer shows as a thin strip over its health after a fight: the game's own bar stays unseen, and everything is drawn again once the fight ends.
+- "Not yours yet" is never said in dungeons and raids (every monster there is your group's), nor of a monster a companion of your group already hit.
+- The label grows with a long line it wraps (your group's quest objectives): what the character targets stays inside it, never spilled over its nameplate.

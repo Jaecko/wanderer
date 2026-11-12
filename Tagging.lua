@@ -70,9 +70,11 @@ local function IsOnYou(unit)
 end
 
 local function IsUntouched(unit)
+	-- (yours by the game's word: taken. Its "no" is not trusted: in a group, a monster a companion hit first is
+	-- the group's, yet not yours by that word; the blows and the health below tell)
 	if UnitIsTappedByPlayer then
 		local mine = Safe(UnitIsTappedByPlayer, unit)
-		if not U.IsSecret(mine) then return not mine end
+		if not U.IsSecret(mine) and mine then return false end
 	end
 	local key = Key(unit)
 	if key and touched[key] then return false end -- took a blow of its own
@@ -86,6 +88,9 @@ end
 function ns.IsUntaggedOnYou(unit)
 	local db = ns.db
 	if not (db and db.enabled and db.label.untagged) then return false end
+	-- (in a dungeon or a raid, every monster is your group's: nobody else can take it; asked of the game itself,
+	-- the mark, the label and the line over the target frame alike)
+	if ns.zone == "dungeon" or ns.zone == "raid" or Clean(Safe(IsInInstance)) then return false end
 	if not Clean(Safe(UnitExists, unit)) or Clean(Safe(UnitIsPlayer, unit)) then return false end
 	if not Clean(Safe(UnitCanAttack, "player", unit)) or Clean(Safe(UnitIsDead, unit)) then return false end
 	-- Already someone else's, or the game keeps it secret: never claim it is free.
@@ -99,7 +104,7 @@ local function CreateMark()
 	local mark, skin = ns.Skin.CreateWindow(nil, "LOW")
 	skin.minOpacity = nil -- (the opacity chosen, as it is: the label's look)
 	mark:EnableMouse(false)
-	mark.text = ns.Skin.CreateText(mark, "GameTooltipTextSmall", 1, 0.6, 0.2)
+	mark.text = ns.Skin.CreateText(mark, "GameTooltipTextSmall", ns.Skin.RGB("warn"))
 	mark.text:SetPoint("CENTER")
 	mark.text:SetText(("|T%s:12:12:0:0|t %s"):format(ICON, L.UNTAGGED_MARK))
 	local margin = ns.Skin.Padding() + 4

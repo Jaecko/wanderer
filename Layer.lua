@@ -35,7 +35,7 @@ end
 -- The line under a zone's tooltip ("Layer 12"), when the layer is known.
 function ns.AddLayerLine(tooltip)
 	if not (On() and layer and tooltip) then return end
-	tooltip:AddLine(L.LAYER_LINE:format(layer), 0.55, 0.53, 0.46)
+	tooltip:AddLine(L.LAYER_LINE:format(layer), ns.Skin.RGB("muted"))
 end
 
 function ns.InitLayer()

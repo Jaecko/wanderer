@@ -77,7 +77,7 @@ local function Tip(button)
 	local entry = button.entry
 	local lines = { L["EMOTE_" .. entry.token] or entry.token }
 	local target = Clean(Safe(UnitName, "target"))
-	if target then lines[#lines + 1] = { L.EMOTES_TOWARD:format(target), 0.81, 0.78, 0.72 } end
+	if target then lines[#lines + 1] = { L.EMOTES_TOWARD:format(target), ns.Skin.RGB("soft") } end
 	local typed = Command(entry.token)
 	if typed then lines[#lines + 1] = { typed, 0.56, 0.53, 0.46 } end
 	return lines
@@ -85,8 +85,8 @@ end
 
 -- The bar comes in while the mouse is near, out of a fight; goes out slowly otherwise.
 local function Watch(self, elapsed)
-	-- (shown a moment when it comes, so you know where it waits; with a controller, no mouse to bring it: it stays)
-	local near = not InCombatLockdown() and (self:IsMouseOver(NEAR, -NEAR, -NEAR, NEAR) or GetTime() < (self.showUntil or 0) or U.UsingPad())
+	-- (shown a moment when it comes, so you know where it waits; with a controller it is not kept and cannot be reached)
+	local near = not InCombatLockdown() and (self:IsMouseOver(NEAR, -NEAR, -NEAR, NEAR) or GetTime() < (self.showUntil or 0))
 	local alpha = ns.Skin.Fade(self, near and 1 or 0, elapsed, FADE_IN, FADE_OUT)
 	-- (clicks taken only once it is seen: an emote never goes from a bar still out of sight)
 	local usable = (alpha or 0) > USABLE_ALPHA
@@ -183,7 +183,8 @@ function ns.RefreshEmotes()
 		if not shownOnce then
 			shownOnce = true
 			bar.showUntil = GetTime() + SHOW_FIRST
-			if not (ns.Mine and ns.Mine().emotesTold) then
+			-- Under the pad the bar is out of reach: nothing to point at.
+			if not U.UsingPad() and not (ns.Mine and ns.Mine().emotesTold) then
 				if ns.Mine then ns.Mine().emotesTold = true end
 				ns.Print(L.EMOTES_WHERE)
 			end

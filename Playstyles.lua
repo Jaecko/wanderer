@@ -584,7 +584,7 @@ local function CreateCard(grid, index, key)
 	card.background:SetAllPoints()
 	card.hover = card:CreateTexture(nil, "BACKGROUND", nil, 1)
 	card.hover:SetAllPoints()
-	card.hover:SetColorTexture(1, 1, 1, 0.06)
+	card.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 	card.hover:Hide()
 	card.edges = Skin.Edges(card, 1, 1, 1, 0.07)
 	card.icon = Skin.Icon(card, ICON_SIZE)
@@ -598,10 +598,11 @@ local function CreateCard(grid, index, key)
 	card.keyHint = Skin.Text(card, "GameTooltipTextSmall", "muted")
 	card.keyHint:SetPoint("TOPRIGHT", card, "TOPRIGHT", -12, -10)
 	card.keyHint:SetText(tostring(index))
-	card.keyHint:SetShown(grid.options.keys and true or false)
+	card.keyHint:SetShown(grid.options.keys and not (U.UsingPad and U.UsingPad()) and true or false)
 	card.chip = Skin.Chip(card)
 	card.chip:SetPoint("TOPRIGHT", card, "TOPRIGHT", -30, -9)
 	card.chip:EnableMouse(true)
+	card.chip.padTip = true -- (a controller stops on it for its tooltip)
 	Skin.Tooltip(card.chip, function(self) return self.tip end)
 	card.title = NoWrap(Skin.CreateText(card, "GameTooltipText"))
 	card.title:SetPoint("TOPLEFT", card.icon, "TOPRIGHT", 10, 1)
@@ -649,6 +650,7 @@ local function CreatePanel(grid)
 	panel.get:Fit()
 	-- (everything, whole, under the mouse)
 	Skin.Tooltip(panel, function() return grid.tooltip end)
+	panel.padTip = true -- (a controller stops on it to read it whole)
 	grid.panel = panel
 	grid.footer = NoWrap(Skin.Text(grid.parent, "GameTooltipTextSmall", "muted"))
 end
@@ -737,14 +739,14 @@ function GridMixin:Refresh()
 	for _, card in ipairs(self.cards) do
 		local chosen = card.key == current
 		if chosen then
-			card.background:SetColorTexture(1, 0.82, 0, 0.16)
-			card.title:SetTextColor(1, 0.82, 0)
+			card.background:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN))
+			card.title:SetTextColor(ns.Skin.COLORS.gold[1], ns.Skin.COLORS.gold[2], ns.Skin.COLORS.gold[3])
 		else
 			card.background:SetColorTexture(1, 1, 1, 0.04)
 			card.title:SetTextColor(unpack(ns.Skin.COLORS.text))
 		end
 		card.check:SetShown(chosen)
-		card.keyHint:SetShown(self.options.keys and not chosen and true or false)
+		card.keyHint:SetShown(self.options.keys and not chosen and not (U.UsingPad and U.UsingPad()) and true or false)
 		if current == "custom" and card.key == base then
 			card.chip:Set(L.PLAY_CUSTOMISED, "grey")
 			card.chip.tip = nil

@@ -491,7 +491,8 @@ function ns.PublishLaunchers()
 		end,
 		OnTooltipShow = function(tooltip)
 			tooltip:AddLine(L.ADDON_TITLE)
-			tooltip:AddLine(L.MINIMAP_HINT, 0.7, 0.7, 0.7, true)
+			local r, g, b = ns.Skin.RGB("muted")
+			tooltip:AddLine(L.MINIMAP_HINT, r, g, b, true)
 		end,
 	})
 	local metadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
@@ -507,7 +508,9 @@ function ns.PublishLaunchers()
 				OnTooltipShow = function(tooltip)
 					local launcher = ns.LauncherOf(extension)
 					tooltip:AddLine(extension.title or extension.addon)
-					if not launcher then tooltip:AddLine(L.COMPAT_LAUNCHER_OFF, 0.7, 0.7, 0.7, true)
+					if not launcher then
+						local r, g, b = ns.Skin.RGB("muted")
+						tooltip:AddLine(L.COMPAT_LAUNCHER_OFF, r, g, b, true)
 					elseif launcher.label ~= extension.title then tooltip:AddLine(launcher.label, 1, 1, 1) end
 				end,
 			})

@@ -106,7 +106,7 @@ function World.Reputation(lines)
 			local code = color and U.ColorCode(color.r, color.g, color.b) or "|cffffffff"
 			local text = ns.L.LABEL_REPUTATION_LINE:format(line.text, code .. standing .. "|r")
 			if faction.max and faction.min and faction.value and faction.max > faction.min then
-				text = text .. (" |cffaaaaaa(%d %%)|r"):format(math.floor((faction.value - faction.min) / (faction.max - faction.min) * 100))
+				text = text .. " " .. ns.Skin.Colorize(("(%d %%)"):format(math.floor((faction.value - faction.min) / (faction.max - faction.min) * 100)), "muted")
 			end
 			return text
 		end

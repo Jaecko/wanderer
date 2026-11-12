@@ -307,6 +307,7 @@ local DEFAULTS = {
 		lootSparkle = true, -- the game's sparkle on quest items kept through the graphics presets: asked for
 		editLayout = "", -- "": the game's Edit Mode layout is left alone
 		moveFrames = true, -- the game's windows moved where you drop them (kept)
+		barPins = {}, -- the extensions' words pinned on Wanderer's bar (key -> true/false; unsaid: Bar.lua's own choice)
 	},
 }
 ns.DEFAULTS = DEFAULTS
@@ -414,8 +415,16 @@ _G.Wanderer = setmetatable({
 	-- 15 = Util.AfterFight, Util.Try, Util.ShownPlates, Util.LearnServices, Util.HasFishingPole, Skin.FitScale,
 	-- Skin.GlyphText, Skin.ProgressLine, Skin.UnitBar, OpenOptions, RemoveTodo, HasFishingPole, SetPortrait, the shared word PIN_FAILED,
 	-- Skin.ShowTip, Skin.KeyListener, Skin.LineHeight, the dropdown's tip, Skin.Ask's strata, Skin.Tabs SetList, OnCharacterForgotten;
-	-- 16 = Util.ChatInsert, the job "trackerLook" an extension may take (spec.takes); 17 = ChangeEverywhere.
-	API = 18,
+	-- 16 = Util.ChatInsert, the job "trackerLook" an extension may take (spec.takes); 17 = ChangeEverywhere;
+	-- 19 = Util.MapOfArea (an area's map), Skin.Beside (a sheet beside a window); 20 = UnitNote (a line of an
+	-- extension under a creature's name in Wanderer's label); 21 = Util.PadShiftDown (Shift, the pad's too),
+	-- Skin.Ask's check box (opts.check), Skin.Beside's opts (still, holder) and its side, the pad marks padTip,
+	-- padWheel and padRight's hint word (padRightWord), padSecondary's (padSecondaryWord), Skin.CursorPoint (where a
+	-- card opened by a click stands: the mouse, or the controller's chosen button), Skin.GlyphButton's rightWord and
+	-- Skin.Table's spec.padRight (the top button only where a right click is its own), Placeable, PlaceApply and
+	-- PlaceMode (Place.lua).
+	API = 21,
+	UnitNote = function(fn) ns.UnitNote(fn) end,
 	-- A place's levels and fishing (ZoneData.lua): by its area id, or by its map (onMap); no id: the whole list.
 	ZoneLevels = function(id, onMap) return ns.ZoneLevels and ns.ZoneLevels(id, onMap) end,
 	RegisterExtension = RegisterExtension,
@@ -822,7 +831,7 @@ local function AllHeads(db)
 		and not (ns.Yields and ns.Yields("nameplates")) -- (another addon's plates: left to it)
 end
 
--- In instances the health bars are the player's own choice (the game's
+-- In instances the allies' health bars are the player's own choice (the game's
 -- Nameplates options, V and Shift+V): Wanderer only turns on, out of them,
 -- the plates the label needs.
 local function FriendlyPlates(db)
@@ -859,8 +868,14 @@ end
 -- Other variables Wanderer drives: name -> value wanted by the profile, or nil
 -- to leave the player's own.
 local MANAGED_CVARS = {
-	-- The enemies' plates themselves (V in the game): their names need them.
-	nameplateShowEnemies = function(db) return db.enemyNames == "near" and AllHeads(db) and "1" or nil end,
+	-- The enemies' plates themselves (V in the game): their names need them; in dungeons and raids, their health
+	-- bars are shown (V there stays yours: a value you set is never written over).
+	nameplateShowEnemies = function(db)
+		if db.enemyNames == "near" and AllHeads(db) then return "1" end
+		local zone = ns.zone
+		if (zone == "dungeon" or zone == "raid") and not (ns.Yields and ns.Yields("nameplates")) then return "1" end
+		return nil
+	end,
 	nameplateMinAlpha = function(db) return NearNames(db) and "0" or nil end,
 	nameplateMaxDistance = function(db)
 		if not NearNames(db) then return nil end
@@ -1944,6 +1959,9 @@ SlashCmdList.WANDERER = function(msg)
 	elseif msg == "plates dump" or msg == "barres dump" then
 		-- (diagnostic: the plates over the heads as Wanderer decides them, over 10 seconds)
 		if ns.DumpPlates then ns.DumpPlates() end
+	elseif msg == "texts dump" or msg == "textes dump" then
+		-- (diagnostic: the texts of the unit frames' bars, the game's and Wanderer's, into the saved data)
+		if ns.DumpUnitTexts then ns.DumpUnitTexts() end
 	elseif msg == "frames dump" or msg == "cadres dump" then
 		-- (diagnostic: the unit frames as the game built them, into the saved data, for a look outside the game)
 		if ns.DumpUnitFrames and ns.DumpUnitFrames() then ns.Print(L.UF_DUMP_DONE) end

@@ -211,12 +211,18 @@ local function CoverReloadRow(row)
 	reloadCover:Show()
 end
 
+-- (the controller's key on the Reload line: the secure cover clicked by its name, while it lies there)
+local function ReloadBinding()
+	if reloadCover and reloadCover:IsShown() and reloadCover:GetName() then return "CLICK " .. reloadCover:GetName() .. ":LeftButton" end
+end
+
 -- The tools under the tiles: { text, glyph, right, role, hint, onClick } (onClick: the card closes first, unless
 -- keep).
 local function Tools()
 	local list = {}
 	local function Close(fn) return function() card:Hide() fn() end end
-	list[#list + 1] = { text = L.MENU_PLACE, glyph = "move", onClick = Close(function() ns.PlaceMode() end) }
+	-- (placing is the mouse's: not offered under the controller)
+	if not U.UsingPad() then list[#list + 1] = { text = L.MENU_PLACE, glyph = "move", onClick = Close(function() ns.PlaceMode() end) } end
 	list[#list + 1] = { text = L.MENU_PHOTO, glyph = "camera", onClick = Close(function() ns.TogglePhotoMode() end) }
 	if ns.IconsGathered() then
 		ns.GatherIcons()
@@ -313,6 +319,8 @@ Fill = function()
 		tile.count:Set((entry.count or 0) > 0 and tostring(entry.count) or nil, "gold")
 		tile.dot:SetShown(entry.waits and (entry.count or 0) <= 0 or false)
 		tile.key:SetText(index <= 9 and tostring(index) or "")
+		-- (no number keys under the controller)
+		tile.key:SetShown(not U.UsingPad())
 		local column, line = (index - 1) % PER_ROW, math.floor((index - 1) / PER_ROW)
 		tile:ClearAllPoints()
 		tile:SetPoint("TOPLEFT", card, "TOPLEFT", MARGIN + column * (TILE_W + TILE_GAP), -(top + line * (TILE_H + TILE_GAP)))
@@ -342,6 +350,8 @@ Fill = function()
 		local row = rows[used] or Skin.CardRow(card)
 		rows[used] = row
 		row:Set(entry)
+		-- (a controller's bottom button on the Reload line: the secure cover's click, the only one that may reload)
+		row.padBinding = entry.key == "reload" and ReloadBinding or nil
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", card, "TOPLEFT", MARGIN - 6, -y)
 		row:SetPoint("RIGHT", card, "RIGHT", -(MARGIN - 6), 0)
@@ -362,7 +372,7 @@ Fill = function()
 	end
 	for index = used + 1, #rows do rows[index]:Set(nil) end
 	for index = usedRecent + 1, #recentRows do recentRows[index]:Set(nil) end
-	card.foot:SetText(L.CARD_FOOT:format(math.min(9, #list)))
+	card.foot:SetText(U.UsingPad() and L.CARD_FOOT_PAD or L.CARD_FOOT:format(math.min(9, #list)))
 	card.foot:ClearAllPoints()
 	card.foot:SetPoint("TOPLEFT", card, "TOPLEFT", MARGIN, -(y + 6))
 	card.foot:SetWidth(WIDTH - MARGIN * 2)
@@ -437,7 +447,7 @@ local function Create()
 	card.hover:SetJustifyV("TOP")
 	function card.ShowSummary(entry)
 		if not entry then
-			card.hover:SetText(Skin.Colorize(L.CARD_HOVER_HINT, "muted"))
+			card.hover:SetText(Skin.Colorize(U.UsingPad and U.UsingPad() and L.CARD_HOVER_HINT_PAD or L.CARD_HOVER_HINT, "muted"))
 			return
 		end
 		local words = {}

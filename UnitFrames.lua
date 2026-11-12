@@ -485,17 +485,12 @@ local dressed = setmetatable({}, { __mode = "k" }) -- a game bar -> its state
 local hiddenArt = setmetatable({}, { __mode = "k" }) -- a game region -> its alpha before
 local texts = setmetatable({}, { __mode = "k" }) -- a game text -> its look before
 local hooked = setmetatable({}, { __mode = "k" }) -- what is hooked already (bars, texts, frames)
-local deferred = false -- pieces to make once out of a fight
 local coloring = false -- a health's colour being laid by Wanderer (its own hooks wait)
 
--- Our pieces on a game frame are made out of a fight when it is protected.
+-- Our pieces on a game frame are made out of a fight when it is protected (everything is drawn again then).
 local function CanMake(frame)
 	if not Clean(Safe(InCombatLockdown)) then return true end
-	if Clean(Safe(frame.IsProtected, frame)) then
-		deferred = true
-		return false
-	end
-	return true
+	return not Clean(Safe(frame.IsProtected, frame))
 end
 
 -- The fill's texture as the game set it last (an atlas or a file), kept to be given back.
@@ -632,7 +627,9 @@ end
 local function OwnSync(game)
 	local mine = hooked[game]
 	if type(mine) ~= "table" or not mine.text then return end
-	local on = mine.active and Clean(Safe(game.IsShown, game))
+	-- (the percent and the value together: the game hides its middle string and shows its two side ones instead)
+	local watch = mine.follow or game
+	local on = mine.active and Clean(Safe(watch.IsShown, watch))
 	mine.text:SetShown(on and true or false)
 end
 
@@ -641,7 +638,8 @@ local function OwnText(bar, game, value, _, most)
 	if not IsText(game) then return end
 	local mine = hooked[game]
 	local host = state and state.mirrored and state.mirror or nil
-	local wanted = state and state.on and (host or (UF().shortNumbers and _G.AbbreviateNumbers)) and true or false
+	-- (every bar Wanderer dresses: its texts are ours, centred; the game's own stay on the bars it does not dress)
+	local wanted = state and state.on and true or false
 	if type(mine) ~= "table" then
 		if not wanted then return end
 		mine = {}
@@ -660,6 +658,15 @@ local function OwnText(bar, game, value, _, most)
 	end
 	local text = mine.text
 	mine.active = false
+	local side = Walk(bar, "RightText")
+	local center = Walk(bar, "TextString")
+	local both = wanted and game == center and IsText(side) and Clean(Safe(GetCVar, "statusTextDisplay")) == "BOTH"
+	mine.follow = both and side or nil
+	if both and not mine.sideHooked then
+		mine.sideHooked = true
+		hooksecurefunc(side, "Show", function() OwnSync(game) end)
+		hooksecurefunc(side, "Hide", function() OwnSync(game) end)
+	end
 	if wanted and not (not IsSecret(value) and (type(value) ~= "number" or value <= 0)) then
 		local file, size, flags = Safe(game.GetFont, game)
 		local ours = host and UF().texts ~= "game"
@@ -669,23 +676,24 @@ local function OwnText(bar, game, value, _, most)
 		text:SetShadowOffset(1, -1)
 		text:SetShadowColor(0, 0, 0, 1)
 		text:ClearAllPoints()
-		local left, right = game == rawget(bar, "LeftText"), game == rawget(bar, "RightText")
-		local point = left and "LEFT" or right and "RIGHT" or "CENTER"
-		if host then
-			-- (on the block: a single value at its right end, the percent at its left)
-			if point == "CENTER" then point = "RIGHT" end
-			text:SetJustifyH(point)
-			text:SetPoint(point, host, point, point == "LEFT" and 4 or -4, 0)
-		else
-			text:SetPoint(point, game, point)
-		end
+		local left, right = game == Walk(bar, "LeftText"), game == side
+		-- (one line in the middle of the bar seen, Wanderer's block or the game's own: the percent and the value together
+		-- when the game shows both)
+		text:SetJustifyH("CENTER")
+		text:SetPoint("CENTER", host or Visible(bar), "CENTER", 0, 0)
 		local mode = Clean(Safe(GetCVar, "statusTextDisplay"))
 		local ok
-		if left or (not right and mode == "PERCENT") then
+		if left or (right and IsText(center)) then
+			-- (its words are written by the middle string, on the one centred line)
+			ok = pcall(text.SetText, text, "")
+		elseif right or both then
+			local percent = Percent(bar, value, most)
+			ok = pcall(function()
+				if percent ~= nil then text:SetFormattedText("%d%%  \194\183  %s", percent, Number(value)) else text:SetFormattedText("%s", Number(value)) end
+			end)
+		elseif mode == "PERCENT" then
 			local percent = Percent(bar, value, most)
 			ok = percent ~= nil and pcall(text.SetFormattedText, text, "%d%%", percent)
-		elseif right then
-			ok = pcall(function() text:SetFormattedText("%s", Number(value)) end)
 		else
 			ok = pcall(function() text:SetFormattedText("%s / %s", Number(value), Number(most)) end)
 		end
@@ -693,7 +701,60 @@ local function OwnText(bar, game, value, _, most)
 	end
 	if not texts[game] then Dress(game) end
 	game:SetAlpha(mine.active and 0 or (texts[game] and texts[game].alpha or 1))
+	-- (in that mode the game's two side strings are the ones seen: hidden behind ours, given back otherwise)
+	local hide = both and mine.active
+	if hide or mine.sides then
+		for _, other in ipairs(ns.UnitFramesPresent(Walk(bar, "LeftText"), side)) do
+			if IsText(other) then
+				if not texts[other] then Dress(other) end
+				other:SetAlpha(hide and 0 or (texts[other] and texts[other].alpha or 1))
+			end
+		end
+		mine.sides = hide or nil
+	end
 	OwnSync(game)
+end
+
+-- Diagnostic (/wanderer texts dump): every bar Wanderer dresses and the player's own health bar, their texts (the
+-- game's and ours): shown, opacity, where anchored. Into the saved data (WandererDB.textsDump) and the chat.
+function ns.DumpUnitTexts()
+	local out = {}
+	local function Name(frame)
+		if not frame then return "nil" end
+		return tostring(Clean(Safe(frame.GetDebugName, frame)) or Clean(Safe(frame.GetName, frame)) or "?")
+	end
+	local function Where(region)
+		local point, relative, other, x, y = Safe(region.GetPoint, region, 1)
+		return ("%s>%s:%s %s,%s"):format(tostring(Clean(point)), Name(relative), tostring(Clean(other)), tostring(Clean(x)), tostring(Clean(y)))
+	end
+	local function Bar(bar, why)
+		local state = dressed[bar]
+		out[#out + 1] = ("%s [%s] on=%s mirrored=%s hooks=%s"):format(Name(bar), why, tostring(state and state.on),
+			tostring(state and state.mirrored), tostring(hooked[bar]))
+		for _, game in ipairs(BarTexts(bar)) do
+			local mine = hooked[game]
+			local ours = type(mine) == "table" and mine.text
+			out[#out + 1] = ("  game %s shown=%s alpha=%s at %s"):format(Name(game), tostring(Clean(Safe(game.IsShown, game))),
+				tostring(Clean(Safe(game.GetAlpha, game))), Where(game))
+			out[#out + 1] = ("    ours=%s active=%s shown=%s alpha=%s at %s"):format(tostring(ours ~= nil and ours ~= false),
+				tostring(type(mine) == "table" and mine.active), tostring(ours and Clean(Safe(ours.IsShown, ours))),
+				tostring(ours and Clean(Safe(ours.GetAlpha, ours))), ours and Where(ours) or "-")
+		end
+	end
+	local player = _G.PlayerFrame
+	local seen = {}
+	local own = player and IsBar(Walk(player, "PlayerFrameContent", "PlayerFrameContentMain", "HealthBarsContainer", "HealthBar"))
+	if own then
+		seen[own] = true
+		Bar(own, "player health")
+	end
+	for bar in pairs(dressed) do
+		if not seen[bar] then Bar(bar, "dressed") end
+	end
+	out[#out + 1] = ("statusText=%s"):format(tostring(Clean(Safe(GetCVar, "statusTextDisplay"))))
+	if type(_G.WandererDB) == "table" then _G.WandererDB.textsDump = out end
+	for _, line in ipairs(out) do ns.Print(line) end
+	return true
 end
 
 local function WatchTexts(bar)
@@ -722,9 +783,10 @@ end
 
 local function Unmirror(bar, state)
 	-- (a power bar kept unseen for a character without power: given back)
+	-- (powerHidden cleared before the opacity is given back: its hold lets it through)
 	if state and state.powerHidden and not state.mirrored then
-		bar:SetAlpha(state.alpha or 1)
 		state.powerHidden = nil
+		bar:SetAlpha(state.alpha or 1)
 		ns.UnitFramesMouse(bar, state, true)
 	end
 	if not (state and state.mirrored) then return end
@@ -743,8 +805,8 @@ local function Unmirror(bar, state)
 		state.fillAlpha, state.blanked = nil, nil
 	end
 	if state.powerHidden then
-		bar:SetAlpha(state.alpha or 1)
 		state.powerHidden = nil
+		bar:SetAlpha(state.alpha or 1)
 	end
 	for _, text in ipairs(BarTexts(bar)) do
 		local mine = IsText(text) and hooked[text]
@@ -1193,10 +1255,29 @@ local function NoPower(unit)
 	return none
 end
 
+-- A power bar kept unseen by Wanderer stays unseen: the game giving it its opacity back (in a fight, a range or a
+-- refresh of the frame) would show it at its old place, over the block. (hooked once per bar)
+-- (a field, not a local: this file's main chunk holds as many locals as Lua allows)
+ns.UnitFramesHoldUnseen = (function()
+	local alphaHeld = setmetatable({}, { __mode = "k" })
+	return function(bar, state)
+		if alphaHeld[bar] or not hooksecurefunc then return end
+		alphaHeld[bar] = true
+		hooksecurefunc(bar, "SetAlpha", function(self, value)
+			if not state.powerHidden or (self.IsForbidden and self:IsForbidden()) then return end
+			if IsSecret(value) or value ~= 0 then self:SetAlpha(0) end
+		end)
+	end
+end)()
+
 local function StylePower(entry, bar, unit, look, above)
 	local state = State(bar)
 	state.health = nil
+	ns.UnitFramesHoldUnseen(bar, state)
 	if above and NoPower(unit) then
+		-- (its mirror made now, out of a fight, so that a character with a power met in a fight finds it ready:
+		-- a frame of the game cannot take new pieces then)
+		if not state.mirror and CanMake(entry.frame) then Mirror(entry, bar, look, 1, 1, 1, true) end
 		Unmirror(bar, state)
 		-- (the game's empty bar stays unseen too)
 		state.alpha, state.powerHidden = Clean(Safe(bar.GetAlpha, bar)) or 1, true
@@ -2276,8 +2357,8 @@ function ns.InitUnitFrames()
 			return
 		end
 		if not On() then return end
-		if event == "PLAYER_REGEN_ENABLED" and deferred then
-			deferred = false
+		-- (out of a fight: everything drawn again, whatever a fight left behind; the pieces it could not make, made)
+		if event == "PLAYER_REGEN_ENABLED" then
 			return ns.ApplyUnitFrames()
 		end
 		if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then StyleCompacts() end
@@ -2437,7 +2518,7 @@ function ns.UnitFramesCards(parent, options)
 		card.background:SetAllPoints()
 		card.hover = card:CreateTexture(nil, "BACKGROUND", nil, 1)
 		card.hover:SetAllPoints()
-		card.hover:SetColorTexture(1, 1, 1, 0.06)
+		card.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 		card.hover:Hide()
 		card.edges = ns.Skin.Edges(card, 1, 1, 1, 0.07)
 		card.sample = Sample(card, math.max(20, grid.cardHeight - 50))
@@ -2456,10 +2537,7 @@ function ns.UnitFramesCards(parent, options)
 		card.sample:Draw(look, { class = Clean(you) or "WARRIOR", you = true, power = Clean(token) or "MANA", health = 72 })
 		card:SetScript("OnEnter", function(self)
 			self.hover:Show()
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:AddLine(L["UF_PRESET_" .. key:upper()], 1, 0.82, 0)
-			GameTooltip:AddLine(L["UF_PRESET_" .. key:upper() .. "_DESC"], 1, 1, 1, true)
-			GameTooltip:Show()
+			ns.Skin.ShowTip(self, { L["UF_PRESET_" .. key:upper()], L["UF_PRESET_" .. key:upper() .. "_DESC"] }, "ANCHOR_RIGHT")
 		end)
 		card:SetScript("OnLeave", function(self)
 			self.hover:Hide()
@@ -2498,7 +2576,7 @@ function ns.UnitFramesCards(parent, options)
 		local current = uf and (uf.enabled and ns.UnitFramesPreset() or (options.withGame and "game")) or nil
 		for _, card in ipairs(self.cards) do
 			local chosen = card.key == current
-			card.background:SetColorTexture(chosen and 1 or 1, chosen and 0.82 or 1, chosen and 0 or 1, chosen and 0.14 or 0.04)
+			if chosen then card.background:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN)) else card.background:SetColorTexture(1, 1, 1, 0.04) end
 			card.title:SetTextColor(unpack(chosen and ns.Skin.COLORS.gold or ns.Skin.COLORS.text))
 			card.check:SetShown(chosen)
 		end

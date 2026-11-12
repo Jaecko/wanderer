@@ -10,6 +10,9 @@ local L = ns.L
 -- Around them, the ground markers: a click on a color, then on the ground,
 -- as the game asks. The game keeps those buttons to itself in a fight: the
 -- outer ring only shows out of one (the symbols work in a fight).
+--
+-- Mouse only, like the placing mode: a controller has the game's own
+-- marker bindings.
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
@@ -196,9 +199,7 @@ local function BuildGround()
 		local x, y = Around(index, 9, OUTER_RADIUS)
 		button:SetPoint("CENTER", ground, "CENTER", x, y)
 		button:SetScript("OnEnter", function(self)
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:AddLine(index <= 8 and L.MARKERS_GROUND or L.MARKERS_GROUND_CLEAR, 1, 1, 1, true)
-			GameTooltip:Show()
+			ns.Skin.ShowTip(self, index <= 8 and L.MARKERS_GROUND or L.MARKERS_GROUND_CLEAR, "ANCHOR_RIGHT")
 		end)
 		button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	end

@@ -13,10 +13,10 @@ local L = ns.L
 local U = ns.Util
 
 local WIDTH = 440
-local ROW_HEIGHT = 20
+local ROW_HEIGHT = ns.Skin.ROW.compact
 local STEP, FINE = 0.1, 0.01 -- a point of a characteristic
 local STEP_PERCENT, FINE_PERCENT = 1, 0.1 -- a percent
-local GOLD = { 1, 0.82, 0 }
+local GOLD = ns.Skin.COLORS.gold
 local QUIET = ns.Skin.COLORS.muted
 
 local window, kicker, title, hint, rule, footer, roles, calcCheck, calcRule
@@ -54,7 +54,7 @@ local function Change(stat, direction)
 	local scale = Selected()
 	if not scale then return end
 	local percent = ns.STAT_PERCENT[stat]
-	local step = IsShiftKeyDown() and (percent and FINE_PERCENT or FINE) or (percent and STEP_PERCENT or STEP)
+	local step = U.PadShiftDown() and (percent and FINE_PERCENT or FINE) or (percent and STEP_PERCENT or STEP)
 	local value = math.max(0, (scale.weights[stat] or 0) + direction * step)
 	ns.SetScaleWeight(scale.id, stat, value)
 	Refresh()
@@ -77,7 +77,7 @@ local function Row(index)
 	row.plus = ns.Skin.SmallButton(row, "+", function() Change(row.stat, 1) end)
 	row.plus:SetSize(20, 18)
 	row.plus:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-	row.value = ns.Skin.CreateText(row, "GameTooltipText", 1, 1, 1)
+	row.value = ns.Skin.CreateText(row, "GameTooltipText", ns.Skin.RGB("text"))
 	row.value:SetWidth(44)
 	row.value:SetJustifyH("CENTER")
 	row.value:SetPoint("RIGHT", row.plus, "LEFT", 0, 0)
@@ -89,10 +89,11 @@ local function Row(index)
 	row.gauge:SetPoint("LEFT", row.track, "LEFT", 0, 0)
 	row.highlight = row:CreateTexture(nil, "BACKGROUND")
 	row.highlight:SetAllPoints()
-	row.highlight:SetColorTexture(1, 0.82, 0, 0.06)
+	row.highlight:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.HOVER))
 	row.highlight:Hide()
 	row:SetScript("OnMouseWheel", function(self, delta) Change(self.stat, delta) end)
 	row.padAdjust = function(self, delta) Change(self.stat, delta) end -- (a controller: left and right of the cross)
+	row.padTip = true -- (a plain frame: reached all the same)
 	row:SetScript("OnEnter", function(self) self.highlight:Show() end)
 	row:SetScript("OnLeave", function(self) self.highlight:Hide() end)
 	rows[index] = row
@@ -220,7 +221,7 @@ Refresh = function()
 	local scale = Selected()
 	title:SetText(L.WEIGHTS_TITLE)
 	local className = class and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class] or ""
-	hint:SetText(L.WEIGHTS_HINT:format(className))
+	hint:SetText((ns.Pad and ns.Pad.On() and L.WEIGHTS_HINT_PAD or L.WEIGHTS_HINT):format(className))
 	-- The scales, as tabs.
 	local y = margin + U.Measure(kicker, "GetStringHeight", 10) + 3 + U.Measure(title, "GetStringHeight", 16) + 4
 		+ U.Measure(hint, "GetStringHeight", 12) + 8
@@ -308,13 +309,14 @@ local function CreateWindow()
 	ns.Skin.Dress(window, { "CENTER", UIParent, "CENTER", 0, 40 }, "weightsPos")
 	local margin
 	kicker, title, margin = ns.Skin.Header(window, L.WEIGHTS_KICKER, nil, { margin = 6, settings = "tooltips" })
+	ns.Skin.Help(window, L.WEIGHTS_HELP, "HEADING")
 	hint = ns.Skin.Text(window, "GameTooltipTextSmall", "muted")
 	hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
 	hint:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	hint:SetJustifyH("LEFT")
 	if hint.SetWordWrap then hint:SetWordWrap(true) end
 	rule = window:CreateTexture(nil, "ARTWORK")
-	rule:SetColorTexture(1, 0.82, 0, 0.2)
+	rule:SetColorTexture(ns.Skin.RGB("gold", 0.2))
 	rule:SetHeight(1)
 	footer = ns.Skin.Text(window, "GameTooltipTextSmall", "muted")
 	calcCheck = ns.Skin.Check(window, L.CALC_USE, ns.UseCalculatedWeights, ns.SetUseCalculatedWeights, CalculatedTip)

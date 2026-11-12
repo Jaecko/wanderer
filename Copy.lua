@@ -14,7 +14,7 @@ local WIDTH, HEIGHT = 620, 420
 local MAX_LINES = 300
 local WHEEL_STEP = 40 -- pixels a turn of the wheel scrolls
 
-local window, box, scroll, bar
+local window, box, scroll, bar, hint
 local offset = 0
 
 local function ChatLines(frame)
@@ -45,7 +45,7 @@ local function CreateWindow()
 	Skin.Dress(window)
 	local _, title, margin = Skin.Header(window, L.ADDON_TITLE, L.COPY_TITLE)
 	title:SetPoint("RIGHT", window, "RIGHT", -36, 0)
-	local hint = Skin.Text(window, "GameTooltipTextSmall", "muted")
+	hint = Skin.Text(window, "GameTooltipTextSmall", "muted")
 	hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
 	hint:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	hint:SetText(L.COPY_HINT)
@@ -67,6 +67,11 @@ local function CreateWindow()
 	scroll:SetScrollChild(box)
 	window:EnableMouseWheel(true)
 	window:SetScript("OnMouseWheel", function(_, delta) SetOffset(offset - delta * WHEEL_STEP) end)
+	-- (a controller's right stick: nothing to choose in here, the window's own wheel)
+	Skin.PadWindow(window, { wheel = function(delta)
+		SetOffset(offset - delta * WHEEL_STEP)
+		return true
+	end })
 end
 
 function ns.CopyChat(frame)
@@ -76,6 +81,8 @@ function ns.CopyChat(frame)
 	window:Show()
 	ns.Skin.Get(window):Layout()
 	SetOffset(0)
-	box:SetFocus()
+	-- (with a controller nothing is typed: no focus taken, the hint says copying needs a keyboard)
+	hint:SetText(U.UsingPad() and L.COPY_HINT_PAD or L.COPY_HINT)
+	if not U.UsingPad() then box:SetFocus() end
 	box:HighlightText()
 end

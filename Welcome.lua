@@ -82,9 +82,9 @@ local LIKE_PREVIEW = {
 -- button, the reminders' size and their opening at login (not its weights or its trade: those are its own).
 local MINE_COPIED = { "framePoints", "spots", "minimap", "todoSize", "todoAtLogin" }
 local TIPS = {
-	{ "Interface\\CURSOR\\Point", "WELCOME_TIP_HOVER" },
+	{ "Interface\\CURSOR\\Point", "WELCOME_TIP_HOVER", "WELCOME_TIP_HOVER_PAD" },
 	{ "Interface\\Icons\\INV_Misc_Spyglass_02", "WELCOME_TIP_REVEAL" },
-	{ "Interface\\Icons\\INV_Misc_Book_09", "WELCOME_TIP_MINIMAP" },
+	{ "Interface\\Icons\\INV_Misc_Book_09", "WELCOME_TIP_MINIMAP", "WELCOME_TIP_MINIMAP_PAD" },
 	{ "Interface\\Icons\\INV_Misc_Note_01", "WELCOME_TIP_COMMAND" },
 }
 
@@ -219,7 +219,7 @@ local function Card(parent, title, text, height)
 	card.background:SetAllPoints()
 	card.hover = card:CreateTexture(nil, "BACKGROUND", nil, 1)
 	card.hover:SetAllPoints()
-	card.hover:SetColorTexture(1, 1, 1, 0.06)
+	card.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 	card.hover:Hide()
 	card.check = card:CreateTexture(nil, "OVERLAY")
 	card.check:SetSize(18, 18)
@@ -236,13 +236,10 @@ local function Card(parent, title, text, height)
 	card.text:SetJustifyV("TOP")
 	if card.text.SetMaxLines then card.text:SetMaxLines(2) end
 	card.text:SetText(text)
-	-- (card.Preview(): what the choice brings, told in its tooltip before it is made)
+	-- (card.Preview(): what the choice brings, its tooltip's lines, told before it is made)
 	card:SetScript("OnEnter", function(self)
 		self.hover:Show()
-		if not self.Preview then return end
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		self.Preview()
-		GameTooltip:Show()
+		if self.Preview then ns.Skin.ShowTip(self, self.Preview, "ANCHOR_RIGHT") end
 	end)
 	card:SetScript("OnLeave", function(self)
 		self.hover:Hide()
@@ -250,8 +247,8 @@ local function Card(parent, title, text, height)
 	end)
 	function card:SetChosen(chosen)
 		if chosen then
-			self.background:SetColorTexture(1, 0.82, 0, 0.16)
-			self.title:SetTextColor(1, 0.82, 0)
+			self.background:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN))
+			self.title:SetTextColor(ns.Skin.COLORS.gold[1], ns.Skin.COLORS.gold[2], ns.Skin.COLORS.gold[3])
 		else
 			local c = ns.Skin.COLORS.text
 			self.background:SetColorTexture(1, 1, 1, 0.04)
@@ -283,7 +280,7 @@ local function Page(step, titleKey, textKey)
 	page:SetPoint("TOPLEFT", window.top, "TOPLEFT", 0, 0)
 	page:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -(ns.Skin.Margin() + 8), 56)
 	page:Hide()
-	page.title = ns.Skin.CreateText(page, "GameTooltipHeaderText", 1, 0.82, 0)
+	page.title = ns.Skin.CreateText(page, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
 	page.title:SetPoint("TOPLEFT", page, "TOPLEFT", 0, 0)
 	page.title:SetPoint("RIGHT", page, "RIGHT", 0, 0)
 	if page.title.SetWordWrap then page.title:SetWordWrap(false) end
@@ -293,7 +290,7 @@ local function Page(step, titleKey, textKey)
 	page.text:SetPoint("RIGHT", page, "RIGHT", 0, 0)
 	page.text:SetText(textKey and L[textKey] or "")
 	page.rule = page:CreateTexture(nil, "ARTWORK")
-	page.rule:SetColorTexture(1, 0.82, 0, 0.2)
+	page.rule:SetColorTexture(ns.Skin.RGB("gold", 0.2))
 	page.rule:SetHeight(1)
 	page.rule:SetPoint("TOPLEFT", page.text, "BOTTOMLEFT", 0, -8)
 	page.rule:SetPoint("RIGHT", page, "RIGHT", 0, 0)
@@ -314,13 +311,10 @@ end
 
 local function OnOff(on) return on and L.WELCOME_ON or L.WELCOME_OFF end
 
--- A tooltip line in two halves (what, then how).
+-- A tooltip line in two halves (what, then how, in gold).
 local function Pair(left, right)
-	if GameTooltip.AddDoubleLine then
-		GameTooltip:AddDoubleLine(left, right, 0.9, 0.88, 0.8, 1, 0.82, 0)
-	else
-		GameTooltip:AddLine(left .. ": " .. right, 0.9, 0.88, 0.8)
-	end
+	local text = ns.Skin.COLORS.text
+	return { left .. ": " .. ns.Skin.Colorize(right, "gold"), text[1], text[2], text[3] }
 end
 
 -- The character a new one would copy: the one picked, else the main one.
@@ -380,7 +374,7 @@ local function RevealCard(parent, anchor)
 		local key = RevealKey()
 		title:SetText(key and L.WELCOME_REVEAL_BOUND:format(KeyWords(key)) or L.WELCOME_REVEAL_TITLE)
 		local listening = listener and listener:Listening()
-		text:SetText(said or (listening and L.WELCOME_REVEAL_PRESS_DESC) or (key and L.WELCOME_REVEAL_BOUND_DESC)
+		text:SetText(said or (listening and (U.UsingPad() and L.WELCOME_REVEAL_PRESS_DESC_PAD or L.WELCOME_REVEAL_PRESS_DESC)) or (key and (U.UsingPad() and L.WELCOME_REVEAL_BOUND_DESC_PAD or L.WELCOME_REVEAL_BOUND_DESC))
 			or L.WELCOME_REVEAL_DESC)
 		button:SetText(listening and L.WELCOME_REVEAL_PRESS or (key and L.WELCOME_REVEAL_CHANGE or L.WELCOME_REVEAL_PICK))
 		button:Fit()
@@ -428,7 +422,7 @@ end
 local function IntroPage()
 	local page = Page("intro", "WELCOME_TITLE")
 	page.title:SetFontObject(ns.Skin.FontFor("GameFontNormalHuge"))
-	page.title:SetTextColor(1, 0.82, 0)
+	page.title:SetTextColor(ns.Skin.COLORS.gold[1], ns.Skin.COLORS.gold[2], ns.Skin.COLORS.gold[3])
 	page.text:SetFontObject(ns.Skin.FontFor("GameTooltipText"))
 	page.text:SetTextColor(unpack(ns.Skin.COLORS.text))
 	page.text:SetText(L.WELCOME_INTRO)
@@ -458,13 +452,13 @@ local function IntroPage()
 		local who = LikeWho()
 		local profile = who and ns.root.profiles[ns.CharacterProfile(who.key) or ""]
 		if type(profile) ~= "table" then return end
-		GameTooltip:AddLine(L.WELCOME_LIKE_TIP:format(who.name), 1, 0.82, 0)
-		for _, entry in ipairs(LIKE_PREVIEW) do Pair(L[entry[2]], OnOff(ValueIn(profile, entry[1]))) end
-		for _, look in ipairs({ FADE, LOOKS[1], LOOKS[2] }) do Pair(L[look[1]], LookWords(look, look[2](profile))) end
+		local lines = { L.WELCOME_LIKE_TIP:format(who.name) }
+		for _, entry in ipairs(LIKE_PREVIEW) do lines[#lines + 1] = Pair(L[entry[2]], OnOff(ValueIn(profile, entry[1]))) end
+		for _, look in ipairs({ FADE, LOOKS[1], LOOKS[2] }) do lines[#lines + 1] = Pair(L[look[1]], LookWords(look, look[2](profile))) end
 		local places = type(ns.root.placeProfiles) == "table" and ns.root.placeProfiles[who.key]
-		Pair(L.WELCOME_PLACES, OnOff(type(places) == "table" and next(places) ~= nil))
-		local muted = ns.Skin.COLORS.muted
-		GameTooltip:AddLine(L.WELCOME_LIKE_COPY, muted[1], muted[2], muted[3], true)
+		lines[#lines + 1] = Pair(L.WELCOME_PLACES, OnOff(type(places) == "table" and next(places) ~= nil))
+		lines[#lines + 1] = { L.WELCOME_LIKE_COPY, ns.Skin.RGB("muted") }
+		return lines
 	end
 	like:SetScript("OnClick", function()
 		if not likeFrom or not ns.CopyCharacterSettings(likeFrom) then
@@ -599,6 +593,12 @@ local function PlayPage()
 	end
 end
 
+-- A text, or its controller version when there is one and a controller is in use.
+local function PadText(key)
+	local pad = U.UsingPad and U.UsingPad() and L[key .. "_PAD"]
+	return pad or L[key]
+end
+
 -- A switch: a quiet row, checked when on; get() and set(on).
 local function RowSwitch(page, key, get, set, previous, descKey)
 	local row = CreateFrame("Button", nil, page)
@@ -607,7 +607,7 @@ local function RowSwitch(page, key, get, set, previous, descKey)
 	row:SetPoint("RIGHT", page, "RIGHT", 0, 0)
 	row.hover = row:CreateTexture(nil, "BACKGROUND")
 	row.hover:SetAllPoints()
-	row.hover:SetColorTexture(1, 1, 1, 0.05)
+	row.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 	row.hover:Hide()
 	-- The kit's check box (the whole row answers the clicks).
 	row.check = ns.Skin.Check(row, "", get, set)
@@ -624,9 +624,10 @@ local function RowSwitch(page, key, get, set, previous, descKey)
 		if text.SetWordWrap then text:SetWordWrap(false) end
 	end
 	row.title:SetText(L[key])
-	row.text:SetText(L[descKey or (key .. "_DESC")])
+	row.text:SetText(PadText(descKey or (key .. "_DESC")))
 	function row:Refresh()
 		local on = get() and true or false
+		self.text:SetText(PadText(descKey or (key .. "_DESC")))
 		self.check:Refresh()
 		local c = ns.Skin.COLORS[on and "text" or "soft"]
 		self.title:SetTextColor(c[1], c[2], c[3])
@@ -638,10 +639,7 @@ local function RowSwitch(page, key, get, set, previous, descKey)
 	end)
 	row:SetScript("OnEnter", function(self)
 		self.hover:Show()
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:AddLine(L[key])
-		GameTooltip:AddLine(L[key .. "_DESC"], 1, 1, 1, true)
-		GameTooltip:Show()
+		ns.Skin.ShowTip(self, { L[key], PadText(key .. "_DESC") }, "ANCHOR_RIGHT")
 	end)
 	row:SetScript("OnLeave", function(self)
 		self.hover:Hide()
@@ -934,10 +932,12 @@ local function ReadyPage()
 	if tipsCaption.SetWordWrap then tipsCaption:SetWordWrap(false) end
 	local previous = tipsCaption
 	local revealTip
+	local padTips = {} -- line -> its tip (said otherwise under a controller)
 	for index, tip in ipairs(TIPS) do
 		local line
 		previous, line = IconLine(page, tip[1], L[tip[2]], previous, index == 1 and 10 or 12)
 		if tip[2] == "WELCOME_TIP_REVEAL" then revealTip = line end
+		if tip[3] then padTips[line] = tip end
 	end
 	local options = ns.Skin.Button(page, L.WELCOME_OPTIONS, function()
 		window:Hide()
@@ -963,6 +963,9 @@ local function ReadyPage()
 		-- (the reveal's key, once chosen: named)
 		local key = RevealKey()
 		revealTip:SetText(key and L.WELCOME_TIP_REVEAL_BOUND:format(KeyWords(key)) or L.WELCOME_TIP_REVEAL)
+		-- (a controller has no mouse to hover with, and its touchpad opens the bar)
+		local pad = U.UsingPad and U.UsingPad()
+		for line, tip in pairs(padTips) do line:SetText(L[pad and tip[3] or tip[2]]) end
 		takeBack:SetShown(undo ~= nil)
 		later:ClearAllPoints()
 		later:SetPoint("LEFT", undo and takeBack or options, "RIGHT", 12, 0)
@@ -986,7 +989,8 @@ function ShowStep(step)
 	for index, key in ipairs(STEPS) do
 		pages[key]:SetShown(index == current)
 		local done = index <= current and (index <= READY or further)
-		dots[index].mark:SetColorTexture(1, done and 0.82 or 1, done and 0 or 1, done and 0.9 or (index > READY and 0.15 or 0.25))
+		local gold = ns.Skin.COLORS.gold
+		dots[index].mark:SetColorTexture(done and gold[1] or 1, done and gold[2] or 1, done and gold[3] or 1, done and 0.9 or (index > READY and 0.15 or 0.25))
 	end
 	local refresh = refreshers[STEPS[current]]
 	if refresh then refresh() end
@@ -1027,10 +1031,10 @@ local function CreateWindow()
 	ring:SetSize(CREST_SIZE + 4, CREST_SIZE + 4)
 	ring:SetPoint("CENTER", crest, "CENTER")
 	ring:SetTexture("Interface\\Buttons\\WHITE8X8")
-	ring:SetVertexColor(1, 0.82, 0, 0.55)
+	ring:SetVertexColor(ns.Skin.RGB("gold", 0.55))
 	ns.Skin.RoundMask(window, crest)
 	ring:SetShown(ns.Skin.RoundMask(window, ring))
-	local name = ns.Skin.CreateText(window, "GameTooltipHeaderText", 1, 0.82, 0)
+	local name = ns.Skin.CreateText(window, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
 	name:SetPoint("LEFT", crest, "RIGHT", 12, 6)
 	name:SetPoint("RIGHT", window, "RIGHT", -40, 0)
 	if name.SetWordWrap then name:SetWordWrap(false) end

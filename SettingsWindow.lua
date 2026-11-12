@@ -97,13 +97,13 @@ local function Slider(parent, row, onValue)
 	track:SetColorTexture(1, 1, 1, 0.12)
 	local thumb = slider:CreateTexture(nil, "OVERLAY")
 	thumb:SetSize(8, 16)
-	thumb:SetColorTexture(1, 0.82, 0, 1)
+	thumb:SetColorTexture(ns.Skin.RGB("gold", 1))
 	slider:SetThumbTexture(thumb)
 	local fill = slider:CreateTexture(nil, "ARTWORK")
 	fill:SetHeight(4)
 	fill:SetPoint("LEFT", track, "LEFT")
 	fill:SetPoint("RIGHT", thumb, "CENTER")
-	fill:SetColorTexture(0.79, 0.64, 0.15, 0.9)
+	fill:SetColorTexture(ns.Skin.RGB("gold", 0.9))
 	holder.value = Skin.Text(holder, "GameTooltipText", "gold")
 	holder.value:SetJustifyH("RIGHT")
 	holder.value:SetWidth(54)
@@ -225,7 +225,7 @@ local ShowView, Relayout, BuildNav
 -- A page's title over its content, a few words under it (intro), a chip beside the title (a version).
 local function Heading(view, title, intro)
 	local canvas = view.canvas
-	view.title = Skin.CreateText(canvas, "GameFontNormalLarge", 1, 0.82, 0)
+	view.title = Skin.CreateText(canvas, "GameFontNormalLarge", ns.Skin.RGB("gold"))
 	view.title:SetText(title or "")
 	-- (one line from the start: measured as one line at the first layout)
 	if view.title.SetWordWrap then view.title:SetWordWrap(false) end
@@ -275,14 +275,14 @@ local function RowFrame(canvas, label, desc)
 	local frame = CreateFrame("Button", nil, canvas)
 	frame.hover = frame:CreateTexture(nil, "BACKGROUND")
 	frame.hover:SetAllPoints()
-	frame.hover:SetColorTexture(1, 1, 1, 0.03)
+	frame.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 	frame.hover:Hide()
 	frame.flash = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
 	frame.flash:SetAllPoints()
-	frame.flash:SetColorTexture(1, 0.82, 0, 0.14)
+	frame.flash:SetColorTexture(ns.Skin.RGB("gold", 0.14))
 	frame.flash:Hide()
 	frame.guide = frame:CreateTexture(nil, "ARTWORK")
-	frame.guide:SetColorTexture(1, 0.82, 0, 0.16)
+	frame.guide:SetColorTexture(ns.Skin.RGB("gold", 0.16))
 	frame.guide:SetWidth(1)
 	frame.guide:Hide()
 	frame.label = Skin.Text(frame, "GameTooltipText", "text")
@@ -311,7 +311,7 @@ end
 local function ChangeMarks(frame)
 	frame.changedDot = frame:CreateTexture(nil, "OVERLAY")
 	frame.changedDot:SetSize(5, 5)
-	frame.changedDot:SetColorTexture(1, 0.82, 0, 0.9)
+	frame.changedDot:SetColorTexture(ns.Skin.RGB("gold", 0.9))
 	frame.changedDot:SetPoint("TOPRIGHT", frame.label, "TOPLEFT", -4, -5)
 	frame.changedDot:Hide()
 	frame.reset = Skin.GlyphButton(frame, "undo", 14, function(self)
@@ -535,7 +535,7 @@ local function FoldFrame(canvas, count, onClick)
 	frame.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, 0)
 	frame.hover = frame:CreateTexture(nil, "BACKGROUND")
 	frame.hover:SetAllPoints()
-	frame.hover:SetColorTexture(1, 1, 1, 0.03)
+	frame.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 	frame.hover:Hide()
 	frame.label = Skin.Text(frame, "GameTooltipText", "soft")
 	frame.label:SetText(L.SETTINGS_MORE)
@@ -588,18 +588,20 @@ local function PageView(page)
 				-- (a piece the page draws itself: cards, a card of the game's settings)
 				frame = row.build(self.canvas)
 			else
-				frame = RowFrame(self.canvas, row.label, row.desc)
+				-- (with a controller, its own words when it has them)
+				frame = RowFrame(self.canvas, row.label, U.UsingPad() and row.descPad or row.desc)
 				ChangeMarks(frame)
 				Control(frame, row)
-				if row.advanced then self.folded = self.folded + 1 end
+				if row.advanced then self.advanced = true end
 			end
 			if frame then
 				frame.row = row
 				self.frames[#self.frames + 1] = frame
 			end
 		end
-		if self.folded > 0 then
-			self.fold = FoldFrame(self.canvas, self.folded, function()
+		-- (the fold exists whenever the page has less used rows; Layout counts the ones offered now)
+		if self.advanced then
+			self.fold = FoldFrame(self.canvas, 0, function()
 				Skin.Play("click")
 				ns.SetSettingsPageUnfolded(page, not ns.SettingsPageUnfolded(page))
 				Relayout()
@@ -617,6 +619,18 @@ local function PageView(page)
 		if self.version then
 			local room = width - 6 - (self.resetLink:GetWidth() or 0) - 12
 			self.chip:SetShown(U.Measure(self.title, "GetStringWidth", 120) + 10 + (self.chip:GetWidth() or 0) <= room)
+		end
+		-- (the pad can come or go while the window lives: each row's words, and the fold's count, follow it)
+		local pad = U.UsingPad()
+		self.folded = 0
+		for _, frame in ipairs(self.frames) do
+			local row = frame.row
+			if row.kind ~= "header" and row.kind ~= "block" and frame.desc then
+				local desc = pad and row.descPad or row.desc
+				frame.desc:SetText(desc or "")
+				frame.desc:SetShown(desc ~= nil and desc ~= "")
+				if row.advanced and not (row.hidden and row.hidden()) then self.folded = self.folded + 1 end
+			end
 		end
 		local placed = 0
 		local function Place(frame)
@@ -636,10 +650,21 @@ local function PageView(page)
 			placed = placed + 1
 		end
 		for _, frame in ipairs(self.frames) do
-			if not frame.row.advanced then Place(frame) end
+			-- (row.hidden(): a row not offered now, the placing under the controller)
+			local hidden = frame.row.hidden and frame.row.hidden()
+			if not frame.row.advanced then
+				frame:SetShown(not hidden)
+				if not hidden then Place(frame) end
+			end
 		end
-		if self.fold then
+		if self.fold then self.fold:SetShown(self.folded > 0) end
+		if self.fold and self.folded == 0 then
+			for _, frame in ipairs(self.frames) do
+				if frame.row.advanced then frame:Hide() end
+			end
+		elseif self.fold then
 			local open = ns.SettingsPageUnfolded(page)
+			self.fold.count:Set(tostring(self.folded), "grey")
 			y = y + (placed > 0 and 14 or 0)
 			self.fold:ClearAllPoints()
 			self.fold:SetPoint("TOPLEFT", self.canvas, "TOPLEFT", 0, -y)
@@ -650,8 +675,9 @@ local function PageView(page)
 			placed = open and 0 or placed
 			for _, frame in ipairs(self.frames) do
 				if frame.row.advanced then
-					frame:SetShown(open)
-					if open then Place(frame) end
+					local shown = open and not (frame.row.hidden and frame.row.hidden())
+					frame:SetShown(shown)
+					if shown then Place(frame) end
 				end
 			end
 		end
@@ -746,6 +772,8 @@ local function PlaystylesView()
 		Skin.Tooltip(self.undo, { L.PLAY_UNDO, L.PLAY_UNDO_DESC })
 	end
 	function view:Layout(width)
+		-- (said otherwise under a controller: no hovering there)
+		self.intro:SetText(U.UsingPad() and L.PLAYSTYLES_DESC_PAD or L.PLAYSTYLES_DESC)
 		local y = LayoutHeading(self, width)
 		y = y + self.grid:Layout(self.intro, width - 6, HEADING_GAP)
 		self.undo:ClearAllPoints()
@@ -914,6 +942,8 @@ local function KeysView()
 		self.canvas:HookScript("OnHide", function() Said(nil) end)
 	end
 	function view:Layout(width)
+		-- (said otherwise under a controller: these keys are a keyboard's)
+		self.intro:SetText(U.UsingPad() and L.SETTINGS_KEYS_DESC_PAD or L.SETTINGS_KEYS_DESC)
 		local y = LayoutHeading(self, width)
 		self.status:ClearAllPoints()
 		self.status:SetPoint("TOPLEFT", self.canvas, "TOPLEFT", 0, -(y - HEADING_GAP + 6))
@@ -1008,9 +1038,12 @@ local function PlaceView()
 		end, "main", 160)
 	end
 	function view:Layout(width)
+		-- (said otherwise under a controller: placing the pieces needs a mouse)
+		self.intro:SetText(U.UsingPad() and L.PLACING_DESC_PAD or L.PLACING_DESC)
 		local y = LayoutHeading(self, width)
 		self.button:ClearAllPoints()
 		self.button:SetPoint("TOPLEFT", self.canvas, "TOPLEFT", 0, -y)
+		self.button:SetShown(not U.UsingPad())
 		return y + self.button:GetHeight() + 20
 	end
 	function view:Refresh() end
@@ -1029,7 +1062,7 @@ local function OfferView(offer)
 		self.icon:SetSize(40, 40)
 		self.icon:SetTexture(offer.icon)
 		self.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-		self.name = Skin.CreateText(self.card, "GameTooltipHeaderText", 1, 0.82, 0)
+		self.name = Skin.CreateText(self.card, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
 		self.name:SetText(offer.name)
 		self.text = Skin.Text(self.card, "GameTooltipText", "text")
 		self.text:SetText(L[offer.text])
@@ -1084,7 +1117,7 @@ local function NewsView()
 		Heading(self, L.NEWS_SHOW)
 		for _, section in ipairs(ns.NewsSections(false)) do
 			local block = { lines = {} }
-			block.name = Skin.CreateText(self.canvas, "GameTooltipHeaderText", 1, 0.82, 0)
+			block.name = Skin.CreateText(self.canvas, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
 			block.name:SetText(section.name)
 			block.chip = Skin.Chip(self.canvas)
 			block.chip:Set(L.NEWS_VERSION:format(section.version), section.new and "gold" or "grey")
@@ -1092,7 +1125,7 @@ local function NewsView()
 			for _, line in ipairs(section.lines) do
 				local mark = self.canvas:CreateTexture(nil, "ARTWORK")
 				mark:SetSize(5, 5)
-				mark:SetColorTexture(1, 0.82, 0, 0.8)
+				mark:SetColorTexture(ns.Skin.RGB("gold", 0.8))
 				local text = Skin.Text(self.canvas, "GameTooltipText", "text")
 				text:SetText(line)
 				block.lines[#block.lines + 1] = { mark = mark, text = text }
@@ -1133,6 +1166,8 @@ end
 -- by their names first. A result opens its page there, the row lit a moment.
 
 local SYSTEM = { { "keys", "KEYBINDS" }, { "changes", "CHANGES_TITLE" }, { "place", "PLACING_TITLE" }, { "news", "NEWS_SHOW" } }
+-- (placing is the mouse's: its page not offered under the controller)
+local function Offered(key) return key ~= "place" or not U.UsingPad() end
 
 function ns.SearchSettings(query)
 	local folded = U.Fold(query or "")
@@ -1145,13 +1180,14 @@ function ns.SearchSettings(query)
 		if not page.offer and U.Matches(page.name, folded, true) then Add(named, { key = page.key, label = page.name }) end
 		for _, row in ipairs(page.rows) do
 			-- (a shortcut of the home page: the setting is found on its own page)
-			if row.kind ~= "header" and row.kind ~= "block" and not row.shortcut then
+			-- (nor a row not offered now)
+			if row.kind ~= "header" and row.kind ~= "block" and not row.shortcut and not (row.hidden and row.hidden()) then
 				local where = page.name
 				if row.section and row.section ~= page.name then where = where .. " · " .. row.section end
 				local result = { key = page.key, row = row, label = row.label, where = where }
 				if U.Matches(row.label, folded, true) then
 					Add(named, result)
-				elseif U.Matches(table.concat({ row.desc or "", row.section or "", page.name, ns.SettingsRowNote(row) or "" }, " "),
+				elseif U.Matches(table.concat({ (U.UsingPad() and row.descPad or row.desc) or "", row.section or "", page.name, ns.SettingsRowNote(row) or "" }, " "),
 					folded, true) then
 					Add(described, result)
 				end
@@ -1159,7 +1195,7 @@ function ns.SearchSettings(query)
 		end
 	end
 	for _, system in ipairs(SYSTEM) do
-		if U.Matches(L[system[2]], folded, true) then Add(named, { key = system[1], label = L[system[2]] }) end
+		if Offered(system[1]) and U.Matches(L[system[2]], folded, true) then Add(named, { key = system[1], label = L[system[2]] }) end
 	end
 	-- (a key by its action's name: the Keys page)
 	for _, group in ipairs(KeyGroups()) do
@@ -1191,7 +1227,7 @@ local function ResultsView()
 		button:SetHeight(42)
 		button.hover = button:CreateTexture(nil, "BACKGROUND")
 		button.hover:SetAllPoints()
-		button.hover:SetColorTexture(1, 1, 1, 0.04)
+		button.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 		button.hover:Hide()
 		button.label = Skin.Text(button, "GameTooltipText", "text")
 		button.label:SetPoint("TOPLEFT", button, "TOPLEFT", 10, -6)
@@ -1288,7 +1324,9 @@ local function NavEntries()
 		end
 	end
 	table.sort(groups.extensions, function(a, b) return a.rank < b.rank end)
-	for _, system in ipairs(SYSTEM) do groups.more[#groups.more + 1] = { key = system[1], name = L[system[2]] } end
+	for _, system in ipairs(SYSTEM) do
+		if Offered(system[1]) then groups.more[#groups.more + 1] = { key = system[1], name = L[system[2]] } end
+	end
 	for _, part in ipairs({ { "wanderer", L.ADDON_TITLE }, { "extensions", L.SECTION_EXTENSIONS }, { "more", L.SETTINGS_GROUP_MORE } }) do
 		if groups[part[1]][1] then
 			list[#list + 1] = { caption = part[2] }
@@ -1326,15 +1364,15 @@ local function NavButton(index)
 	button:SetHeight(NAV_ROW)
 	button.chosen = button:CreateTexture(nil, "BACKGROUND")
 	button.chosen:SetAllPoints()
-	button.chosen:SetColorTexture(1, 0.82, 0, 0.08)
+	button.chosen:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN))
 	button.bar = button:CreateTexture(nil, "ARTWORK")
-	button.bar:SetColorTexture(1, 0.82, 0, 1)
+	button.bar:SetColorTexture(ns.Skin.RGB("gold", 1))
 	button.bar:SetWidth(2)
 	button.bar:SetPoint("TOPLEFT")
 	button.bar:SetPoint("BOTTOMLEFT")
 	button.hover = button:CreateTexture(nil, "BACKGROUND", nil, 1)
 	button.hover:SetAllPoints()
-	button.hover:SetColorTexture(1, 1, 1, 0.04)
+	button.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 	button.hover:Hide()
 	button.text = Skin.Text(button, "GameTooltipText", "soft")
 	button.text:SetPoint("LEFT", button, "LEFT", 12, 0)
@@ -1476,8 +1514,9 @@ local function Create()
 	Skin.Sounds(window, Skin.SOUNDS.open, Skin.SOUNDS.close)
 	Skin.Dress(window, { "CENTER", UIParent, "CENTER", 0, 20 }, "settingsPos")
 	local _, _, margin = Skin.Header(window, L.ADDON_TITLE, L.SETTINGS_TITLE)
+	Skin.Help(window, L.SETTINGS_HELP, "HEADING")
 	window.version = Skin.Text(window, "GameTooltipTextSmall", "muted")
-	window.version:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin - 22, -margin)
+	window.version:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin - 44, -margin) -- (left of the help's "?")
 	local get = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
 	window.version:SetText(get and U.Safe(get, "Wanderer", "Version") or "")
 	window.rule = Skin.Rule(window, true, 0.12)

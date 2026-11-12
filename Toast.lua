@@ -23,7 +23,7 @@ local DONE_ALPHA = 0.55 -- a line whose action was taken
 local SLOTS = 2 -- notices shown at once
 local STACK_GAP = 6
 local SECOND_ALPHA = 0.85
-local ROW_COLOR, ROW_HOVER = { 0.92, 0.92, 0.92 }, { 1, 0.82, 0 }
+local ROW_COLOR, ROW_HOVER = ns.Skin.COLORS.text, ns.Skin.COLORS.gold
 local MAX_WIDTH = 420 -- its words at most this wide: a longer line wraps (the title is cut, whole under the mouse)
 
 local U = ns.Util
@@ -78,6 +78,10 @@ local function Layout(slot)
 	-- (a title cut: whole under the mouse, the notice taking the mouse for it)
 	slot.titleCut = titleWidth > width - countWidth + 0.5
 	frame:EnableMouse(Clickable(slot.notice) or slot.titleCut)
+	-- (the whole notice's button: reached by a controller too, its top button silencing the kind)
+	slot.whole:EnableMouse(Clickable(slot.notice) or slot.titleCut)
+	slot.whole.padRight = slot.notice and slot.notice.kind ~= nil or nil
+	slot.whole.padRightWord = "SILENCE"
 	text:SetWidth(width)
 	local height = U.Measure(title, "GetStringHeight", 14)
 		+ (withText and (LINE_GAP + U.Measure(text, "GetStringHeight", 12)) or 0)
@@ -196,6 +200,8 @@ local function Fill(slot, notice)
 		if line then
 			row.text:SetText(line.text)
 			row:EnableMouse(line.onClick ~= nil or notice.kind ~= nil)
+			row.padRight = notice.kind ~= nil or nil
+			row.padRightWord = "SILENCE"
 		end
 	end
 	ShowCount(slot)
@@ -235,8 +241,8 @@ end
 
 local function OnUpdate(slot, elapsed)
 	local frame = slot.frame
-	-- (a notice under the mouse that takes a click: it waits for it)
-	if not ((Clickable(slot.notice) and frame:IsMouseOver()) or Held(frame)) then slot.shownFor = slot.shownFor + elapsed end
+	-- (a notice under the mouse, or chosen by the controller, that takes a click: it waits for it)
+	if not ((Clickable(slot.notice) and U.Hovered(frame)) or Held(frame)) then slot.shownFor = slot.shownFor + elapsed end
 	if slot.shownFor >= slot.showTime then slot.targetAlpha = 0 end
 	local target = slot.targetAlpha > 0 and slot.peak or 0
 	if ns.Skin.Fade(frame, target, elapsed, FADE, FADE) <= 0 and slot.targetAlpha == 0 then
@@ -268,22 +274,17 @@ end
 local function Hint(slot, hint)
 	if not slot.notice then return end
 	if _G.SetCursor then _G.SetCursor("INTERACT_CURSOR") end
-	local any = false
-	GameTooltip:SetOwner(slot.frame, "ANCHOR_BOTTOM")
-	if slot.titleCut then
-		local gold = ns.Skin.COLORS.gold
-		GameTooltip:AddLine(slot.title:GetText() or "", gold[1], gold[2], gold[3], true)
-		any = true
-	end
-	if hint then
-		GameTooltip:AddLine(hint, 1, 1, 1, true)
-		any = true
-	end
+	local Skin = ns.Skin
+	-- (its whole title in gold when it was cut, what a click does, how to silence it in the muted color)
+	local lines = {}
+	if slot.titleCut then lines[#lines + 1] = { slot.title:GetText() or "", Skin.RGB("gold") } end
+	if hint then lines[#lines + 1] = { hint, Skin.RGB("text") } end
 	if slot.notice.kind then
-		GameTooltip:AddLine(L.TOAST_MUTE_HINT, ns.Skin.COLORS.muted[1], ns.Skin.COLORS.muted[2], ns.Skin.COLORS.muted[3], true)
-		any = true
+		-- (with a controller: its top button, drawn)
+		local words = U.UsingPad and U.UsingPad() and Skin.PadKeys and Skin.PadKeys({ { "PAD4", "SILENCE" } })
+		lines[#lines + 1] = { words or L.TOAST_MUTE_HINT, Skin.RGB("muted") }
 	end
-	if any then GameTooltip:Show() else GameTooltip:Hide() end
+	if not Skin.ShowTip(slot.frame, lines, "ANCHOR_BOTTOM") then GameTooltip:Hide() end
 end
 
 local function Unhint()
@@ -454,8 +455,8 @@ local function MakeSlot(index)
 	local slot = { index = index, frame = frame, rows = {}, shownFor = 0, targetAlpha = 0, showTime = SHOW_TIME, peak = 1 }
 	ns.PlaceApply("toastTop", frame)
 	frame:EnableMouse(false)
-	slot.title = Skin.CreateText(frame, "GameTooltipHeaderText", 1, 0.82, 0)
-	slot.text = Skin.CreateText(frame, "GameTooltipText", 1, 1, 1)
+	slot.title = Skin.CreateText(frame, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
+	slot.text = Skin.CreateText(frame, "GameTooltipText", Skin.RGB("text"))
 	slot.kicker = Skin.CreateKicker(frame)
 	slot.title:SetJustifyH("CENTER")
 	if slot.title.SetWordWrap then slot.title:SetWordWrap(false) end
@@ -469,10 +470,20 @@ local function MakeSlot(index)
 	slot.tone:SetWidth(2)
 	slot.tone:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -6)
 	slot.tone:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, 6)
-	slot.tone:SetColorTexture(1, 0.82, 0, 0.7)
+	slot.tone:SetColorTexture(Skin.COLORS.gold[1], Skin.COLORS.gold[2], Skin.COLORS.gold[3], 0.7)
+	-- The whole notice as one button (its click, its right click), under its own lines.
+	slot.whole = CreateFrame("Button", nil, frame)
+	slot.whole:SetAllPoints()
+	slot.whole:SetFrameLevel(frame:GetFrameLevel() + 1)
+	slot.whole:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	slot.whole:SetScript("OnClick", function(_, button) OnClick(slot, frame, button) end)
+	slot.whole:SetScript("OnEnter", function() local enter = frame:GetScript("OnEnter") if enter then enter(frame) end end)
+	slot.whole:SetScript("OnLeave", function() Unhint() end)
+	slot.whole:EnableMouse(false)
 	-- The lines of their own: gold under the mouse when they take a click.
 	for line = 1, MAX_LINES do
 		local row = CreateFrame("Button", nil, frame)
+		row:SetFrameLevel(frame:GetFrameLevel() + 2)
 		row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		row.text = Skin.CreateText(row, "GameTooltipText", ROW_COLOR[1], ROW_COLOR[2], ROW_COLOR[3])
 		row.text:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
@@ -500,6 +511,8 @@ local function MakeSlot(index)
 	frame:SetScript("OnLeave", Unhint)
 	frame.noFadeIn = true
 	frame:SetScript("OnUpdate", function(_, elapsed) OnUpdate(slot, elapsed) end)
+	-- (the controller's touchpad goes into a notice shown: Pad.lua)
+	if Skin.PadNotice then Skin.PadNotice(frame) end
 	return slot
 end
 

@@ -181,7 +181,7 @@ local function Build()
 	line.text:SetPoint("RIGHT")
 	line.text:SetJustifyH("LEFT")
 	if line.text.SetWordWrap then line.text:SetWordWrap(true) end
-	line:RegisterForClicks("RightButtonUp")
+	line:RegisterForClicks("LeftButtonUp", "RightButtonUp") -- (either click: the same menu)
 	line:SetScript("OnClick", function(self) Menu(self) end)
 	Skin.Tooltip(line, L.PROVISIONS_TIP, "ANCHOR_BOTTOMLEFT")
 	button = Skin.GameButton(MerchantFrame, "WandererProvisionsFill", L.PROVISIONS_FILL:format(""), Fill, L.PROVISIONS_FILL_DESC)

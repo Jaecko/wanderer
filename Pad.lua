@@ -175,6 +175,8 @@ end
 local BUTTONS = { Button = true, CheckButton = true, ItemButton = true, DropdownButton = true }
 
 local function Usable(frame)
+	-- (padTip: a frame that only has a tooltip, reached to read it: being chosen is its OnEnter)
+	if frame.padTip and frame.IsMouseEnabled and frame:IsMouseEnabled() then return true end
 	local kind = frame.GetObjectType and frame:GetObjectType()
 	if BUTTONS[kind] then
 		if frame.IsEnabled and frame:IsEnabled() == false then return false end
@@ -226,7 +228,7 @@ local function Marker()
 	marker = CreateFrame("Frame", nil, UIParent)
 	marker:SetFrameStrata("TOOLTIP")
 	if marker.SetIgnoreParentAlpha then marker:SetIgnoreParentAlpha(true) end
-	local edges = Skin.Edges(marker, 1, 0.82, 0, 1)
+	local edges = Skin.Edges(marker, ns.Skin.RGB("gold", 1))
 	edges[1]:SetHeight(2)
 	edges[2]:SetHeight(2)
 	edges[3]:SetWidth(2)
@@ -361,7 +363,8 @@ local function Scroll(delta)
 	if Answer("wheel", delta) then return true end
 	local frame = current
 	while frame and frame ~= active do
-		local wheel = not frame.padAdjust and frame.GetScript and frame:GetScript("OnMouseWheel")
+		-- (padAdjust takes the cross's left and right; padWheel: the stick still scrolls it)
+		local wheel = (not frame.padAdjust or frame.padWheel) and frame.GetScript and frame:GetScript("OnMouseWheel")
 		if wheel then
 			wheel(frame, delta * (frame.padStep or 1))
 			-- (a moment later, once redrawn: what the chosen row now shows; a row scrolled out of sight is left)
@@ -532,8 +535,22 @@ function SwitchHint()
 		if #open + (GameWindow() and 1 or 0) > 1 then
 			lines[#lines + 1] = Skin.PadKeys({ { "PADLTRIGGER PADRTRIGGER", "SWITCH" } }) or ns.L.PAD_SWITCH_HINT
 		end
-		if active and not gameTurn and ((current and current.padAlt) or Answer("hasAlt")) then
-			lines[#lines + 1] = Skin.PadKeys({ { "PAD3", "MORE" } }) or ns.L.PAD_ALT_HINT
+		-- (not when the window binds the left button to something of its own: that says nothing of the button chosen;
+		-- nor the chosen button's own lines while the window holds the stick for itself: opts.owns())
+		local opts = active and windows[active]
+		local own = opts and opts.actions
+		local owned = opts and type(opts.owns) == "function" and select(2, pcall(opts.owns)) == true
+		if not owned and active and not gameTurn and not (own and own.PAD3) and ((current and current.padAlt) or Answer("hasAlt")) then
+			lines[#lines + 1] = Skin.PadKeys({ { "PAD3", current and current.padAltWord or "MORE" } }) or ns.L.PAD_ALT_HINT
+		end
+		-- (the top button: the chosen one's second click when it has one, else its right click)
+		local mine = not owned and active and not gameTurn and current
+		if mine and current.padSecondary then
+			local words = current.padSecondaryWord and Skin.PadKeys({ { "PAD4", current.padSecondaryWord } })
+			if words then lines[#lines + 1] = words end
+		elseif mine and current.padRight then
+			local words = Skin.PadKeys({ { "PAD4", current.padRightWord or "OPTIONS" } })
+			if words then lines[#lines + 1] = words end
 		end
 	end
 	if not lines[1] then
@@ -780,7 +797,8 @@ local function Closed(window)
 end
 
 -- A window of ours the controller can use. opts: { close(window) (the right button; else its cross, else
--- Hide), side (beside a game window: offered, never chosen by itself) }.
+-- Hide), side (beside a game window: offered, never chosen by itself), owns() (true while the window drives the
+-- stick itself, a map's cursor: the chosen button's hints step back; Skin.PadRefreshHint() when it changes) }.
 function Skin.PadWindow(window, opts)
 	if not window then return end
 	if windows[window] then
@@ -964,7 +982,10 @@ end
 
 local function NoticeShown()
 	for _, frame in ipairs(notices) do
-		if frame:IsVisible() and Targets(frame)[1] then return frame end
+		-- (any size: a notice's own button covers it whole)
+		local left, right, top, bottom
+		if frame:IsVisible() then left, right, top, bottom = Rect(frame) end
+		if left and Walk(frame, frame, math.huge, left, right, top, bottom, {})[1] then return frame end
 	end
 	return nil
 end
@@ -1071,6 +1092,10 @@ events:SetScript("OnEvent", function(_, event, ...)
 	-- The controller interface taken or left.
 	gameTurn = false
 	HomeKey()
+	-- (an open settings page follows: its words, its rows shown or not)
+	if ns.RefreshSettingsWindow then ns.RefreshSettingsWindow() end
+	if ns.RefreshCard then ns.RefreshCard() end
+	if ns.RefreshLauncherHint then ns.RefreshLauncherHint() end
 	if Pad.On() then return Focus(Eligible()) end
 	Select(nil)
 	active, held = nil, nil

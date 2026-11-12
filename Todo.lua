@@ -18,7 +18,7 @@ local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
 
 local WIDTH = 300
-local ROW_HEIGHT = 22
+local ROW_HEIGHT = ns.Skin.ROW.compact
 local VISIBLE = 12 -- rows shown at once (until the window is resized: as many as fit); the wheel scrolls the rest
 local MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT = 240, 170, 700, 900
 local MAX_ITEMS = 60
@@ -129,7 +129,7 @@ local OpenMenu = function(row)
 			end)
 		end
 		root:CreateDivider()
-		root:CreateButton("|cffff6060" .. L.TODO_REMOVE .. "|r", function() Remove(item) Refresh() end)
+		root:CreateButton(ns.Skin.Colorize(L.TODO_REMOVE, "bad"), function() Remove(item) Refresh() end)
 	end)
 end
 
@@ -159,14 +159,14 @@ local function Row(index)
 	local starred = row.star.SetAtlas and pcall(row.star.SetAtlas, row.star, "PetJournal-FavoritesIcon")
 	if not starred then row.star:SetTexture("Interface\\Common\\FavoritesIcon") end
 	row.star:Hide()
-	row.text = ns.Skin.CreateText(row, "GameTooltipText", 0.95, 0.93, 0.88)
+	row.text = ns.Skin.CreateText(row, "GameTooltipText", ns.Skin.RGB("text"))
 	row.text:SetPoint("LEFT", row.check.box, "RIGHT", 6, 0)
 	-- (the "⋯" button's own column, left of the cross: never over the words)
 	row.text:SetPoint("RIGHT", row.remove, "LEFT", -(ns.Skin.ROW_MORE + 6), 0)
 	if row.text.SetWordWrap then row.text:SetWordWrap(false) end
 	row.highlight = row:CreateTexture(nil, "BACKGROUND")
 	row.highlight:SetAllPoints()
-	row.highlight:SetColorTexture(1, 0.82, 0, 0.08)
+	row.highlight:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.HOVER))
 	row.highlight:Hide()
 	-- A click ticks (or unticks); a right click opens its menu.
 	row:SetScript("OnClick", function(self, button)
@@ -182,9 +182,7 @@ local function Row(index)
 	row:SetScript("OnEnter", function(self)
 		self.highlight:Show()
 		self.remove:Show()
-		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-		GameTooltip:AddLine(L.TODO_ROW_HINT, 0.9, 0.9, 0.9, true)
-		GameTooltip:Show()
+		ns.Skin.ShowTip(self, U.UsingPad() and L.TODO_ROW_HINT_PAD or L.TODO_ROW_HINT, "ANCHOR_LEFT")
 	end)
 	row:SetScript("OnLeave", function(self)
 		GameTooltip:Hide()
@@ -227,10 +225,11 @@ Refresh = function()
 		if item.item and item.count and not item.done then
 			words = words .. "  " .. U.HaveNeed(U.ItemCount(item.item), item.count)
 		end
-		if item.place then words = words .. "  |cff808080· " .. PlaceName(item.place) .. "|r" end
+		if item.place then words = words .. "  " .. ns.Skin.Colorize("\194\183 " .. PlaceName(item.place), "muted") end
 		row.text:SetText(words)
 		row.star:SetShown(item.star and not item.done or false)
-		if item.done then row.text:SetTextColor(0.5, 0.5, 0.5) else row.text:SetTextColor(0.95, 0.93, 0.88) end
+		local c = ns.Skin.COLORS[item.done and "muted" or "text"]
+		row.text:SetTextColor(c[1], c[2], c[3])
 		row.check:Refresh()
 		row:ClearAllPoints()
 		row:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8 - (index - 1) * ROW_HEIGHT)
@@ -279,7 +278,7 @@ local function CreateWindow()
 	ns.Skin.Dress(window, { "RIGHT", UIParent, "RIGHT", -260, 80 }, "todoPos")
 	local _, margin
 	_, title, margin = ns.Skin.Header(window, L.ADDON_TITLE, nil, { margin = 6, settings = "practical" })
-	empty = ns.Skin.CreateText(window, "GameTooltipTextSmall", 0.6, 0.6, 0.6)
+	empty = ns.Skin.Text(window, "GameTooltipTextSmall", "muted")
 	empty:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
 	-- Inside the window, over as many lines as it needs.
 	empty:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
@@ -301,7 +300,7 @@ local function CreateWindow()
 	clearButton = CreateFrame("Button", nil, window)
 	clearButton:SetHeight(18)
 	clearButton:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 0, 4)
-	clearButton.text = ns.Skin.CreateText(clearButton, "GameTooltipTextSmall", 0.75, 0.68, 0.5)
+	clearButton.text = ns.Skin.CreateText(clearButton, "GameTooltipTextSmall", ns.Skin.RGB("label"))
 	clearButton.text:SetPoint("RIGHT")
 	clearButton.text:SetText(L.TODO_CLEAR_DONE)
 	clearButton:SetWidth(U.Measure(clearButton.text, "GetStringWidth", 160) + 8)
@@ -309,8 +308,8 @@ local function CreateWindow()
 		ns.Skin.Play("click")
 		ClearDone()
 	end)
-	clearButton:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 0.82, 0) end)
-	clearButton:SetScript("OnLeave", function(self) self.text:SetTextColor(0.75, 0.68, 0.5) end)
+	clearButton:SetScript("OnEnter", function(self) self.text:SetTextColor(ns.Skin.COLORS.gold[1], ns.Skin.COLORS.gold[2], ns.Skin.COLORS.gold[3]) end)
+	clearButton:SetScript("OnLeave", function(self) self.text:SetTextColor(ns.Skin.COLORS.label[1], ns.Skin.COLORS.label[2], ns.Skin.COLORS.label[3]) end)
 	window:EnableMouseWheel(true)
 	window:SetScript("OnMouseWheel", function(_, delta)
 		offset = offset - delta

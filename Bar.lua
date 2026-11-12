@@ -19,24 +19,96 @@ local items, dots = {}, {}
 local pulsing = {} -- words whose extension says something waits there
 local C -- Wanderer's colors (Kit.lua's, read once the bar is made)
 
--- What the bar offers, as things stand: { key, label, hint, run, right }.
-local function Entries()
-	local list = {
-		{ key = "menu", label = "Wanderer", hint = L.BAR_MENU_HINT, gold = true,
-			run = function(self) ns.ShowMenu(self) end, right = function() ns.OpenOptions() end },
-		{ key = "todo", label = L.TODO_TITLE, run = function() ns.ToggleTodo() end,
-			summary = function() return ns.TodoLines() end },
-	}
-	-- The extensions' windows (not the shopping list: it stays in the menu).
+-- The extensions' words on the bar: a few by default (the ones used every day), the others in "More" (its card:
+-- each window with its icon, its count, a star to pin it on the bar). Pinned or not: this profile's choice.
+local DEFAULT_PINS = { quests = true, maps = true, chat = true }
+local function Pinned(key)
+	local pins = ns.db.world.barPins
+	if type(pins) == "table" and pins[key] ~= nil then return pins[key] and true or false end
+	return DEFAULT_PINS[key] or false
+end
+ns.BarPinned = Pinned
+
+function ns.SetBarPin(key, on)
+	if type(ns.db.world.barPins) ~= "table" then ns.db.world.barPins = {} end
+	ns.db.world.barPins[key] = on and true or false
+	ns.RefreshBar()
+	if ns.RefreshBarMore then ns.RefreshBarMore() end
+end
+
+-- An extension's icon: its addon's own (its toc).
+local function IconOf(extension)
+	local meta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+	local icon = meta and extension.addon and U.Clean(U.Safe(meta, extension.addon, "IconTexture"))
+	return icon or "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
+-- The extensions' windows (not the shopping list: it stays in the menu): { key, label, icon, open, attention, count,
+-- summary }, in their order.
+local function Windows()
+	local list = {}
 	for _, extension in ipairs(ns.EXTENSIONS or {}) do
 		local launcher = ns.LauncherOf(extension)
 		if launcher and extension.key ~= "auction" then
-			-- (launcher.attention(): true when something waits there, the word then pulses)
-			-- (count: a number beside the word; summary: what its hover card says)
-			list[#list + 1] = { key = "ext:" .. extension.key, label = launcher.label, run = function() launcher.open() end,
+			list[#list + 1] = { key = extension.key, label = launcher.label, icon = IconOf(extension), open = launcher.open,
 				attention = launcher.attention, count = function() return ns.LauncherCount(launcher) end,
 				summary = function() return ns.LauncherSummary(launcher) end }
 		end
+	end
+	return list
+end
+ns.BarWindows = Windows
+
+local function Safely(fn, fallback)
+	if not fn then return fallback end
+	local ok, value = pcall(fn)
+	if ok and value ~= nil then return value end
+	return fallback
+end
+
+-- What the bar offers, as things stand: { key, label, hint, hintPad (said under a controller), run, right,
+-- rightWord (the controller's top button doing the right click) }.
+local function Entries()
+	local list = {
+		{ key = "menu", label = "Wanderer", hint = L.BAR_MENU_HINT, hintPad = L.BAR_MENU_HINT_PAD, gold = true,
+			run = function(self) ns.ShowMenu(self) end, right = function() ns.OpenOptions() end, rightWord = "OPTIONS" },
+		{ key = "todo", label = L.TODO_TITLE, run = function() ns.ToggleTodo() end,
+			summary = function() return ns.TodoLines() end },
+	}
+	-- The extensions' windows pinned (a right click takes one off), the others in "More".
+	-- (attention(): true when something waits there, the word then pulses; count: a number beside the word;
+	-- summary: what its hover card says)
+	local more = {}
+	for _, window in ipairs(Windows()) do
+		if Pinned(window.key) then
+			list[#list + 1] = { key = "ext:" .. window.key, label = window.label, run = function() window.open() end,
+				attention = window.attention, count = window.count, summary = window.summary, hint = L.BAR_PINNED_HINT,
+				hintPad = L.BAR_PINNED_HINT_PAD, right = function() ns.SetBarPin(window.key, false) end, rightWord = "UNPIN" }
+		else
+			more[#more + 1] = window
+		end
+	end
+	if more[1] then
+		list[#list + 1] = { key = "more", label = L.BAR_MORE, arrow = true, hint = L.BAR_MORE_HINT,
+			run = function(self) ns.ToggleBarMore(self) end,
+			-- (what waits behind it: the sum of their counts, a pulse when one of them asks)
+			count = function()
+				local sum = 0
+				for _, window in ipairs(more) do sum = sum + (Safely(window.count, 0) or 0) end
+				return sum
+			end,
+			attention = function()
+				for _, window in ipairs(more) do if Safely(window.attention, false) == true then return true end end
+				return false
+			end,
+			summary = function()
+				local lines = {}
+				for _, window in ipairs(more) do
+					local count = Safely(window.count, 0) or 0
+					if count > 0 and #lines < 3 then lines[#lines + 1] = { text = window.label .. "  " .. count, role = "text" } end
+				end
+				return lines
+			end }
 	end
 	-- The other addons' icons, in their drawer under the word; none: no word.
 	if ns.CountIcons() > 0 then
@@ -93,7 +165,8 @@ local function ShowHover(item)
 	end
 	for index = #lines + 1, #card.lines do card.lines[index]:Hide() end
 	card.hint:SetWidth(HOVER_WIDTH - m * 2)
-	card.hint:SetText(entry.hint or L.BAR_CLICK_OPEN)
+	local hint = entry.hintPad and U.UsingPad and U.UsingPad() and entry.hintPad or entry.hint
+	card.hint:SetText(hint or L.BAR_CLICK_OPEN)
 	card.hint:ClearAllPoints()
 	card.hint:SetPoint("TOPLEFT", card, "TOPLEFT", m, -(y + 3))
 	y = y + 3 + U.Measure(card.hint, "GetStringHeight", 12)
@@ -232,7 +305,7 @@ local function Attention()
 		end
 	end
 	bar:SetScript("OnUpdate", any and Pulse or nil)
-	if any then bar:SetAlpha(NEAR) elseif not (bar.IsMouseOver and bar:IsMouseOver()) then Near(false) end
+	if any then bar:SetAlpha(NEAR) elseif not U.Hovered(bar) then Near(false) end
 end
 
 -- The counts beside the words, and what waits behind them.
@@ -262,6 +335,8 @@ function ns.RefreshBar()
 	for index, entry in ipairs(list) do
 		local item = Item(index)
 		item.entry = entry
+		-- (its right click, the controller's top button)
+		item.padRight, item.padRightWord = entry.right and true or nil, entry.rightWord
 		item.text:SetText(U.Upper(entry.label))
 		item.arrow:SetShown(entry.arrow and true or false)
 		Color(item, false)
