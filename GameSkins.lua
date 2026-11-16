@@ -483,9 +483,10 @@ end
 
 -- A button: the kit's quiet one (a faint ground, a thin golden edge, a light under the mouse); its words and its
 -- icon the game's.
+-- (the red three slice buttons, the game menu's among them, name their middle Center)
 local function Button(button)
 	FadeStates(button, (Icons(button)))
-	FadePieces(button, { "Left", "Middle", "Right" })
+	FadePieces(button, { "Left", "Middle", "Center", "Right" })
 	local ground = Ground(button)
 	ground:SetAllPoints()
 	ground:SetColorTexture(1, 1, 1, 0.04)
@@ -626,7 +627,7 @@ end
 local function DressPiece(piece, window)
 	local kind = Kind(piece)
 	local parent = piece.GetParent and piece:GetParent()
-	local three = Piece(piece, "Left") and Piece(piece, "Middle") and Piece(piece, "Right")
+	local three = Piece(piece, "Left") and (Piece(piece, "Middle") or Piece(piece, "Center")) and Piece(piece, "Right")
 	if kind == "Button" and (Part(parent, "CloseButton") == piece or Named(piece, "CloseButton$")) then
 		Close(piece)
 	elseif (kind == "Button" or kind == "CheckButton") and (Piece(piece, "LeftActive") or Piece(piece, "LeftDisabled")
