@@ -11,6 +11,8 @@ local _, ns = ...
 -- is dressed once; the windows the game loads later (its Blizzard_ addons) are dressed as they come, the pieces
 -- it makes later (a page opened, a list filled) as their window shows or a tab is clicked.
 --
+-- The pieces on the screen (action buttons, bag bar, menus of a right click): see "On the screen" below.
+--
 -- Left whole to ElvUI (its skins on) and Aurora (Compat.lua, "gameSkins"). Switched off (Appearance), the
 -- game's own look comes back at the next /reload: nothing dressed is undone in place.
 
@@ -942,6 +944,129 @@ local function DressWindow(window, spec)
 end
 GameSkins.Dressed = function(window) return dressed[window] ~= nil end
 
+-- On the screen ------------------------------------------------------------------------------------------------
+-- The pieces that stand on the screen rather than in a window: the action buttons of the bars, the bag bar, the
+-- menus of a right click. The game's round art faded, the icon cropped square on a dark ground with a thin dark
+-- edge (ElvUI's way); a soft light under the mouse, the pressed and the chosen states as plain tints. The bars'
+-- slot settings (BarSlots.lua) set how strong that edge and that ground are. The game's auras are forbidden to
+-- addons: left as they are. Action buttons are left to an addon that dresses them (Masque, Bartender4, Dominos),
+-- and never touched during a fight (after it).
+
+local screen = setmetatable({}, { __mode = "k" }) -- an action button dressed -> { ground, edges }
+GameSkins.ScreenParts = function(button) return screen[button] end
+
+local BAR_ADDONS = { "Masque", "Bartender4", "Dominos" }
+local function BarsLeftToOthers()
+	local loaded = C_AddOns and C_AddOns.IsAddOnLoaded or rawget(_G, "IsAddOnLoaded")
+	if not loaded then return false end
+	for _, name in ipairs(BAR_ADDONS) do
+		if U.Safe(loaded, name) then return true end
+	end
+	return false
+end
+
+-- The game's state textures of a button laid square over its icon, in plain tints (again after the game sets
+-- its own art back).
+local function States(button)
+	local highlight = button.GetHighlightTexture and button:GetHighlightTexture()
+	if IsTexture(highlight) then
+		highlight:SetColorTexture(1, 1, 1, Skin.HOVER)
+		highlight:SetAllPoints(button)
+	end
+	local pushed = button.GetPushedTexture and button:GetPushedTexture()
+	if IsTexture(pushed) then
+		pushed:SetColorTexture(0, 0, 0, 0.35)
+		pushed:SetAllPoints(button)
+	end
+	local checked = button.GetCheckedTexture and button:GetCheckedTexture()
+	if IsTexture(checked) then
+		checked:SetColorTexture(Skin.RGB("gold", 0.3))
+		checked:SetAllPoints(button)
+	end
+	for _, key in ipairs({ "NormalTexture", "SlotBackground", "SlotArt" }) do
+		local part = key == "NormalTexture" and button.GetNormalTexture and button:GetNormalTexture() or Part(button, key)
+		if IsTexture(part) and not own[part] then part:SetAlpha(0) end
+	end
+end
+
+local function ActionButton(button)
+	if screen[button] or not Touchable(button) or InCombatLockdown() then return end
+	local icon = Part(button, "icon") or Piece(button, "Icon")
+	if not IsTexture(icon) then return end
+	CropIcon(button, icon)
+	local ground = Ground(button)
+	ground:SetAllPoints()
+	ground:SetColorTexture(0, 0, 0, 0.55)
+	local edges = OwnEdges(Skin.Edges(button, 0, 0, 0, 1))
+	for _, edge in ipairs(edges) do edge:SetDrawLayer("ARTWORK", 7) end
+	screen[button] = { ground = ground, edges = edges }
+	States(button)
+	if button.UpdateButtonArt then
+		hooksecurefunc(button, "UpdateButtonArt", function(self)
+			if InCombatLockdown() then return U.AfterFight("gameSkinsBars", function() States(self) end) end
+			States(self)
+		end)
+	end
+end
+
+local BAG_BUTTONS = { "MainMenuBarBackpackButton", "CharacterBag0Slot", "CharacterBag1Slot", "CharacterBag2Slot",
+	"CharacterBag3Slot", "CharacterReagentBag0Slot" }
+local function BagButton(button)
+	if looked[button] or not Touchable(button) then return end
+	local icon = Piece(button, "IconTexture") or Part(button, "icon")
+	if not IsTexture(icon) then return end
+	looked[button] = true
+	CropIcon(button, icon)
+	for _, key in ipairs({ "CircleMask", "SlotHighlightTexture" }) do
+		local part = Part(button, key)
+		if IsTexture(part) and part.SetAlpha then part:SetAlpha(0) end
+	end
+	local ground = Ground(button)
+	ground:SetAllPoints()
+	ground:SetColorTexture(0, 0, 0, 0.55)
+	ItemButton(button, icon)
+	States(button)
+end
+
+-- A menu of a right click (the game's newer menus): its dark art faded, the windows' ground and edge under it.
+local function MenuLook(style)
+	if looked[style] or not Active() or not Touchable(style) then return end
+	looked[style] = true
+	FadeRegions(style)
+	local r, g, b, a, er, eg, eb, ea = Skin.WindowColors()
+	local ground = Ground(style)
+	ground:SetPoint("TOPLEFT", -2, 2)
+	ground:SetPoint("BOTTOMRIGHT", 2, 6)
+	ground:SetColorTexture(r, g, b, math.max(a or 0.92, 0.92))
+	OwnEdges(Skin.Edges(style, er, eg, eb, ea, ground))
+end
+
+local menuHooked = false
+local function HookMenus()
+	local mixin = rawget(_G, "MenuStyle1Mixin")
+	if menuHooked or type(mixin) ~= "table" or type(mixin.Generate) ~= "function" then return end
+	menuHooked = true
+	hooksecurefunc(mixin, "Generate", MenuLook)
+end
+
+-- Every piece on the screen the game has made by now, not dressed yet (the action buttons: after a fight).
+local function DressScreen()
+	HookMenus()
+	for _, name in ipairs(BAG_BUTTONS) do
+		local button = rawget(_G, name)
+		if type(button) == "table" then BagButton(button) end
+	end
+	if BarsLeftToOthers() then return end
+	if InCombatLockdown() then return U.AfterFight("gameSkinsBars", DressScreen) end
+	for _, bar in ipairs(ns.BAR_BUTTONS or {}) do
+		for index = 1, bar[2] do
+			local button = rawget(_G, bar[1] .. index)
+			if type(button) == "table" then ActionButton(button) end
+		end
+	end
+	if ns.RefreshBarSlots then ns.RefreshBarSlots() end
+end
+
 -- Every window of the list the game has made by now, not dressed yet (one the game protects, met during a
 -- fight: after it).
 local function Discover()
@@ -958,6 +1083,7 @@ local function Discover()
 		end
 	end
 	if waiting then U.AfterFight("gameSkins", Discover) end
+	DressScreen()
 end
 
 local installed = false

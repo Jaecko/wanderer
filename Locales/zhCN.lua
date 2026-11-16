@@ -1570,9 +1570,10 @@ for key, text in pairs({
 	ROLL_SECONDS = "%d 秒",
 	COMPAT_JOB_LOOTWINDOW = "拾取窗口",
 	COMPAT_JOB_LOOTROLLS = "拾取掷骰",
-	LABEL_GAME_SKINS = "游戏窗口使用 Wanderer 的配色",
-	LABEL_GAME_SKINS_DESC = "Wanderer 不替换的游戏窗口（角色、法术、收藏、队伍查找器、好友、公会、地下城手册、交易、菜单、询问框……）采用 Wanderer 窗口的外观：所选风格的深色底和边框，以及它的按钮、标签页和滚动条。窗口里的内容不会被移动或改变。关闭后，游戏原本的外观在 /reload 后恢复。",
+	LABEL_GAME_SKINS = "游戏窗口和按钮使用 Wanderer 的配色",
+	LABEL_GAME_SKINS_DESC = "Wanderer 不替换的游戏窗口（角色、法术、收藏、队伍查找、好友、公会、地下城手册、交易、菜单、询问……）采用 Wanderer 窗口的外观：所选风格的深色底和边框、按钮、标签和滚动条。动作按钮和背包栏使用深色底上带细边框的方形图标，右键菜单使用窗口的底色。不移动也不改变任何东西。关闭后，/reload 后恢复游戏原本的外观。",
 	COMPAT_JOB_GAMESKINS = "游戏窗口的外观",
 	NAV_MARKER = "屏幕上的导航标记",
 	NAV_MARKER_DESC = "在屏幕上显示游戏指向追踪任务或地图标记的标记及其距离（游戏的“游戏内导航”设置）。关闭后恢复你自己的设置。",
+
 }) do L[key] = text end

@@ -1,6 +1,7 @@
 # Wanderer 1.4.55
 
 ### New
+- Wanderer's colors now reach the game's buttons too: the action buttons and the bag bar get square icons on a dark ground with a thin edge (the action bar slot settings still set their edge and ground), and the right click menus take the windows' ground. Left to Masque, Bartender4 or Dominos when one of them is on.
 - In the world settings: the game's navigation marker on screen (toward the tracked quest or the map pin), on by default for everyone; unchecked, your own setting comes back.
 - Wanderer Bestiary joins the family: the creatures of the world and your hunting log, offered among the other addons.
 
@@ -14,6 +15,7 @@
 - Unit frames, notices, threat and reward arrows use the shared palette.
 
 ### Fixed
+- Loot feed: the money taken from a letter shows too, like the items.
 - Loot feed: the money you pick up is read from the game's own message, so it shows even when looting right after a fight.
 - Loot window: coins no longer wear a quality border.
 - Merchant window: repairing with the guild's gold is offered only when your guild allowance covers the cost.

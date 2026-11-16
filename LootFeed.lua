@@ -6,7 +6,7 @@ local L = ns.L
 -- others up; it stays a few seconds (an epic one longer) and fades away. The same thing again while it shows:
 -- its count grows, with a soft pulse. The mouse over it holds every line and shows the item; Shift click
 -- links it in the chat. Read from the game's own messages about you only (your loot, the items put in your
--- bags, your money and currencies); a secret line is left alone. Hidden while a conversation scene shows,
+-- bags, your money and currencies, the money taken from a letter); a secret line is left alone. Hidden while a conversation scene shows,
 -- and caught up after. Another addon showing its own loot feed: left to it (Compat.lua).
 
 local U = ns.Util
@@ -40,6 +40,7 @@ local nextIn = 0
 local lastMoney, pendingMoney, moneyHeard = nil, nil, -100
 local moneyShown, moneySaid = -100, -100 -- the last money line added from your money's change, from the game's words
 local lootOpen, lootUntil = false, -100
+local mailOpen = false -- the mailbox open: money that comes is taken from a letter
 
 -- The game's messages about you, as patterns: the counted ones first (the plain one would take the count).
 local LOOTED, RECEIVED, CURRENCY = {}, {}, {}
@@ -383,7 +384,7 @@ local function SaidMoney(text)
 end
 
 local function Looting(now)
-	return lootOpen or now <= lootUntil or now - moneyHeard <= MONEY_GRACE
+	return lootOpen or mailOpen or now <= lootUntil or now - moneyHeard <= MONEY_GRACE
 end
 
 -- Your money grew: shown when it came from the loot (the loot window, or the loot's money message), else
@@ -411,14 +412,19 @@ local function OnEvent(_, event, text)
 		if On() then return OnMoney() end
 		lastMoney = Clean(Safe(GetMoney))
 		return
-	elseif event == "PLAYER_ENTERING_WORLD" then
-		lastMoney = Clean(Safe(GetMoney))
+	elseif event == "PLAYER_ENTERING_WORLD" or event == "MERCHANT_SHOW" then
+		-- (a mailbox left behind: never one at a merchant, nor after a loading screen)
+		mailOpen = false
+		if event == "PLAYER_ENTERING_WORLD" then lastMoney = Clean(Safe(GetMoney)) end
 		return
 	elseif event == "LOOT_OPENED" or event == "LOOT_READY" then
 		lootOpen = true
 		return
 	elseif event == "LOOT_CLOSED" then
 		lootOpen, lootUntil = false, GetTime() + MONEY_GRACE
+		return
+	elseif event == "MAIL_SHOW" or event == "MAIL_CLOSED" then
+		mailOpen = event == "MAIL_SHOW"
 		return
 	end
 	if not On() then return end
@@ -484,5 +490,9 @@ function ns.InitLootFeed()
 	end
 	-- (currencies: only where the game has them)
 	pcall(events.RegisterEvent, events, "CHAT_MSG_CURRENCY")
+	-- (the money of a letter: no loot message of its own)
+	pcall(events.RegisterEvent, events, "MAIL_SHOW")
+	pcall(events.RegisterEvent, events, "MAIL_CLOSED")
+	pcall(events.RegisterEvent, events, "MERCHANT_SHOW")
 	events:SetScript("OnEvent", OnEvent)
 end
