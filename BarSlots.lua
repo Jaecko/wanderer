@@ -11,7 +11,6 @@ local BARS = { -- the game's buttons, by the name of their first one, and how ma
 	{ "MultiBarRightButton", 12 }, { "MultiBarLeftButton", 12 }, { "MultiBar5Button", 12 },
 	{ "MultiBar6Button", 12 }, { "MultiBar7Button", 12 }, { "StanceButton", 10 }, { "PetActionButton", 10 },
 }
-ns.BAR_BUTTONS = BARS -- (the game skins dress the same buttons: GameSkins.lua)
 local PARTS = { NormalTexture = "border", SlotBackground = "background", SlotArt = "background" }
 
 local hooked = setmetatable({}, { __mode = "k" })
@@ -25,13 +24,6 @@ local function Wanted()
 end
 
 local function Paint(button, alphas)
-	-- Dressed square (GameSkins.lua): the game's art stays faded, the dressing's edge and ground take the opacities.
-	local look = ns.GameSkins and ns.GameSkins.ScreenParts and ns.GameSkins.ScreenParts(button)
-	if look then
-		look.ground:SetAlpha(alphas.background)
-		for _, edge in ipairs(look.edges) do edge:SetAlpha(alphas.border) end
-		return
-	end
 	for key, kind in pairs(PARTS) do
 		local part = button[key]
 		if key == "NormalTexture" and button.GetNormalTexture then part = button:GetNormalTexture() or part end
@@ -40,7 +32,7 @@ local function Paint(button, alphas)
 end
 
 local function EachButton(fn)
-	for _, bar in ipairs(ns.BAR_BUTTONS or BARS) do
+	for _, bar in ipairs(BARS) do
 		for i = 1, bar[2] do
 			local button = _G[bar[1] .. i]
 			if button then fn(button) end

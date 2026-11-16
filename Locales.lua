@@ -1568,7 +1568,7 @@ local L = {
 	COMPAT_JOB_LOOTWINDOW = "the loot window",
 	COMPAT_JOB_LOOTROLLS = "the loot rolls",
 	LABEL_GAME_SKINS = "Wanderer's colors on the game's windows and buttons",
-	LABEL_GAME_SKINS_DESC = "The game's windows Wanderer does not replace (character, spells, collections, group finder, friends, guild, journal, trade, menus, questions...) take the look of Wanderer's windows: the chosen style's dark ground and edge, its buttons, tabs and scroll bars. The action buttons and the bag bar get square icons on a dark ground with a thin edge, and the right click menus the windows' ground. Nothing is moved or changed. Turned off, the game's own look comes back after a /reload.",
+	LABEL_GAME_SKINS_DESC = "The game's windows Wanderer does not replace (character, spells, collections, group finder, friends, guild, journal, trade, menus, questions...) take the look of Wanderer's windows: the chosen style's dark ground and edge, its buttons, tabs and scroll bars. The bag bar gets square icons on a dark ground with a thin edge, and the right click menus the windows' ground. Nothing is moved or changed. Turned off, the game's own look comes back after a /reload.",
 	COMPAT_JOB_GAMESKINS = "the look of the game's windows",
 	NAV_MARKER = "The navigation marker on screen",
 	NAV_MARKER_DESC = "Shows the game's marker toward the tracked quest or the map pin, with its distance (the game's \"In-game navigation\" setting). Off, your own setting comes back.",
@@ -1593,6 +1593,7 @@ local L = {
 
 	THREAT_COLORS = "Threat in the monsters' health color",
 	THREAT_COLORS_DESC = "During a fight, a monster's health bar says who it is after: green, it is on you; yellow, you are losing it or about to take it; red, it is on someone else. On the nameplates, the label and the target frame.",
+
 }
 
 

@@ -1554,7 +1554,7 @@ for key, text in pairs({
 	COMPAT_JOB_LOOTWINDOW = "das Beutefenster",
 	COMPAT_JOB_LOOTROLLS = "die Beutewürfe",
 	LABEL_GAME_SKINS = "Wanderers Farben auf den Fenstern und Knöpfen des Spiels",
-	LABEL_GAME_SKINS_DESC = "Die Fenster des Spiels, die Wanderer nicht ersetzt (Charakter, Zauber, Sammlungen, Gruppensuche, Freunde, Gilde, Journal, Handel, Menüs, Fragen...), erhalten das Aussehen von Wanderers Fenstern: dunkler Grund und Rand des gewählten Stils, seine Knöpfe, Reiter und Bildlaufleisten. Die Aktionsknöpfe und die Taschenleiste erhalten quadratische Symbole auf dunklem Grund mit feinem Rand, die Rechtsklickmenüs den Grund der Fenster. Nichts wird verschoben oder verändert. Aus, kehrt das Aussehen des Spiels nach einem /reload zurück.",
+	LABEL_GAME_SKINS_DESC = "Die Fenster des Spiels, die Wanderer nicht ersetzt (Charakter, Zauber, Sammlungen, Gruppensuche, Freunde, Gilde, Journal, Handel, Menüs, Fragen...), erhalten das Aussehen von Wanderers Fenstern: dunkler Grund und Rand des gewählten Stils, seine Knöpfe, Reiter und Bildlaufleisten. Die Taschenleiste erhält quadratische Symbole auf dunklem Grund mit feinem Rand, die Rechtsklickmenüs den Grund der Fenster. Nichts wird verschoben oder verändert. Aus, kehrt das Aussehen des Spiels nach einem /reload zurück.",
 	COMPAT_JOB_GAMESKINS = "das Aussehen der Fenster des Spiels",
 	NAV_MARKER = "Die Navigationsmarkierung auf dem Bildschirm",
 	NAV_MARKER_DESC = "Zeigt die Markierung des Spiels zur verfolgten Quest oder zur Kartenmarkierung, mit ihrer Entfernung (die Spieleinstellung „Navigation im Spiel“). Aus, kehrt Ihre eigene Einstellung zurück.",
@@ -1579,4 +1579,5 @@ for key, text in pairs({
 
 	THREAT_COLORS = "Bedrohung in der Lebensfarbe der Monster",
 	THREAT_COLORS_DESC = "Im Kampf zeigt die Lebensleiste eines Monsters, wen es angreift: grün, es ist auf dir; gelb, du verlierst es oder ziehst es gleich; rot, es ist auf jemand anderem. Auf den Namensplaketten, dem Etikett und dem Zielrahmen.",
+
 }) do L[key] = text end

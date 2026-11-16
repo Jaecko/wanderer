@@ -1554,7 +1554,7 @@ for key, text in pairs({
 	COMPAT_JOB_LOOTWINDOW = "la finestra del bottino",
 	COMPAT_JOB_LOOTROLLS = "i tiri per il bottino",
 	LABEL_GAME_SKINS = "I colori di Wanderer sulle finestre e i pulsanti del gioco",
-	LABEL_GAME_SKINS_DESC = "Le finestre del gioco che Wanderer non sostituisce (personaggio, incantesimi, collezioni, ricerca gruppo, amici, gilda, diario, scambio, menu, domande...) prendono l'aspetto delle finestre di Wanderer: il fondo scuro e il bordo dello stile scelto, i suoi pulsanti, schede e barre di scorrimento. I pulsanti d'azione e la barra delle borse hanno icone quadrate su un fondo scuro con un bordo sottile, e i menu del clic destro il fondo delle finestre. Nulla viene spostato o cambiato. Disattivato, l'aspetto del gioco torna dopo un /reload.",
+	LABEL_GAME_SKINS_DESC = "Le finestre del gioco che Wanderer non sostituisce (personaggio, incantesimi, collezioni, ricerca gruppo, amici, gilda, diario, scambio, menu, domande...) prendono l'aspetto delle finestre di Wanderer: il fondo scuro e il bordo dello stile scelto, i suoi pulsanti, schede e barre di scorrimento. La barra delle borse ha icone quadrate su un fondo scuro con un bordo sottile, e i menu del clic destro il fondo delle finestre. Nulla viene spostato o cambiato. Disattivato, l'aspetto del gioco torna dopo un /reload.",
 	COMPAT_JOB_GAMESKINS = "l'aspetto delle finestre del gioco",
 	NAV_MARKER = "L'indicatore di navigazione sullo schermo",
 	NAV_MARKER_DESC = "Mostra l'indicatore del gioco verso la missione seguita o il segnaposto della mappa, con la sua distanza (l'impostazione «Navigazione di gioco» del gioco). Disattivato, torna la tua impostazione.",
@@ -1579,4 +1579,5 @@ for key, text in pairs({
 
 	THREAT_COLORS = "La minaccia nel colore della vita dei mostri",
 	THREAT_COLORS_DESC = "In combattimento, la barra della vita di un mostro dice chi sta attaccando: verde, è su di te; giallo, lo stai perdendo o stai per prenderlo; rosso, è su un altro. Sulle targhette, sull'etichetta e sul riquadro del bersaglio.",
+
 }) do L[key] = text end

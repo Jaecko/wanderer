@@ -946,25 +946,10 @@ end
 GameSkins.Dressed = function(window) return dressed[window] ~= nil end
 
 -- On the screen ------------------------------------------------------------------------------------------------
--- The pieces that stand on the screen rather than in a window: the action buttons of the bars, the bag bar, the
--- menus of a right click. The game's round art faded, the icon cropped square on a dark ground with a thin dark
--- edge (ElvUI's way); a soft light under the mouse, the pressed and the chosen states as plain tints. The bars'
--- slot settings (BarSlots.lua) set how strong that edge and that ground are. The game's auras are forbidden to
--- addons: left as they are. Action buttons are left to an addon that dresses them (Masque, Bartender4, Dominos),
--- and never touched during a fight (after it).
-
-local screen = setmetatable({}, { __mode = "k" }) -- an action button dressed -> { ground, edges }
-GameSkins.ScreenParts = function(button) return screen[button] end
-
-local BAR_ADDONS = { "Masque", "Bartender4", "Dominos" }
-local function BarsLeftToOthers()
-	local loaded = C_AddOns and C_AddOns.IsAddOnLoaded or rawget(_G, "IsAddOnLoaded")
-	if not loaded then return false end
-	for _, name in ipairs(BAR_ADDONS) do
-		if U.Safe(loaded, name) then return true end
-	end
-	return false
-end
+-- The pieces that stand on the screen rather than in a window: the bag bar, the menus of a right click. The
+-- game's round art faded, the icon cropped square on a dark ground with a thin edge; a soft light under the mouse,
+-- the pressed and the chosen states as plain tints. The action buttons keep the game's own look (their icons and
+-- their cooldowns as the game draws them: the user's choice, 2026-11-16). The game's auras are forbidden to addons.
 
 -- The game's state textures of a button laid square over its icon, in plain tints (again after the game sets
 -- its own art back).
@@ -987,26 +972,6 @@ local function States(button)
 	for _, key in ipairs({ "NormalTexture", "SlotBackground", "SlotArt" }) do
 		local part = key == "NormalTexture" and button.GetNormalTexture and button:GetNormalTexture() or Part(button, key)
 		if IsTexture(part) and not own[part] then part:SetAlpha(0) end
-	end
-end
-
-local function ActionButton(button)
-	if screen[button] or not Touchable(button) or InCombatLockdown() then return end
-	local icon = Part(button, "icon") or Piece(button, "Icon")
-	if not IsTexture(icon) then return end
-	CropIcon(button, icon)
-	local ground = Ground(button)
-	ground:SetAllPoints()
-	ground:SetColorTexture(0, 0, 0, 0.55)
-	local edges = OwnEdges(Skin.Edges(button, 0, 0, 0, 1))
-	for _, edge in ipairs(edges) do edge:SetDrawLayer("ARTWORK", 7) end
-	screen[button] = { ground = ground, edges = edges }
-	States(button)
-	if button.UpdateButtonArt then
-		hooksecurefunc(button, "UpdateButtonArt", function(self)
-			if InCombatLockdown() then return U.AfterFight("gameSkinsBars", function() States(self) end) end
-			States(self)
-		end)
 	end
 end
 
@@ -1051,22 +1016,13 @@ local function HookMenus()
 end
 
 local Try -- (below: an error on one piece kept for the diagnostic, never stopping the others)
--- Every piece on the screen the game has made by now, not dressed yet (the action buttons: after a fight).
+-- Every piece on the screen the game has made by now, not dressed yet.
 local function DressScreen()
 	HookMenus()
 	for _, name in ipairs(BAG_BUTTONS) do
 		local button = rawget(_G, name)
 		if type(button) == "table" then Try(BagButton, button) end
 	end
-	if BarsLeftToOthers() then return end
-	if InCombatLockdown() then return U.AfterFight("gameSkinsBars", DressScreen) end
-	for _, bar in ipairs(ns.BAR_BUTTONS or {}) do
-		for index = 1, bar[2] do
-			local button = rawget(_G, bar[1] .. index)
-			if type(button) == "table" then Try(ActionButton, button) end
-		end
-	end
-	if ns.RefreshBarSlots then ns.RefreshBarSlots() end
 end
 
 -- Diagnostic (/wanderer skins dump): what the game answers about the pieces on the screen, into the saved data
@@ -1094,7 +1050,7 @@ function GameSkins.DumpScreen()
 		if type(button) ~= "table" then return { name = name, missing = true } end
 		local out = {
 			name = name, forbidden = Forbidden(button), protected = button.IsProtected and button:IsProtected() or false,
-			touchable = Touchable(button), dressed = screen[button] ~= nil, looked = looked[button] or false,
+			touchable = Touchable(button), looked = looked[button] or false,
 			shown = U.Clean(U.Safe(button.IsVisible, button)), hasIcon = IsTexture(Part(button, "icon") or Piece(button, "Icon")),
 			updateArt = button.UpdateButtonArt ~= nil, regions = {},
 		}
@@ -1112,7 +1068,7 @@ function GameSkins.DumpScreen()
 	ns.root.skinsDump = {
 		at = date and date("%Y-%m-%d %H:%M:%S") or nil, active = Active(),
 		setting = ns.db and ns.db.label and ns.db.label.gameSkins, yields = ns.Yields("gameSkins"),
-		barsToOthers = BarsLeftToOthers(), fight = InCombatLockdown(), barButtons = ns.BAR_BUTTONS and #ns.BAR_BUTTONS or 0,
+		fight = InCombatLockdown(),
 		menuMixin = type(rawget(_G, "MenuStyle1Mixin")) == "table", menuHooked = menuHooked, errors = screenErrors,
 		buttons = buttons,
 	}

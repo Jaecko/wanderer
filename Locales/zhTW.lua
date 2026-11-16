@@ -1554,7 +1554,7 @@ for key, text in pairs({
 	COMPAT_JOB_LOOTWINDOW = "拾取視窗",
 	COMPAT_JOB_LOOTROLLS = "拾取擲骰",
 	LABEL_GAME_SKINS = "遊戲視窗和按鈕使用 Wanderer 的配色",
-	LABEL_GAME_SKINS_DESC = "Wanderer 不取代的遊戲視窗（角色、法術、收藏、隊伍搜尋、好友、公會、地城手冊、交易、選單、詢問……）採用 Wanderer 視窗的外觀：所選風格的深色底與邊框、按鈕、標籤和捲軸。快捷列按鈕和背包列使用深色底上帶細邊框的方形圖示，右鍵選單使用視窗的底色。不移動也不改變任何東西。關閉後，/reload 後恢復遊戲原本的外觀。",
+	LABEL_GAME_SKINS_DESC = "Wanderer 不取代的遊戲視窗（角色、法術、收藏、隊伍搜尋、好友、公會、地城手冊、交易、選單、詢問……）採用 Wanderer 視窗的外觀：所選風格的深色底與邊框、按鈕、標籤和捲軸。背包列使用深色底上帶細邊框的方形圖示，右鍵選單使用視窗的底色。不移動也不改變任何東西。關閉後，/reload 後恢復遊戲原本的外觀。",
 	COMPAT_JOB_GAMESKINS = "遊戲視窗的外觀",
 	NAV_MARKER = "螢幕上的導航標記",
 	NAV_MARKER_DESC = "在螢幕上顯示遊戲指向追蹤任務或地圖標記的標記及其距離（遊戲的「遊戲內導航」設定）。關閉後恢復你自己的設定。",
@@ -1579,4 +1579,5 @@ for key, text in pairs({
 
 	THREAT_COLORS = "以怪物血條顏色顯示仇恨",
 	THREAT_COLORS_DESC = "戰鬥中，怪物的血條顯示它在攻擊誰：綠色，在你身上；黃色，你正在失去或即將拿到仇恨；紅色，在別人身上。顯示於名條、標籤與目標框架。",
+
 }) do L[key] = text end

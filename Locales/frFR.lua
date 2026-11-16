@@ -1554,7 +1554,7 @@ for key, text in pairs({
 	COMPAT_JOB_LOOTWINDOW = "la fenêtre de butin",
 	COMPAT_JOB_LOOTROLLS = "les jets de butin",
 	LABEL_GAME_SKINS = "Couleurs de Wanderer sur les fenêtres et boutons du jeu",
-	LABEL_GAME_SKINS_DESC = "Les fenêtres du jeu que Wanderer ne remplace pas (personnage, sorts, collections, recherche de groupe, amis, guilde, journal, échange, menus, questions...) prennent l'allure des fenêtres de Wanderer : le fond sombre et le bord du style choisi, ses boutons, onglets et barres de défilement. Les boutons d'action et la barre des sacs prennent des icônes carrées sur un fond sombre au liseré fin, et les menus du clic droit le fond des fenêtres. Rien n'est déplacé ni changé. Désactivé, l'allure du jeu revient après un /reload.",
+	LABEL_GAME_SKINS_DESC = "Les fenêtres du jeu que Wanderer ne remplace pas (personnage, sorts, collections, recherche de groupe, amis, guilde, journal, échange, menus, questions...) prennent l'allure des fenêtres de Wanderer : le fond sombre et le bord du style choisi, ses boutons, onglets et barres de défilement. La barre des sacs prend des icônes carrées sur un fond sombre au liseré fin, et les menus du clic droit le fond des fenêtres. Rien n'est déplacé ni changé. Désactivé, l'allure du jeu revient après un /reload.",
 	COMPAT_JOB_GAMESKINS = "l'allure des fenêtres du jeu",
 	NAV_MARKER = "Le curseur de navigation à l'écran",
 	NAV_MARKER_DESC = "Montre le repère du jeu vers la quête suivie ou l'épingle de la carte, avec sa distance (le réglage « Navigation en jeu » du jeu). Désactivé, votre propre réglage revient.",
@@ -1579,4 +1579,5 @@ for key, text in pairs({
 
 	THREAT_COLORS = "La menace dans la couleur de vie des monstres",
 	THREAT_COLORS_DESC = "Pendant un combat, la barre de vie d'un monstre dit qui il vise : vert, il est sur vous ; jaune, vous le perdez ou allez le prendre ; rouge, il est sur un autre. Sur les barres de nom, l'étiquette et le cadre de la cible.",
+
 }) do L[key] = text end

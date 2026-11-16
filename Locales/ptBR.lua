@@ -1554,7 +1554,7 @@ for key, text in pairs({
 	COMPAT_JOB_LOOTWINDOW = "a janela de saque",
 	COMPAT_JOB_LOOTROLLS = "as rolagens de saque",
 	LABEL_GAME_SKINS = "As cores do Wanderer nas janelas e botões do jogo",
-	LABEL_GAME_SKINS_DESC = "As janelas do jogo que o Wanderer não substitui (personagem, feitiços, coleções, localizador de grupo, amigos, guilda, diário, troca, menus, perguntas...) ganham a aparência das janelas do Wanderer: o fundo escuro e a borda do estilo escolhido, seus botões, abas e barras de rolagem. Os botões de ação e a barra de bolsas ganham ícones quadrados sobre um fundo escuro com borda fina, e os menus do clique direito o fundo das janelas. Nada é movido ou mudado. Desligado, a aparência do jogo volta depois de um /reload.",
+	LABEL_GAME_SKINS_DESC = "As janelas do jogo que o Wanderer não substitui (personagem, feitiços, coleções, localizador de grupo, amigos, guilda, diário, troca, menus, perguntas...) ganham a aparência das janelas do Wanderer: o fundo escuro e a borda do estilo escolhido, seus botões, abas e barras de rolagem. A barra de bolsas ganha ícones quadrados sobre um fundo escuro com borda fina, e os menus do clique direito o fundo das janelas. Nada é movido ou mudado. Desligado, a aparência do jogo volta depois de um /reload.",
 	COMPAT_JOB_GAMESKINS = "o visual das janelas do jogo",
 	NAV_MARKER = "O marcador de navegação na tela",
 	NAV_MARKER_DESC = "Mostra o marcador do jogo até a missão acompanhada ou o alfinete do mapa, com a distância (a opção \"Navegação no jogo\" do jogo). Desligado, sua própria opção volta.",
@@ -1579,4 +1579,5 @@ for key, text in pairs({
 
 	THREAT_COLORS = "A ameaça na cor da vida dos monstros",
 	THREAT_COLORS_DESC = "Em combate, a barra de vida de um monstro diz quem ele ataca: verde, está em você; amarelo, você está perdendo ou vai tomá-lo; vermelho, está em outro. Nas placas de nome, na etiqueta e no quadro do alvo.",
+
 }) do L[key] = text end
