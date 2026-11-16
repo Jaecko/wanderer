@@ -357,7 +357,29 @@ local function Repeats(quest)
 	return Clean(quest.repeatable) and true or (type(frequency) == "number" and frequency > 0) or false
 end
 
--- Choices of the conversation: { label, icon, atlas, action, level, trivial, said, seen }. The quests your
+-- A dialogue option's words as the game's window writes them: "(Quest)" or "(Play movie)" before them when its
+-- flags ask for it.
+local function OptionLabel(option)
+	local name, flags = option.name, Clean(option.flags)
+	local kinds = Enum and Enum.GossipOptionRecFlags
+	local format = _G.GOSSIP_OPTION_PREPEND
+	if type(name) ~= "string" or U.IsSecret(name) or type(flags) ~= "number" or flags == 0 or not kinds
+		or type(format) ~= "string" or not (bit and bit.band) then
+		return name
+	end
+	local prepends = {}
+	if kinds.QuestLabelPrepend and bit.band(flags, kinds.QuestLabelPrepend) ~= 0 and _G.QUEST_PREPEND then
+		prepends[#prepends + 1] = _G.QUEST_PREPEND
+	end
+	if kinds.PlayMovieLabelPrepend and bit.band(flags, kinds.PlayMovieLabelPrepend) ~= 0 and _G.PLAY_MOVIE_PREPEND then
+		prepends[#prepends + 1] = _G.PLAY_MOVIE_PREPEND
+	end
+	if not prepends[1] then return name end
+	local ok, text = pcall(string.format, format, table.concat(prepends, " "), name)
+	return ok and text or name
+end
+
+-- Choices of the conversation: { label, words, icon, atlas, action, level, trivial, said, seen }. The quests your
 -- level makes grey come last. seen: its key in the choices already read (the dialogue options only: a quest
 -- offered and declined never looks done).
 local function GossipChoices(guid)
@@ -381,7 +403,7 @@ local function GossipChoices(guid)
 	table.sort(options, function(a, b) return (a.orderIndex or 0) < (b.orderIndex or 0) end)
 	for _, option in ipairs(options) do
 		local id = Clean(option.gossipOptionID)
-		choices[#choices + 1] = { label = option.name, icon = option.icon, said = true,
+		choices[#choices + 1] = { label = OptionLabel(option), words = option.name, icon = Clean(option.overrideIconID) or option.icon, said = true,
 			seen = npc and type(id) == "number" and ("o" .. npc .. ":" .. id) or nil,
 			action = function() Safe(Gossip.SelectOption, option.gossipOptionID) end }
 	end
@@ -637,7 +659,7 @@ local Render
 -- A choice made: your words (a plain choice, not a quest) are kept for the answer's page.
 local function Pick(choice)
 	U.PlaySound("IG_QUEST_LIST_SELECT")
-	local label = choice.said and Clean(choice.label)
+	local label = choice.said and Clean(choice.words or choice.label)
 	said = type(label) == "string" and U.PlainText(label) or nil
 	MarkSeen(choice.seen)
 	choice.action()
@@ -1764,6 +1786,19 @@ local function Wanted()
 		and not ns.SceneYielded()
 end
 
+-- The game's own rule (its gossip window): no quest and a single option the game marks to be taken alone (and
+-- not forced to show): that option is taken at once, no window. Returns its order index, else nil.
+local function GameTakesOnlyOption()
+	if not Gossip.SelectOptionByIndex then return nil end
+	if (Clean(Safe(Gossip.GetNumAvailableQuests)) or 0) > 0 or (Clean(Safe(Gossip.GetNumActiveQuests)) or 0) > 0 then return nil end
+	local options = Safe(Gossip.GetOptions)
+	local only = type(options) == "table" and #options == 1 and options[1]
+	if not (type(only) == "table" and Clean(only.selectOptionWhenOnlyOption)) then return nil end
+	if Gossip.ForceGossip and Clean(Safe(Gossip.ForceGossip)) then return nil end
+	return Clean(only.orderIndex)
+end
+ns.SceneTakesOnlyOption = GameTakesOnlyOption -- (tests)
+
 local function OnEvent(_, event, ...)
 	if event == "GOSSIP_CLOSED" or event == "QUEST_FINISHED" then return OnClosed(event) end
 	-- A window opened from the conversation (a merchant, a trainer, the flight map...): the scene ends at once,
@@ -1852,6 +1887,14 @@ local function OnEvent(_, event, ...)
 				-- themselves): nothing to show.
 				if ns.WasAnswered(event) then
 					if scene then Finish(false) end
+					return
+				end
+				-- (a lone option the game takes by itself: taken, as its window would)
+				local only = event == "GOSSIP_SHOW" and GameTakesOnlyOption()
+				if only then
+					if scene then Finish(false) end
+					watched = nil
+					Safe(Gossip.SelectOptionByIndex, only)
 					return
 				end
 				local ok, problem = pcall(Begin, event, startItem, args)

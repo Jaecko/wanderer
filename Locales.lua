@@ -368,7 +368,7 @@ local L = {
 	DEBUG_DRAWN_BOTH = "BOTH (problem)",
 	DEBUG_DRAWN_OFF = "game look (Wanderer style off)",
 	WELCOME_TITLE = "Well met, traveller",
-	WELCOME_INTRO = "Sit a moment by the fire. Three choices and the road is yours; the rest can wait for another evening.",
+	WELCOME_INTRO = "Sit a moment by the fire. A few steps make Wanderer yours, or keep what it advises: everything can change later.",
 	WELCOME_STEP_LOOK = "How shall your tale be bound?",
 	WELCOME_TIP_HOVER = "Hover anyone to read their name, title and level.",
 	WELCOME_TIP_REVEAL = "Bind a key to see every name while you hold it (Key Bindings, Wanderer).",
@@ -444,7 +444,6 @@ local L = {
 	WELCOME_LOOK_DESC = "Choose its binding: it will dress every label and every note you read along the way.",
 	WELCOME_PLAY_DESC = "Tell me how you walk the world, and I will pack your bag accordingly.",
 	WELCOME_STEP_INTERFACE = "Lighten your pack",
-	WELCOME_INTERFACE_DESC = "Leave behind what you do not need: the world is better seen without clutter. Nothing is lost, all of it comes back when you wish.",
 	WELCOME_STEP_READY = "The road awaits",
 	WELCOME_READY_DESC = "Here is what this character sets out with, and a few words of advice.",
 	WELCOME_NEXT = "Continue",
@@ -778,7 +777,6 @@ local L = {
 	STYLED_TRACKER = "Quest tracker in Wanderer's style",
 
 	WELCOME_STEP_APPEARANCE = "The look of your interface",
-	WELCOME_APPEARANCE_DESC = "A quiet bar, the game's windows where you want them, the minimap and the quest tracker in Wanderer's hand. Each one comes back as the game draws it whenever you wish.",
 
 
 	AGO = "%s ago",
@@ -991,10 +989,6 @@ local L = {
 	WELCOME_REVEAL_PRESS = "Press a key...",
 	WELCOME_REVEAL_PRESS_DESC = "The next key you press is the one (with Shift, Ctrl or Alt if you like). Escape: no change.",
 	WELCOME_TIP_REVEAL_BOUND = "Hold %s to see every name around you (Key Bindings, Wanderer).",
-	WELCOME_MORE = "Fine-tune",
-	WELCOME_MORE_DESC = "A few more pages, if you wish: a lighter interface, its look, what is this character's own, the extensions. Everything is in the options too.",
-	WELCOME_MORE_COUNT = "Fine-tuning: page %d of %d",
-	WELCOME_DONE = "That will do",
 	DOTS_TARGET = "On your target",
 	DOTS_TARGET_DESC = "The game's frame of your target.",
 	DOTS_FOCUS = "On your focus",
@@ -1359,9 +1353,6 @@ local L = {
 	BARS_FADE_COMBAT = "Faded out of combat",
 	BARS_FADE_CALM = "Faded when calm",
 	BARS_FADE_NONE = "Never faded",
-	BARS_SHOWN_GAME = "Bars shown: set by the game",
-	BARS_SHOWN_GAME_DESC = "Bars 2 to 8 show through the game's own option, for each character: Options > Action Bars. Edit Mode then sets when each one shows.",
-	BARS_SHOWN_GAME_BUTTON = "Game options",
 	RELOAD_AFTER_FIGHT = "After the fight: the game allows no reload during one.",
 	CHARACTERS_FORGET_ASK = "Forget %s? Everything Wanderer kept for this character goes.",
 	CHARACTERS_MAIN_MARK = "Mark as your main character",
@@ -1591,6 +1582,22 @@ local L = {
 	NAV_MARKER_DESC = "Shows the game's marker toward the tracked quest or the map pin, with its distance (the game's \"In-game navigation\" setting). Off, your own setting comes back.",
 
 	SKINS_DUMP_DONE = "Game skins dump written: /reload to save it.",
+	WELCOME_GUIDE = "Guide me",
+	WELCOME_GUIDE_DESC = "A few short steps: how you play, the look, your screen, this character.",
+	WELCOME_QUICK = "Keep the advised settings",
+	WELCOME_QUICK_DESC = "Wanderer is already set as most travellers enjoy it. See it at once.",
+	WELCOME_STEP_SCREEN = "Your screen",
+	WELCOME_SCREEN_DESC = "Lighter where you wish, and in Wanderer's hand where you like. Nothing is lost: all of it comes back in the settings.",
+	WELCOME_BARS_SHOWN = "Action bars shown",
+	WELCOME_SUM_EDIT = "Click: back to the step that sets it.",
+	WELCOME_SKIP_DESC = "Closes the welcome. It opens again with /wanderer welcome, or from the settings.",
+	WELCOME_NAV_INTRO = "Welcome",
+	WELCOME_NAV_PLAY = "Way to play",
+	WELCOME_NAV_LOOK = "Look",
+	WELCOME_NAV_SCREEN = "Your screen",
+	WELCOME_NAV_CHARACTER = "This character",
+	WELCOME_NAV_EXTENSIONS = "Extensions",
+	WELCOME_NAV_READY = "Set out",
 }
 
 

@@ -30,14 +30,14 @@ end
 
 -- What is rolled for: { name, icon, count, quality, bop, need, greed, disenchant, transmog, reasons, link } or nil.
 local function Read(id)
-	local icon, name, count, quality, bop, need, greed, disenchant, reasonNeed, reasonGreed, reasonDisenchant, _, transmog =
+	local icon, name, count, quality, bop, need, greed, disenchant, reasonNeed, reasonGreed, reasonDisenchant, skill, transmog =
 		Safe(G("GetLootRollItemInfo"), id)
 	name = Clean(name)
 	if not name then return nil end
 	return { name = name, icon = Clean(icon), count = Clean(count) or 1, quality = Clean(quality), bop = Clean(bop) and true or false,
 		need = Clean(need) and true or false, greed = Clean(greed) and true or false, disenchant = Clean(disenchant) and true or false,
 		transmog = Clean(transmog) and true or false, link = Clean(Safe(G("GetLootRollItemLink"), id)),
-		reasons = { need = Clean(reasonNeed), greed = Clean(reasonGreed), disenchant = Clean(reasonDisenchant) } }
+		reasons = { need = Clean(reasonNeed), greed = Clean(reasonGreed), disenchant = Clean(reasonDisenchant) }, skill = Clean(skill) }
 end
 ns.LootRollRead = Read -- (tests)
 
@@ -47,9 +47,15 @@ local function Left(roll)
 	return left and left / 1000 or nil
 end
 
--- The game's own reason a choice is closed to you (its words), else ours.
-local function Reason(code)
-	return code and G("LOOT_ROLL_INELIGIBLE_REASON" .. code) or L.ROLL_CLOSED
+-- The game's own reason a choice is closed to you (its words, with the enchanting skill they may ask for), else ours.
+local function Reason(code, skill)
+	local words = code and G("LOOT_ROLL_INELIGIBLE_REASON" .. code)
+	if type(words) ~= "string" then return L.ROLL_CLOSED end
+	if words:find("%d", 1, true) then
+		local ok, said = pcall(string.format, words, skill or 0)
+		return ok and said or L.ROLL_CLOSED
+	end
+	return words
 end
 
 local function Choose(roll, kind)
@@ -150,7 +156,7 @@ local function Paint(card, roll)
 	local greedKey = info.transmog and "transmog" or "greed"
 	for key, button in pairs(card.buttons) do
 		local open = key == "pass" or (key == "greed" and (info.greed or info.transmog)) or info[key]
-		button.closed = not open and Reason(info.reasons[key]) or nil
+		button.closed = not open and Reason(info.reasons[key], info.skill) or nil
 		button:SetEnabled(open and true or false)
 		button.key = key == "greed" and greedKey or key
 		button:SetShown(key ~= "disenchant" or info.disenchant or (info.reasons.disenchant or 0) > 0)
@@ -342,9 +348,17 @@ function ns.InitLootRolls()
 		elseif event == "CANCEL_ALL_LOOT_ROLLS" then
 			RemoveAll()
 		elseif event == "PLAYER_ENTERING_WORLD" then
-			-- (after a reload: the rolls still open)
+			-- (after a reload or a loading screen: the rolls still open; those ended meanwhile let go)
 			local active = Safe(G("GetActiveLootRollIDs"))
 			if type(active) == "table" then
+				local still = {}
+				for _, open in ipairs(active) do
+					local rollID = Clean(open)
+					if rollID then still[rollID] = true end
+				end
+				for index = #rolls, 1, -1 do
+					if not still[rolls[index].id] then Remove(rolls[index].id) end
+				end
 				for _, open in ipairs(active) do Add(open) end
 			end
 		elseif rolls[1] then

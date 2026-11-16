@@ -532,7 +532,10 @@ local function Create()
 		local allowance = Clean(Safe(GetGuildBankWithdrawMoney)) or 0
 		return L.MERCHANT_REPAIR_GUILD_TIP:format(allowance == -1 and L.MERCHANT_NO_LIMIT or U.Coins(allowance))
 	end, 26)
-	foot.one = Skin.SmallButton(foot, L.MERCHANT_REPAIR_ONE, function() Safe(G("ShowRepairCursor")) end, L.MERCHANT_REPAIR_ONE_TIP, 26)
+	-- (a second click puts the hammer away, as the game's button does)
+	foot.one = Skin.SmallButton(foot, L.MERCHANT_REPAIR_ONE, function()
+		if G("InRepairMode") and Clean(Safe(G("InRepairMode"))) then Safe(G("HideRepairCursor")) else Safe(G("ShowRepairCursor")) end
+	end, L.MERCHANT_REPAIR_ONE_TIP, 26)
 	window.foot = foot
 	window.hint = Skin.Text(window, "GameTooltipTextSmall", "muted")
 	window.hint:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin - 2)

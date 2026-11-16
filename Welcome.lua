@@ -1,43 +1,37 @@
 local _, ns = ...
 local L = ns.L
 
--- Welcome screen: shown once for each character, on its first arrival in the
--- world with Wanderer. Three choices and it is done: what Wanderer is about
--- (and the key that shows every name), the look, the way you play, then what
--- it sets out with. Further pages wait there for who wants them: a quieter
--- interface, the look of the interface (the bar, the movable windows), what
--- is this character's own (what you play, the profiles by place, the action
--- bars), the extensions. One step at a time, with Back, Next and Not now, and
--- the dots to go straight to a step.
--- A character met after others opens on one choice: like your main character
--- (a copy of its settings, its own from then on) or set up apart.
+-- Welcome screen: shown once for each character, on its first arrival in the world with Wanderer. One way, step
+-- by step, every step named on the rail at the left (the one shown in gold, the ones seen ticked, a click on any
+-- goes there): welcome (what Wanderer is about, the key that shows every name, and at once a choice: be guided,
+-- or keep the advised settings and go straight to the end), the way you play, the look, your screen (lighter, and
+-- its look), this character's own (how you play it, the profiles by place, its bars), the extensions when some
+-- are missing, then what it sets out with: each line of it a click away from the step that sets it.
+-- A character met after others opens on one choice: like your main character (a copy of its settings, its own
+-- from then on) or set up apart.
 -- Reopened with /wanderer welcome or from the options.
 
 local U = ns.Util
 
-local WIDTH, HEIGHT = 620, 640
+local WIDTH, HEIGHT = 820, 690
 local CREST_SIZE = 44
 local CARD_GAP = 10
 local ROW_HEIGHT = 46
-local DOT_SIZE, DOT_GAP = 8, 8
-local MORE_GAP = 10 -- between the dots of the way and the further ones
+local RAIL_WIDTH, RAIL_ROW = 190, 34 -- the steps' rail at the left, one row each
 local ICON = "Interface\\Icons\\INV_Misc_Map_01"
 local SHOW_DELAY = 2 -- seconds after arriving, once the screen has settled
 local SHOW_DELAY_BESIDE = 7 -- with Naowh Forever, after its own first window (it comes at 5)
 local AFTER_OTHER = 1 -- seconds after another addon's first window closed
 local LIKE_HEIGHT, APART_HEIGHT = 92, 64
 local SUMMARY_LINE = 16
--- The way to the road: three choices, then what this character sets out with (READY, where it may end).
-local ESSENTIAL = { "intro", "look", "play", "ready" }
-local READY = #ESSENTIAL
--- Further, for who wants them: after READY, the extensions' page last (when some are missing).
-local MORE = { "interface", "appearance", "character" }
+-- The way, in order: welcome, the way you play, the look, your screen, this character, the extensions (when some
+-- are missing), then what this character sets out with (always last).
 local STEPS = {} -- every page in order (made with the window)
 local function BuildSteps()
 	for index = #STEPS, 1, -1 do STEPS[index] = nil end
-	for _, key in ipairs(ESSENTIAL) do STEPS[#STEPS + 1] = key end
-	for _, key in ipairs(MORE) do STEPS[#STEPS + 1] = key end
+	for _, key in ipairs({ "intro", "play", "look", "screen", "character" }) do STEPS[#STEPS + 1] = key end
 	if ns.OffersWanted() and ns.MissingExtensions()[1] then STEPS[#STEPS + 1] = "extensions" end
+	STEPS[#STEPS + 1] = "ready"
 end
 local LAYOUT_KEYS = { "stacked", "clean", "blizzard" }
 local SMALL_CARD = 56
@@ -201,7 +195,7 @@ function ns.UndoCharacterCopy()
 end
 
 local window
-local pages, dots = {}, {}
+local pages, rail = {}, {}
 local current = 1
 local refreshers = {} -- one per page, run when it shows
 
@@ -332,7 +326,7 @@ local function OffersLike()
 	return not ns.Welcomed() and LikeCandidates()[1] ~= nil
 end
 
-local ShowStep
+local ShowStep, StepOf
 
 -- The reveal key ------------------------------------------------------------------------------------------
 -- Names stay quiet over heads: a key held shows them all. Told on the first page, and set right there (the
@@ -427,6 +421,22 @@ local function IntroPage()
 		previous = IconLine(first, line[1], L[line[2]], previous, index == 1 and 18 or 12)
 	end
 	local reveal = RevealCard(first, previous)
+	-- Then the choice: be guided through the steps, or keep what Wanderer advises and see it at the end.
+	local guide = Card(first, L.WELCOME_GUIDE, L.WELCOME_GUIDE_DESC, APART_HEIGHT)
+	guide:SetPoint("TOPLEFT", reveal, "BOTTOMLEFT", 0, -16)
+	guide:SetPoint("RIGHT", first, "CENTER", -CARD_GAP / 2, 0)
+	guide:SetScript("OnClick", function()
+		ns.Skin.Play("click")
+		ShowStep(2)
+	end)
+	local quick = Card(first, L.WELCOME_QUICK, L.WELCOME_QUICK_DESC, APART_HEIGHT)
+	quick:SetPoint("TOPLEFT", first, "CENTER", CARD_GAP / 2, 0)
+	quick:SetPoint("TOP", guide, "TOP", 0, 0)
+	quick:SetPoint("RIGHT", first, "RIGHT", 0, 0)
+	quick:SetScript("OnClick", function()
+		ns.Skin.Play("confirm")
+		ShowStep(#STEPS)
+	end)
 	-- Another one: like your main character, or set up apart.
 	local alt = CreateFrame("Frame", nil, page)
 	alt:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, 0)
@@ -458,7 +468,7 @@ local function IntroPage()
 			return
 		end
 		ns.Skin.Play("confirm")
-		ShowStep(READY)
+		ShowStep(#STEPS)
 	end)
 	-- Another one to copy, picked from the list (remembered as your main).
 	local pickRow = CreateFrame("Frame", nil, alt)
@@ -494,7 +504,11 @@ local function IntroPage()
 		first:SetShown(not who)
 		alt:SetShown(who and true or false)
 		page.text:SetText(who and L.WELCOME_ALT_INTRO or L.WELCOME_INTRO)
-		if not who then return reveal.Refresh() end
+		if not who then
+			guide:SetChosen(false)
+			quick:SetChosen(false)
+			return reveal.Refresh()
+		end
 		like.title:SetText(L.WELCOME_LIKE:format(who.name))
 		local facts = {}
 		if who.level then facts[#facts + 1] = L.WELCOME_LIKE_LEVEL:format(who.level) end
@@ -688,23 +702,27 @@ local function LookRow(page, look, previous)
 	return row
 end
 
--- The quieter interface: its switches, then the fade's choice of three.
-local function InterfacePage()
-	local page = Page("interface", "WELCOME_STEP_INTERFACE", "WELCOME_INTERFACE_DESC")
-	local rows, previous = {}, page.rule
+-- Your screen: lighter (its switches, then the fade's choice of three), then its look (the bar, the movable
+-- windows, the minimap's and the quest tracker's looks), each group under its name.
+local function ScreenPage()
+	local page = Page("screen", "WELCOME_STEP_SCREEN", "WELCOME_SCREEN_DESC")
+	local function Caption(text, anchor, gap)
+		local caption = ns.Skin.Caps(page, text, "kicker")
+		caption:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
+		caption:SetPoint("RIGHT", page, "RIGHT", 0, 0)
+		caption:SetJustifyH("LEFT")
+		if caption.SetWordWrap then caption:SetWordWrap(false) end
+		return caption
+	end
+	local rows = {}
+	local previous = Caption(L.WELCOME_STEP_INTERFACE, page.rule, 10)
 	for _, entry in ipairs(INTERFACE) do
 		previous = SwitchRow(page, entry[1], entry[2], previous)
 		rows[#rows + 1] = previous
 	end
-	rows[#rows + 1] = LookRow(page, FADE, previous)
-	refreshers.interface = function()
-		for _, row in ipairs(rows) do row:Refresh() end
-	end
-end
-
-local function AppearancePage()
-	local page = Page("appearance", "WELCOME_STEP_APPEARANCE", "WELCOME_APPEARANCE_DESC")
-	local rows, previous = {}, page.rule
+	previous = LookRow(page, FADE, previous)
+	rows[#rows + 1] = previous
+	previous = Caption(L.WELCOME_STEP_APPEARANCE, previous, 12)
 	for _, entry in ipairs(APPEARANCE) do
 		previous = SwitchRow(page, entry[1], entry[2], previous, entry[3])
 		rows[#rows + 1] = previous
@@ -713,7 +731,7 @@ local function AppearancePage()
 		previous = LookRow(page, look, previous)
 		rows[#rows + 1] = previous
 	end
-	refreshers.appearance = function()
+	refreshers.screen = function()
 		for _, row in ipairs(rows) do row:Refresh() end
 	end
 end
@@ -773,24 +791,31 @@ local function CharacterPage()
 		end)
 		cards[index] = card
 	end
-	-- (which bars show is the game's own option: said here, the game's settings a click away)
-	local barsButton = ns.Skin.SmallButton(page, L.BARS_SHOWN_GAME_BUTTON, function()
-		ns.Skin.Play("click")
-		ns.OpenGameActionBars()
-	end, L.BARS_SHOWN_GAME_DESC)
-	barsButton:SetPoint("TOPRIGHT", cards[#cards], "BOTTOMRIGHT", 0, -10)
+	-- Which bars show (2 to 8): the game's own setting, each a box here (BarSlots.lua), never the game's options.
 	local barsCaption = ns.Skin.Text(page, "GameTooltipTextSmall", "label")
-	barsCaption:SetText(L.BARS_SHOWN_GAME)
-	barsCaption:SetPoint("LEFT", cards[1], "LEFT", 6, 0)
-	barsCaption:SetPoint("TOP", barsButton, "TOP", 0, 0)
-	barsCaption:SetPoint("BOTTOM", barsButton, "BOTTOM", 0, 0)
-	barsCaption:SetPoint("RIGHT", barsButton, "LEFT", -8, 0)
+	barsCaption:SetPoint("TOPLEFT", cards[1], "BOTTOMLEFT", 6, -14)
+	barsCaption:SetPoint("RIGHT", page, "RIGHT", 0, 0)
 	barsCaption:SetJustifyH("LEFT")
 	if barsCaption.SetWordWrap then barsCaption:SetWordWrap(false) end
+	barsCaption:SetText(L.WELCOME_BARS_SHOWN)
+	local bars = {}
+	for bar = 2, 8 do
+		local card = Card(page, tostring(bar), "", 30)
+		card.title:ClearAllPoints()
+		card.title:SetPoint("LEFT", card, "LEFT", 10, 0)
+		card.text:Hide()
+		card.check:SetSize(14, 14)
+		card.check:ClearAllPoints()
+		card.check:SetPoint("RIGHT", card, "RIGHT", -6, 0)
+		card:SetScript("OnClick", function(self)
+			if ns.SetActionBarShown(bar - 1, not ns.ActionBarShown(bar - 1)) then ns.Skin.Play("click") else ns.Skin.Play("refuse") end
+			self:SetChosen(ns.ActionBarShown(bar - 1))
+		end)
+		local label = rawget(_G, "OPTION_SHOW_ACTION_BAR")
+		if label then ns.Skin.Tooltip(card, label:format(bar)) end
+		bars[#bars + 1] = card
+	end
 	refreshers.character = function()
-		-- (not with a controller: the game's settings opened from an addon block the game's own actions)
-		barsButton:SetShown(not ns.Util.UsingPad())
-		barsCaption:SetShown(not ns.Util.UsingPad())
 		local width = page:GetWidth() > 0 and page:GetWidth() or WIDTH - 2 * (ns.Skin.Margin() + 8)
 		play:Refresh()
 		profile:Refresh()
@@ -801,6 +826,17 @@ local function CharacterPage()
 			card:ClearAllPoints()
 			card:SetPoint("TOPLEFT", layoutCaption, "BOTTOMLEFT", -6 + (index - 1) * (cardWidth + CARD_GAP), -6)
 			card:SetChosen(ns.db.world.editLayout == ns.LayoutName(card.key))
+		end
+		-- (the game choosing the bars itself: nothing offered)
+		local forced = ns.ActionBarsForced()
+		barsCaption:SetShown(not forced)
+		local barWidth = math.floor((width - 6 * 6) / 7)
+		for index, card in ipairs(bars) do
+			card:SetShown(not forced)
+			card:SetWidth(barWidth)
+			card:ClearAllPoints()
+			card:SetPoint("TOPLEFT", barsCaption, "BOTTOMLEFT", -6 + (index - 1) * (barWidth + 6), -6)
+			card:SetChosen(ns.ActionBarShown(index))
 		end
 	end
 end
@@ -889,6 +925,21 @@ local function ReadyPage()
 				if text.SetWordWrap then text:SetWordWrap(false) end
 			end
 			line.Value = entry[2]
+			-- (a click on the line: back to the step that sets it)
+			local go = CreateFrame("Button", nil, line)
+			go:SetAllPoints()
+			go.hover = go:CreateTexture(nil, "HIGHLIGHT")
+			go.hover:SetPoint("TOPLEFT", -4, 2)
+			go.hover:SetPoint("BOTTOMRIGHT", 4, -2)
+			go.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+			go:SetScript("OnClick", function()
+				local step = StepOf(entry[3])
+				if step then
+					ns.Skin.Play("click")
+					ShowStep(step)
+				end
+			end)
+			ns.Skin.Tooltip(go, { L[entry[1]], L.WELCOME_SUM_EDIT })
 			lines[#lines + 1] = line
 			previous = line
 		end
@@ -897,12 +948,12 @@ local function ReadyPage()
 		{ "WELCOME_SUM_LOOK", function()
 			local theme = ns.CurrentTheme()
 			return theme and L["STYLE_" .. theme:upper()] or L.WELCOME_SUM_CUSTOM
-		end },
+		end, "look" },
 		{ "WELCOME_SUM_WAY", function()
 			if copiedFrom then return L.WELCOME_LIKE:format(copiedFrom) end
 			local way = ns.CurrentPlaystyle()
 			return way == "" and L.WELCOME_SUM_NONE or ns.PlaystyleWords(way)
-		end },
+		end, "play" },
 		{ "WELCOME_SUM_LIGHTER", function()
 			local on = 0
 			for _, entry in ipairs(INTERFACE) do
@@ -910,12 +961,12 @@ local function ReadyPage()
 			end
 			if ns.FadeMode() ~= "none" then on = on + 1 end
 			return L.WELCOME_SUM_COUNT:format(on, #INTERFACE + 1)
-		end },
+		end, "screen" },
 	})
 	Column(right, {
-		{ "BAR_SHOW", function() return OnOff(Setting("world.bar")) end },
-		{ "MOVE_FRAMES", function() return OnOff(Setting("world.moveFrames")) end },
-		{ "WELCOME_PLACES", function() return OnOff(next(ns.PlaceProfiles()) ~= nil) end },
+		{ "BAR_SHOW", function() return OnOff(Setting("world.bar")) end, "screen" },
+		{ "MOVE_FRAMES", function() return OnOff(Setting("world.moveFrames")) end, "screen" },
+		{ "WELCOME_PLACES", function() return OnOff(next(ns.PlaceProfiles()) ~= nil) end, "character" },
 	})
 	local tipsCaption = ns.Skin.Caps(page, L.WELCOME_TIPS)
 	tipsCaption:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -16)
@@ -974,27 +1025,44 @@ function ns.RefreshWelcome()
 	if refresh then refresh() end
 end
 
--- The pages counted on the way (the three choices and the road), the further ones apart, marked fainter.
+-- The rail tells the whole way: the step shown in gold with its edge, the ones seen ticked, the ones to come
+-- numbered and soft. Each one goes straight to its step.
+local seen = {} -- step key -> true once shown
+local function PaintRail()
+	local gold, text, muted = ns.Skin.COLORS.gold, ns.Skin.COLORS.text, ns.Skin.COLORS.muted
+	for index, key in ipairs(STEPS) do
+		local row = rail[index]
+		local here = index == current
+		local c = here and gold or (seen[key] and text or muted)
+		row.name:SetTextColor(c[1], c[2], c[3])
+		row.ground:SetShown(here)
+		row.edge:SetShown(here)
+		local ticked = seen[key] and not here
+		row.number:SetShown(not ticked)
+		row.tick:SetShown(ticked)
+		row.number:SetTextColor(c[1], c[2], c[3])
+		row.ring:SetVertexColor(c[1], c[2], c[3], here and 0.28 or 0.12)
+	end
+end
+
 function ShowStep(step)
 	current = math.max(1, math.min(#STEPS, step))
-	local further = current > READY
-	for index, key in ipairs(STEPS) do
-		pages[key]:SetShown(index == current)
-		local done = index <= current and (index <= READY or further)
-		local gold = ns.Skin.COLORS.gold
-		dots[index].mark:SetColorTexture(done and gold[1] or 1, done and gold[2] or 1, done and gold[3] or 1, done and 0.9 or (index > READY and 0.15 or 0.25))
-	end
+	for index, key in ipairs(STEPS) do pages[key]:SetShown(index == current) end
+	seen[STEPS[current]] = true
+	PaintRail()
 	local refresh = refreshers[STEPS[current]]
 	if refresh then refresh() end
+	local last = current == #STEPS
 	window.back:SetShown(current > 1)
-	-- The road (or the last further page): setting out closes; from the road, the further pages for who wants them.
-	local ends = current == READY or current == #STEPS
-	window.next:SetText(ends and L.WELCOME_START or L.WELCOME_NEXT)
-	window.more:SetShown(current == READY and #STEPS > READY)
-	window.skip:SetShown(not ends)
-	window.skip:SetLabel(further and L.WELCOME_DONE or L.WELCOME_SKIP)
-	window.counter:SetText(further and L.WELCOME_MORE_COUNT:format(current - READY, #STEPS - READY)
-		or L.WELCOME_STEP_COUNT:format(current, READY))
+	window.next:SetText(last and L.WELCOME_START or L.WELCOME_NEXT)
+	window.skip:SetShown(not last)
+	window.counter:SetText(L.WELCOME_STEP_COUNT:format(current, #STEPS))
+end
+-- (the step of a page, by its key: nil when that page is not on the way)
+function StepOf(key)
+	for index, step in ipairs(STEPS) do
+		if step == key then return index end
+	end
 end
 
 -- (seen: marked once it hides, whatever closed it)
@@ -1003,9 +1071,56 @@ local function Close()
 end
 
 local function FooterButton(text, onClick, main)
-	local button = ns.Skin.Button(window, text, onClick, main and "main" or nil, 110)
+	local button = ns.Skin.Button(window, text, onClick, main and "main" or nil, 120)
 	button:SetHeight(26)
 	return button
+end
+
+-- One step of the rail: its number (a tick once seen) in a ring, its short name.
+local function RailRow(index, key)
+	local row = CreateFrame("Button", nil, window)
+	row:SetHeight(RAIL_ROW)
+	row:SetPoint("TOPLEFT", window.railTop, "TOPLEFT", 0, -(index - 1) * (RAIL_ROW + 2))
+	row:SetPoint("RIGHT", window.railTop, "LEFT", RAIL_WIDTH - 12, 0)
+	row.ground = row:CreateTexture(nil, "BACKGROUND")
+	row.ground:SetAllPoints()
+	row.ground:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN))
+	row.edge = row:CreateTexture(nil, "ARTWORK")
+	row.edge:SetWidth(2)
+	row.edge:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+	row.edge:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+	row.edge:SetColorTexture(ns.Skin.RGB("gold", 0.9))
+	row.hover = row:CreateTexture(nil, "HIGHLIGHT")
+	row.hover:SetAllPoints()
+	row.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+	row.ring = row:CreateTexture(nil, "ARTWORK")
+	row.ring:SetSize(20, 20)
+	row.ring:SetPoint("LEFT", row, "LEFT", 10, 0)
+	row.ring:SetTexture("Interface\\Buttons\\WHITE8X8")
+	ns.Skin.RoundMask(row, row.ring)
+	row.number = ns.Skin.Text(row, "GameFontHighlightSmall", "text")
+	row.number:SetPoint("CENTER", row.ring, "CENTER", 0, 0)
+	row.number:SetWidth(20)
+	if row.number.SetWordWrap then row.number:SetWordWrap(false) end
+	row.number:SetText(tostring(index))
+	row.tick = row:CreateTexture(nil, "OVERLAY")
+	row.tick:SetSize(14, 14)
+	row.tick:SetPoint("CENTER", row.ring, "CENTER", 0, 0)
+	ns.Skin.GlyphOn(row.tick, "check")
+	row.name = ns.Skin.Text(row, "GameTooltipText", "text")
+	row.name:SetPoint("LEFT", row.ring, "RIGHT", 10, 0)
+	row.name:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+	row.name:SetJustifyH("LEFT")
+	if row.name.SetWordWrap then row.name:SetWordWrap(false) end
+	row.name:SetText(L["WELCOME_NAV_" .. key:upper()])
+	row:SetScript("OnClick", function()
+		if index ~= current then
+			ns.Skin.Play("click")
+			ShowStep(index)
+		end
+	end)
+	ns.Skin.Tooltip(row, function() return pages[key].title:GetText() end, "ANCHOR_RIGHT")
+	return row
 end
 
 local function CreateWindow()
@@ -1015,7 +1130,7 @@ local function CreateWindow()
 	ns.Skin.Dress(window, nil, nil, Close)
 	local margin = ns.Skin.Margin() + 8
 
-	-- The crest and the name, on every step.
+	-- The crest and the name, on every step, with where you are on the way.
 	local crest = window:CreateTexture(nil, "ARTWORK")
 	crest:SetSize(CREST_SIZE, CREST_SIZE)
 	crest:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
@@ -1035,53 +1150,39 @@ local function CreateWindow()
 	window.counter = ns.Skin.Text(window, "GameTooltipTextSmall", "muted")
 	window.counter:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -3)
 	window.counter:SetPoint("RIGHT", window, "RIGHT", -40, 0)
+	-- The rail at the left, the pages at its right, a thin rule between them.
+	window.railTop = CreateFrame("Frame", nil, window)
+	window.railTop:SetSize(1, 1)
+	window.railTop:SetPoint("TOPLEFT", crest, "BOTTOMLEFT", -6, -18)
+	local divider = window:CreateTexture(nil, "ARTWORK")
+	divider:SetWidth(1)
+	divider:SetColorTexture(ns.Skin.RGB("gold", 0.15))
+	divider:SetPoint("TOPLEFT", window.railTop, "TOPLEFT", RAIL_WIDTH, 0)
+	divider:SetPoint("BOTTOM", window, "BOTTOM", 0, 56)
 	window.top = CreateFrame("Frame", nil, window)
 	window.top:SetSize(1, 1)
-	window.top:SetPoint("TOPLEFT", crest, "BOTTOMLEFT", 0, -16)
+	window.top:SetPoint("TOPLEFT", window.railTop, "TOPLEFT", RAIL_WIDTH + 18, 0)
 
 	BuildSteps()
 	IntroPage()
-	LookPage()
 	PlayPage()
-	ReadyPage()
-	InterfacePage()
-	AppearancePage()
+	LookPage()
+	ScreenPage()
 	CharacterPage()
 	if tContains(STEPS, "extensions") then ExtensionsPage() end
+	ReadyPage()
+	for index, key in ipairs(STEPS) do rail[index] = RailRow(index, key) end
 
-	-- Progress dots (each one names its step and goes straight to it) and the way forward.
-	for index, key in ipairs(STEPS) do
-		local dot = CreateFrame("Button", nil, window)
-		dot:SetSize(DOT_SIZE + DOT_GAP, DOT_SIZE + DOT_GAP)
-		-- (the further pages a little apart, their dots smaller)
-		local further = index > READY
-		dot:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT",
-			margin - DOT_GAP / 2 + (index - 1) * (DOT_SIZE + DOT_GAP) + (further and MORE_GAP or 0), margin + 9 - DOT_GAP / 2)
-		dot.mark = dot:CreateTexture(nil, "ARTWORK")
-		dot.mark:SetSize(further and DOT_SIZE - 2 or DOT_SIZE, further and DOT_SIZE - 2 or DOT_SIZE)
-		dot.mark:SetPoint("CENTER", dot, "CENTER", 0, 0)
-		dot:SetScript("OnClick", function()
-			if index ~= current then
-				ns.Skin.Play("click")
-				ShowStep(index)
-			end
-		end)
-		ns.Skin.Tooltip(dot, function() return pages[key].title:GetText() end, "ANCHOR_TOP")
-		dots[index] = dot
-	end
+	-- The way forward: Continue (Set out on the last step), Back, and a quiet Not now that closes.
 	window.next = FooterButton(L.WELCOME_NEXT, function()
-		if current == READY or current == #STEPS then Close() else ShowStep(current + 1) end
-	end)
+		if current == #STEPS then Close() else ShowStep(current + 1) end
+	end, true)
 	window.next:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin, margin)
 	window.back = FooterButton(L.WELCOME_BACK, function() ShowStep(current - 1) end)
 	window.back:SetPoint("RIGHT", window.next, "LEFT", -8, 0)
-	-- From the road: the further pages.
-	window.more = FooterButton(L.WELCOME_MORE, function() ShowStep(READY + 1) end)
-	window.more:SetPoint("RIGHT", window.back, "LEFT", -8, 0)
-	ns.Skin.Tooltip(window.more, L.WELCOME_MORE_DESC, "ANCHOR_TOP")
-	-- (a real button, quiet, in line with Back and Next)
 	window.skip = ns.Skin.SmallButton(window, L.WELCOME_SKIP, Close, nil, 26)
-	window.skip:SetPoint("LEFT", dots[#STEPS], "RIGHT", 16, 0)
+	window.skip:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin)
+	ns.Skin.Tooltip(window.skip, L.WELCOME_SKIP_DESC, "ANCHOR_TOP")
 
 	-- Seen once closed by you; hidden with the whole interface (a new character's opening film, the screen
 	-- hidden by the game), it is still to come: it shows again with the interface.
@@ -1094,14 +1195,21 @@ local function CreateWindow()
 	window:HookScript("OnShow", function(self)
 		-- On a small screen (or a large interface scale), the window shrinks to fit.
 		self:SetScale(ns.Skin.FitScale(self))
-		-- (the extensions no more suggested, or all installed since the window was made: their page goes, its dot too)
-		if STEPS[#STEPS] == "extensions" and not (ns.OffersWanted() and ns.MissingExtensions()[1]) then
+		-- (the extensions no more suggested, or all installed since the window was made: their step goes)
+		local at = StepOf("extensions")
+		if at and not (ns.OffersWanted() and ns.MissingExtensions()[1]) then
 			pages.extensions:Hide()
-			dots[#STEPS]:Hide()
-			STEPS[#STEPS] = nil
-			self.skip:ClearAllPoints()
-			self.skip:SetPoint("LEFT", dots[#STEPS], "RIGHT", 16, 0)
+			table.remove(STEPS, at)
+			local gone = table.remove(rail, at)
+			gone:Hide()
+			for index, row in ipairs(rail) do
+				row:ClearAllPoints()
+				row:SetPoint("TOPLEFT", self.railTop, "TOPLEFT", 0, -(index - 1) * (RAIL_ROW + 2))
+				row:SetPoint("RIGHT", self.railTop, "LEFT", RAIL_WIDTH - 12, 0)
+				row.number:SetText(tostring(index))
+			end
 		end
+		wipe(seen)
 		ShowStep(1)
 	end)
 	ns.Skin.Get(window):Layout()

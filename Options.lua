@@ -679,10 +679,37 @@ local function ActionBarsPage()
 	Page(L.PAGE_ACTION_BARS, "bars")
 	-- (a first section named as the page: no title of its own)
 	Header(L.PAGE_ACTION_BARS)
-	-- (which bars show is the game's own option: never a second switch here, its page a click away)
-	-- (not with a controller: the game's settings opened from an addon block the game's own actions)
-	Button(L.BARS_SHOWN_GAME, L.BARS_SHOWN_GAME_BUTTON, L.BARS_SHOWN_GAME_DESC, function() ns.OpenGameActionBars() end).hidden =
-		function() return ns.Util.UsingPad() end
+	-- Which bars show, the bars locked, the cooldowns' numbers: the game's own settings of its Action Bars page, here
+	-- as the same boxes (in the game's own words), so nothing sends you to the game's options. Each character's, kept
+	-- by the game; nothing written in Wanderer's profile.
+	local function GameText(name, fallback) return rawget(_G, name) or fallback end
+	for bar = 2, 8 do
+		AddRow({ kind = "check", label = GameText("OPTION_SHOW_ACTION_BAR", "%d"):format(bar),
+			desc = GameText("OPTION_SHOW_ACTION_BAR" .. bar .. "_TOOLTIP", nil),
+			get = function() return ns.ActionBarShown(bar - 1) end,
+			set = function(value) ns.SetActionBarShown(bar - 1, value) end,
+			hidden = function() return ns.ActionBarsForced() end })
+	end
+	local function CVarOn(name) return ns.Util.Safe(GetCVarBool, name) and true or false end
+	local function SetCVarOn(name, value)
+		local set = (C_CVar and C_CVar.SetCVar) or SetCVar
+		if set then pcall(set, name, value and "1" or "0") end
+	end
+	local lock = AddRow({ kind = "check", label = GameText("LOCK_ACTIONBAR_TEXT", ""), desc = GameText("OPTION_TOOLTIP_LOCK_ACTIONBAR", nil),
+		get = function() return CVarOn("lockActionBars") end, set = function(value) SetCVarOn("lockActionBars", value) end })
+	-- (the key that still picks a spell up from a locked bar)
+	local PICKUP = { { "SHIFT", GameText("SHIFT_KEY", "SHIFT") }, { "CTRL", GameText("CTRL_KEY", "CTRL") },
+		{ "ALT", GameText("ALT_KEY", "ALT") }, { "NONE", GameText("NONE_KEY", "NONE") } }
+	Under(AddRow({ kind = "dropdown", label = GameText("PICKUP_ACTION_KEY_TEXT", ""), desc = GameText("OPTION_TOOLTIP_PICKUP_ACTION_KEY_TEXT", nil),
+		choices = PICKUP,
+		get = function() return (GetModifiedClick and ns.Util.Safe(GetModifiedClick, "PICKUPACTION")) or "SHIFT" end,
+		set = function(value)
+			if not SetModifiedClick then return end
+			pcall(SetModifiedClick, "PICKUPACTION", value)
+			if SaveBindings and GetCurrentBindingSet then pcall(SaveBindings, GetCurrentBindingSet()) end
+		end }), lock, function() return CVarOn("lockActionBars") end)
+	AddRow({ kind = "check", label = GameText("COUNTDOWN_FOR_COOLDOWNS_TEXT", ""), desc = GameText("OPTION_TOOLTIP_COUNTDOWN_FOR_COOLDOWNS", nil),
+		get = function() return CVarOn("countdownForCooldowns") end, set = function(value) SetCVarOn("countdownForCooldowns", value) end })
 	-- (Wanderer's fade dims the bars out of combat: said here, its setting one click away)
 	AddRow({ kind = "button", label = L.BARS_FADE, desc = L.BARS_FADE_DESC,
 		text = function()

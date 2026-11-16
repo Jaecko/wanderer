@@ -81,3 +81,40 @@ function ns.InitBarSlots()
 		soon()
 	end)
 end
+
+-- Which bars show (2 to 8), as the game's own options page sets them: each character's, kept by the game. What was
+-- just chosen is remembered a moment (the game does the same): the server sends the bars back a little later,
+-- and a second choice made meanwhile must not undo the first. Never during a fight (the bars are the game's
+-- protected frames).
+local TOGGLES_FRESH = 10 -- seconds a choice is trusted over what the game says
+local toggles, togglesAt = nil, -100
+
+local function Toggles()
+	if toggles and GetTime() - togglesAt <= TOGGLES_FRESH then return toggles end
+	if not GetActionBarToggles then return {} end
+	return { GetActionBarToggles() }
+end
+
+-- Bar 2 to 8 shown (index 1 to 7 of the game's list).
+function ns.ActionBarShown(index)
+	return Toggles()[index] and true or false
+end
+
+function ns.SetActionBarShown(index, shown)
+	if not SetActionBarToggles then return false end
+	if InCombatLockdown() then
+		ns.Print(ns.L.SETTINGS_KEY_COMBAT)
+		return false
+	end
+	toggles = Toggles()
+	for at = 1, 8 do toggles[at] = toggles[at] and true or false end
+	toggles[index] = shown and true or false
+	togglesAt = GetTime()
+	return (pcall(SetActionBarToggles, unpack(toggles)))
+end
+
+-- The game forcing which bars show (some of its rules): nothing to choose then.
+function ns.ActionBarsForced()
+	local rules = _G.C_GameRules
+	return rules and rules.IsMultiActionBarVisibilityForced and ns.Util.Safe(rules.IsMultiActionBarVisibilityForced) and true or false
+end

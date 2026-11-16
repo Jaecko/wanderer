@@ -27,9 +27,17 @@ end
 -- (an extension showing the trainers in its own window, Wanderer Training: its buttons buy there)
 local function Replaced() return ns.Yields("trainerWindow") ~= nil end
 
+-- A hunter's pet trainer: its prices are the pet's training points, not gold; the game's window counts them, Learn all
+-- is not offered there.
+local function PetTrainer()
+	local kinds = Enum and Enum.TrainerType
+	if not (kinds and kinds.Pet and _G.C_Trainer and _G.C_Trainer.GetTrainerType) then return false end
+	return Clean(Safe(_G.C_Trainer.GetTrainerType)) == kinds.Pet
+end
+
 local function Update()
 	if not button then return end
-	local shown = ns.db and ns.db.enabled and ns.db.trainer.learnAll and not Replaced()
+	local shown = ns.db and ns.db.enabled and ns.db.trainer.learnAll and not Replaced() and not PetTrainer()
 	button:SetShown(shown and true or false)
 	if not shown then return end
 	-- (what Learn all buys: as far as your gold goes)
@@ -54,6 +62,7 @@ end
 
 -- What Learn all costs (as far as your gold goes).
 local function Cost()
+	if PetTrainer() then return nil end
 	local chosen, spent = U.TrainerPlan(Learnable())
 	if not chosen[1] then return nil end
 	return { L.TRAINER_LEARN_ALL:format(#chosen), ((_G.COSTS_LABEL and (_G.COSTS_LABEL .. " ")) or "") .. U.Coins(spent) }

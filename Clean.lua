@@ -517,23 +517,6 @@ function ns.LayoutName(key)
 	return L["LAYOUT_" .. key:upper()]
 end
 
--- The bars shown ---------------------------------------------------------------------
--- Which of bars 2 to 8 show is the game's own option, for each character (Options > Action Bars, kept by the
--- server; Edit Mode adds when each one shows). Wanderer never keeps a second switch for it: it opens the
--- game's page.
-function ns.OpenGameActionBars()
-	-- (never with a controller: the game's panel opened by an addon blocks the game's own actions)
-	if U.UsingPad() then return false end
-	local GameSettings = _G.Settings -- (Settings in this file is a layout helper)
-	local id = GameSettings and GameSettings.ACTION_BAR_CATEGORY_ID
-	-- (Wanderer's own settings out of the way: the game's page in view)
-	if ns.CloseSettingsWindow then ns.CloseSettingsWindow() end
-	if id and GameSettings.OpenToCategory and pcall(GameSettings.OpenToCategory, id) then return true end
-	local panel = _G.SettingsPanel
-	if panel and panel.Open and pcall(panel.Open, panel) then return true end
-	return false
-end
-
 -- The game said its layouts again: read from them.
 function ns.LayoutsUpdated()
 	ns.RefreshOptions()
