@@ -1322,7 +1322,6 @@ for key, text in pairs({
 	PLAY_TOLD_AUCTION_MERCHANT = "提示更適合賣給商人的物品",
 	PLAY_TOLD_MAPS_ZONES = "各區域的等級與釣魚",
 	PLAY_TOLD_TRAINING_TRAINER = "Wanderer 的訓練師視窗",
-	PLAY_TOLD_CHAT_GREETINGS = "需要回應的問候",
 	PLAY_TOLD_CHAT_NAMECARD = "玩家名字上的卡片",
 	UF_TEXTURE_CLEAN = "簡潔",
 	UF_THICKNESS = "條的厚度",
@@ -1584,4 +1583,5 @@ for key, text in pairs({
 	WELCOME_NAV_CHARACTER = "這個角色",
 	WELCOME_NAV_EXTENSIONS = "擴充",
 	WELCOME_NAV_READY = "出發",
+
 }) do L[key] = text end

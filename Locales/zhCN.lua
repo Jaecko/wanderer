@@ -1322,7 +1322,6 @@ for key, text in pairs({
 	PLAY_TOLD_AUCTION_MERCHANT = "提示更适合卖给商人的物品",
 	PLAY_TOLD_MAPS_ZONES = "各区域的等级与钓鱼",
 	PLAY_TOLD_TRAINING_TRAINER = "Wanderer 的训练师窗口",
-	PLAY_TOLD_CHAT_GREETINGS = "需要回应的问候",
 	PLAY_TOLD_CHAT_NAMECARD = "玩家名字上的卡片",
 	UF_TEXTURE_CLEAN = "简洁",
 	UF_THICKNESS = "条的厚度",
@@ -1584,4 +1583,5 @@ for key, text in pairs({
 	WELCOME_NAV_CHARACTER = "这个角色",
 	WELCOME_NAV_EXTENSIONS = "扩展",
 	WELCOME_NAV_READY = "出发",
+
 }) do L[key] = text end

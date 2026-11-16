@@ -1322,7 +1322,6 @@ for key, text in pairs({
 	PLAY_TOLD_AUCTION_MERCHANT = "Meglio venduto a un mercante, segnalato",
 	PLAY_TOLD_MAPS_ZONES = "Livelli e pesca di ogni zona",
 	PLAY_TOLD_TRAINING_TRAINER = "La finestra degli istruttori di Wanderer",
-	PLAY_TOLD_CHAT_GREETINGS = "I saluti da ricambiare",
 	PLAY_TOLD_CHAT_NAMECARD = "Una scheda sul nome dei giocatori",
 	UF_TEXTURE_CLEAN = "Netta",
 	UF_THICKNESS = "Spessore delle barre",
@@ -1584,4 +1583,5 @@ for key, text in pairs({
 	WELCOME_NAV_CHARACTER = "Questo personaggio",
 	WELCOME_NAV_EXTENSIONS = "Estensioni",
 	WELCOME_NAV_READY = "In cammino",
+
 }) do L[key] = text end

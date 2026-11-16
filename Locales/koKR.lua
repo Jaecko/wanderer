@@ -1322,7 +1322,6 @@ for key, text in pairs({
 	PLAY_TOLD_AUCTION_MERCHANT = "상인에게 파는 편이 나은 물건 알림",
 	PLAY_TOLD_MAPS_ZONES = "지역별 레벨과 낚시",
 	PLAY_TOLD_TRAINING_TRAINER = "Wanderer의 전문가 창",
-	PLAY_TOLD_CHAT_GREETINGS = "답할 인사",
 	PLAY_TOLD_CHAT_NAMECARD = "플레이어 이름 위 카드",
 	UF_TEXTURE_CLEAN = "깔끔",
 	UF_THICKNESS = "바 두께",
@@ -1584,4 +1583,5 @@ for key, text in pairs({
 	WELCOME_NAV_CHARACTER = "이 캐릭터",
 	WELCOME_NAV_EXTENSIONS = "확장",
 	WELCOME_NAV_READY = "출발",
+
 }) do L[key] = text end

@@ -1336,7 +1336,6 @@ local L = {
 	PLAY_TOLD_AUCTION_MERCHANT = "Better sold at a merchant, told",
 	PLAY_TOLD_MAPS_ZONES = "Levels and fishing of each zone",
 	PLAY_TOLD_TRAINING_TRAINER = "Wanderer's trainer window",
-	PLAY_TOLD_CHAT_GREETINGS = "Greetings to answer",
 	PLAY_TOLD_CHAT_NAMECARD = "A card on players' names",
 	UF_TEXTURE_CLEAN = "Clean",
 	UF_THICKNESS = "Bar thickness",
@@ -1598,6 +1597,7 @@ local L = {
 	WELCOME_NAV_CHARACTER = "This character",
 	WELCOME_NAV_EXTENSIONS = "Extensions",
 	WELCOME_NAV_READY = "Set out",
+
 }
 
 

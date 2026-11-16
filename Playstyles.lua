@@ -101,7 +101,7 @@ ns.PLAYSTYLES = {
 		["hands.bagsClosed"] = true, ["fishing.splash"] = true,
 		["quests.mapGivers"] = false, ["quests.foldStory"] = true, ["maps.arrowQuiet"] = true,
 		["chat.messagesWindow"] = true, ["chat.quietChannels"] = true,
-	}, { "scene.reader", "gestures.sitAtFire", "chat.greetings", "chat.nameCard", "rp.useName" }),
+	}, { "scene.reader", "gestures.sitAtFire", "chat.nameCard", "rp.useName" }),
 	-- Quests without delay, the way shown, nothing in the way.
 	adventurer = Way("adventurer", "balanced", "keep", "Ability_Rogue_Sprint", {
 		["scene.enabled"] = false, ["scene.camera"] = false, ["world.filterErrors"] = true, ["world.lootSparkle"] = true,
@@ -191,7 +191,7 @@ local TOLD_WORDS = {
 	["bags.toBank"] = "PLAY_TOLD_BAGS_BANK", ["bags.byProfession"] = "PLAY_TOLD_BAGS_PROFESSION",
 	["auction.toMerchant"] = "PLAY_TOLD_AUCTION_MERCHANT", ["maps.zoneFacts"] = "PLAY_TOLD_MAPS_ZONES",
 	["maps.arrow"] = "PLAY_LINE_MAPS_ARROW", ["quests.mapGivers"] = "PLAY_LINE_QUESTS_GIVERS",
-	["training.trainer"] = "PLAY_TOLD_TRAINING_TRAINER", ["chat.greetings"] = "PLAY_TOLD_CHAT_GREETINGS",
+	["training.trainer"] = "PLAY_TOLD_TRAINING_TRAINER",
 	["chat.nameCard"] = "PLAY_TOLD_CHAT_NAMECARD",
 }
 ns.PLAYSTYLE_TOLD_WORDS = TOLD_WORDS
