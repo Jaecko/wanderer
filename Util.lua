@@ -206,7 +206,8 @@ function Util.IsMouseOver(frame)
 	if not frame then return false end
 	if frame.IsMouseOver then
 		local ok, over = pcall(frame.IsMouseOver, frame)
-		return ok and over and true or false
+		-- (a hidden answer, a frame of hidden size in a fight: never tested as it is)
+		return ok and Util.Clean(over) and true or false
 	end
 	return MouseIsOver ~= nil and MouseIsOver(frame) and true or false
 end
