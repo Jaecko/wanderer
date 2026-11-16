@@ -1049,22 +1049,73 @@ local function HookMenus()
 	hooksecurefunc(mixin, "Generate", MenuLook)
 end
 
+local Try -- (below: an error on one piece kept for the diagnostic, never stopping the others)
 -- Every piece on the screen the game has made by now, not dressed yet (the action buttons: after a fight).
 local function DressScreen()
 	HookMenus()
 	for _, name in ipairs(BAG_BUTTONS) do
 		local button = rawget(_G, name)
-		if type(button) == "table" then BagButton(button) end
+		if type(button) == "table" then Try(BagButton, button) end
 	end
 	if BarsLeftToOthers() then return end
 	if InCombatLockdown() then return U.AfterFight("gameSkinsBars", DressScreen) end
 	for _, bar in ipairs(ns.BAR_BUTTONS or {}) do
 		for index = 1, bar[2] do
 			local button = rawget(_G, bar[1] .. index)
-			if type(button) == "table" then ActionButton(button) end
+			if type(button) == "table" then Try(ActionButton, button) end
 		end
 	end
 	if ns.RefreshBarSlots then ns.RefreshBarSlots() end
+end
+
+-- Diagnostic (/wanderer skins dump): what the game answers about the pieces on the screen, into the saved data
+-- (WandererDB.skinsDump), for a look outside the game.
+local screenErrors = {} -- the first errors met while dressing a piece on the screen (they never stop the rest)
+function Try(fn, ...)
+	local ok, problem = pcall(fn, ...)
+	if not ok and #screenErrors < 10 then screenErrors[#screenErrors + 1] = tostring(problem) end
+end
+
+function GameSkins.DumpScreen()
+	if not ns.root then return false end
+	local function Region(region)
+		if type(region) ~= "table" or not region.GetObjectType then return tostring(region) end
+		local atlas = region.GetAtlas and U.Clean(U.Safe(region.GetAtlas, region))
+		local file = region.GetTexture and U.Clean(U.Safe(region.GetTexture, region))
+		local layer, sub = U.Safe(region.GetDrawLayer, region)
+		return string.format("%s %s alpha=%s shown=%s layer=%s/%s own=%s file=%s", region:GetObjectType(),
+			tostring(U.Clean(U.Safe(region.GetName, region)) or "?"), tostring(U.Clean(U.Safe(region.GetAlpha, region))),
+			tostring(U.Clean(U.Safe(region.IsShown, region))), tostring(layer), tostring(sub), tostring(own[region] or false),
+			tostring(atlas or file))
+	end
+	local function Facts(name)
+		local button = rawget(_G, name)
+		if type(button) ~= "table" then return { name = name, missing = true } end
+		local out = {
+			name = name, forbidden = Forbidden(button), protected = button.IsProtected and button:IsProtected() or false,
+			touchable = Touchable(button), dressed = screen[button] ~= nil, looked = looked[button] or false,
+			shown = U.Clean(U.Safe(button.IsVisible, button)), hasIcon = IsTexture(Part(button, "icon") or Piece(button, "Icon")),
+			updateArt = button.UpdateButtonArt ~= nil, regions = {},
+		}
+		for _, region in ipairs({ button:GetRegions() }) do out.regions[#out.regions + 1] = Region(region) end
+		for _, getter in ipairs({ "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetCheckedTexture" }) do
+			if button[getter] then out[getter] = Region(button[getter](button)) end
+		end
+		return out
+	end
+	local buttons = {}
+	for _, name in ipairs({ "ActionButton1", "ActionButton2", "MultiBarBottomLeftButton1", "MultiBarRightButton1",
+		"MainMenuBarBackpackButton", "CharacterBag0Slot" }) do
+		buttons[#buttons + 1] = Facts(name)
+	end
+	ns.root.skinsDump = {
+		at = date and date("%Y-%m-%d %H:%M:%S") or nil, active = Active(),
+		setting = ns.db and ns.db.label and ns.db.label.gameSkins, yields = ns.Yields("gameSkins"),
+		barsToOthers = BarsLeftToOthers(), fight = InCombatLockdown(), barButtons = ns.BAR_BUTTONS and #ns.BAR_BUTTONS or 0,
+		menuMixin = type(rawget(_G, "MenuStyle1Mixin")) == "table", menuHooked = menuHooked, errors = screenErrors,
+		buttons = buttons,
+	}
+	return true
 end
 
 -- Every window of the list the game has made by now, not dressed yet (one the game protects, met during a

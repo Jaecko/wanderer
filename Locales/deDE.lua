@@ -1576,4 +1576,5 @@ for key, text in pairs({
 	NAV_MARKER = "Die Navigationsmarkierung auf dem Bildschirm",
 	NAV_MARKER_DESC = "Zeigt die Markierung des Spiels zur verfolgten Quest oder zur Kartenmarkierung, mit ihrer Entfernung (die Spieleinstellung „Navigation im Spiel“). Aus, kehrt Ihre eigene Einstellung zurück.",
 
+	SKINS_DUMP_DONE = "Protokoll der Spielgestaltung geschrieben: /reload zum Speichern.",
 }) do L[key] = text end

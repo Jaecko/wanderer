@@ -1576,4 +1576,5 @@ for key, text in pairs({
 	NAV_MARKER = "화면의 길 안내 표시",
 	NAV_MARKER_DESC = "추적 중인 퀘스트나 지도 핀까지의 게임 표시를 거리와 함께 보여 줍니다 (게임의 \"게임 내 길 안내\" 설정). 끄면 원래 설정으로 돌아갑니다.",
 
+	SKINS_DUMP_DONE = "게임 꾸미기 기록 작성: /reload로 저장하세요.",
 }) do L[key] = text end

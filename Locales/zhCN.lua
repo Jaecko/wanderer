@@ -1576,4 +1576,5 @@ for key, text in pairs({
 	NAV_MARKER = "屏幕上的导航标记",
 	NAV_MARKER_DESC = "在屏幕上显示游戏指向追踪任务或地图标记的标记及其距离（游戏的“游戏内导航”设置）。关闭后恢复你自己的设置。",
 
+	SKINS_DUMP_DONE = "游戏外观记录已写入：/reload 以保存。",
 }) do L[key] = text end

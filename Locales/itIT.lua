@@ -1576,4 +1576,5 @@ for key, text in pairs({
 	NAV_MARKER = "L'indicatore di navigazione sullo schermo",
 	NAV_MARKER_DESC = "Mostra l'indicatore del gioco verso la missione seguita o il segnaposto della mappa, con la sua distanza (l'impostazione «Navigazione di gioco» del gioco). Disattivato, torna la tua impostazione.",
 
+	SKINS_DUMP_DONE = "Rilevamento dell'aspetto del gioco scritto: /reload per salvarlo.",
 }) do L[key] = text end

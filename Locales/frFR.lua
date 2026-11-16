@@ -1576,4 +1576,5 @@ for key, text in pairs({
 	NAV_MARKER = "Le curseur de navigation à l'écran",
 	NAV_MARKER_DESC = "Montre le repère du jeu vers la quête suivie ou l'épingle de la carte, avec sa distance (le réglage « Navigation en jeu » du jeu). Désactivé, votre propre réglage revient.",
 
+	SKINS_DUMP_DONE = "Relevé de l'habillage écrit : /reload pour l'enregistrer.",
 }) do L[key] = text end

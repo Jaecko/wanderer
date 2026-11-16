@@ -1997,6 +1997,9 @@ SlashCmdList.WANDERER = function(msg)
 	elseif msg == "texts dump" or msg == "textes dump" then
 		-- (diagnostic: the texts of the unit frames' bars, the game's and Wanderer's, into the saved data)
 		if ns.DumpUnitTexts then ns.DumpUnitTexts() end
+	elseif msg == "skins dump" or msg == "habillage dump" then
+		-- (diagnostic: the pieces on the screen as the game answers about them, into the saved data)
+		if ns.GameSkins and ns.GameSkins.DumpScreen and ns.GameSkins.DumpScreen() then ns.Print(L.SKINS_DUMP_DONE) end
 	elseif msg == "frames dump" or msg == "cadres dump" then
 		-- (diagnostic: the unit frames as the game built them, into the saved data, for a look outside the game)
 		if ns.DumpUnitFrames and ns.DumpUnitFrames() then ns.Print(L.UF_DUMP_DONE) end

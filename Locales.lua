@@ -1590,6 +1590,7 @@ local L = {
 	NAV_MARKER = "The navigation marker on screen",
 	NAV_MARKER_DESC = "Shows the game's marker toward the tracked quest or the map pin, with its distance (the game's \"In-game navigation\" setting). Off, your own setting comes back.",
 
+	SKINS_DUMP_DONE = "Game skins dump written: /reload to save it.",
 }
 
 
