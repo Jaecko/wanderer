@@ -1,6 +1,7 @@
 # Wanderer 1.4.55
 
 ### New
+- In the world settings: the game's navigation marker on screen (toward the tracked quest or the map pin), on by default for everyone; unchecked, your own setting comes back.
 - Wanderer Bestiary joins the family: the creatures of the world and your hunting log, offered among the other addons.
 
 ### Changed
@@ -13,6 +14,7 @@
 - Unit frames, notices, threat and reward arrows use the shared palette.
 
 ### Fixed
+- Loot feed: the money you pick up is read from the game's own message, so it shows even when looting right after a fight.
 - Loot window: coins no longer wear a quality border.
 - Merchant window: repairing with the guild's gold is offered only when your guild allowance covers the cost.
 - Turning the unit frame look off no longer leaves Wanderer's cast and points rows behind, and the game's damage trail comes back.

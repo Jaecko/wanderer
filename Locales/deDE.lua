@@ -1573,4 +1573,6 @@ for key, text in pairs({
 	LABEL_GAME_SKINS = "Wanderers Farben auf den Fenstern des Spiels",
 	LABEL_GAME_SKINS_DESC = "Die Fenster des Spiels, die Wanderer nicht ersetzt (Charakter, Zauber, Sammlungen, Gruppensuche, Freunde, Gilde, Journal, Handel, Menüs, Fragen...), sehen aus wie Wanderers Fenster: dunkler Grund und Rand des gewählten Stils, seine Knöpfe, Reiter und Bildlaufleisten. Nichts darin wird verschoben oder verändert. Ausgeschaltet kehrt das Aussehen des Spiels nach einem /reload zurück.",
 	COMPAT_JOB_GAMESKINS = "das Aussehen der Fenster des Spiels",
+	NAV_MARKER = "Die Navigationsmarkierung auf dem Bildschirm",
+	NAV_MARKER_DESC = "Zeigt die Markierung des Spiels zur verfolgten Quest oder zur Kartenmarkierung, mit ihrer Entfernung (die Spieleinstellung „Navigation im Spiel“). Aus, kehrt Ihre eigene Einstellung zurück.",
 }) do L[key] = text end

@@ -1573,4 +1573,6 @@ for key, text in pairs({
 	LABEL_GAME_SKINS = "Colores de Wanderer en las ventanas del juego",
 	LABEL_GAME_SKINS_DESC = "Las ventanas del juego que Wanderer no sustituye (personaje, hechizos, colecciones, buscador de grupo, amigos, hermandad, diario, comercio, menús, preguntas...) toman el aspecto de las ventanas de Wanderer: el fondo oscuro y el borde del estilo elegido, sus botones, pestañas y barras de desplazamiento. Nada en ellas se mueve ni cambia. Desactivado, el aspecto del juego vuelve tras un /reload.",
 	COMPAT_JOB_GAMESKINS = "el aspecto de las ventanas del juego",
+	NAV_MARKER = "El marcador de navegación en pantalla",
+	NAV_MARKER_DESC = "Muestra el marcador del juego hacia la misión seguida o el punto del mapa, con su distancia (el ajuste «Navegación en el juego» del juego). Desactivado, vuelve tu propio ajuste.",
 }) do L[key] = text end

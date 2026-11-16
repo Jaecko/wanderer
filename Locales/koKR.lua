@@ -1573,4 +1573,6 @@ for key, text in pairs({
 	LABEL_GAME_SKINS = "게임 창에 Wanderer 색상 적용",
 	LABEL_GAME_SKINS_DESC = "Wanderer가 대체하지 않는 게임 창(캐릭터, 주문, 수집품, 파티 찾기, 친구, 길드, 모험 안내서, 거래, 메뉴, 확인 창...)이 Wanderer 창처럼 보입니다: 선택한 스타일의 어두운 바탕과 테두리, 버튼, 탭, 스크롤 막대. 창 안의 어떤 것도 옮기거나 바꾸지 않습니다. 끄면 /reload 후에 게임 본래의 모습으로 돌아갑니다.",
 	COMPAT_JOB_GAMESKINS = "게임 창의 모습",
+	NAV_MARKER = "화면의 길 안내 표시",
+	NAV_MARKER_DESC = "추적 중인 퀘스트나 지도 핀까지의 게임 표시를 거리와 함께 보여 줍니다 (게임의 \"게임 내 길 안내\" 설정). 끄면 원래 설정으로 돌아갑니다.",
 }) do L[key] = text end

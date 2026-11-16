@@ -309,6 +309,7 @@ local DEFAULTS = {
 		gatherIcons = true, -- other addons' buttons: left alone until asked
 		layer = true, -- your layer: one line over the zone's name, never on the screen
 		lootSparkle = true, -- the game's sparkle on quest items kept through the graphics presets: asked for
+		navigation = true, -- the game's navigation marker on screen (showInGameNavigation): asked for, for everyone
 		editLayout = "", -- "": the game's Edit Mode layout is left alone
 		moveFrames = true, -- the game's windows moved where you drop them (kept)
 		barPins = {}, -- the extensions' words pinned on Wanderer's bar (key -> true/false; unsaid: Bar.lua's own choice)
@@ -873,6 +874,8 @@ end
 -- Other variables Wanderer drives: name -> value wanted by the profile, or nil
 -- to leave the player's own.
 local MANAGED_CVARS = {
+	-- The game's navigation marker toward the tracked quest or the map pin (off: yours).
+	showInGameNavigation = function(db) return db.world.navigation and "1" or nil end,
 	-- The enemies' plates themselves (V in the game): their names need them; in dungeons and raids, their health
 	-- bars are shown (V there stays yours: a value you set is never written over).
 	nameplateShowEnemies = function(db)

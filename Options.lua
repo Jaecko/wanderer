@@ -566,6 +566,7 @@ local function InterfacePage()
 	Under(Yield(TableCheckbox("sparkles", "questObjects", L.SPARKLE_QUEST_OBJECTS, L.SPARKLE_QUEST_OBJECTS_DESC,
 		ns.RefreshSparkles), "nodeSparkle"), nodes, IsOn("sparkles", "nodes"))
 	Yield(TableCheckbox("world", "lootSparkle", L.LOOT_SPARKLE, L.LOOT_SPARKLE_DESC, ns.Apply), "lootSparkle")
+	TableCheckbox("world", "navigation", L.NAV_MARKER, L.NAV_MARKER_DESC, ns.Apply)
 
 	-- Wanderer's own windows: the size of their words (rarely changed: folded).
 	Header(L.SECTION_WINDOWS, { advanced = true })

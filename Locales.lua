@@ -1587,6 +1587,8 @@ local L = {
 	LABEL_GAME_SKINS = "Wanderer's colors on the game's windows",
 	LABEL_GAME_SKINS_DESC = "The game's windows Wanderer does not replace (character, spells, collections, group finder, friends, guild, journal, trade, menus, questions...) take the look of Wanderer's windows: the chosen style's dark ground and edge, its buttons, tabs and scroll bars. Nothing in them is moved or changed. Turned off, the game's own look comes back after a /reload.",
 	COMPAT_JOB_GAMESKINS = "the look of the game's windows",
+	NAV_MARKER = "The navigation marker on screen",
+	NAV_MARKER_DESC = "Shows the game's marker toward the tracked quest or the map pin, with its distance (the game's \"In-game navigation\" setting). Off, your own setting comes back.",
 }
 
 

@@ -38,6 +38,7 @@ local holder
 local rows, pool, queue = {}, {}, {}
 local nextIn = 0
 local lastMoney, pendingMoney, moneyHeard = nil, nil, -100
+local moneyShown, moneySaid = -100, -100 -- the last money line added from your money's change, from the game's words
 local lootOpen, lootUntil = false, -100
 
 -- The game's messages about you, as patterns: the counted ones first (the plain one would take the count).
@@ -367,6 +368,20 @@ local function OnCurrency(text)
 	if link then Add(CurrencyEntry(link, count)) end
 end
 
+-- The amount the game's money message says ("You loot 1 Gold, 2 Silver, 3 Copper", "Your share of the loot is..."),
+-- in copper; nil when it names no coin (words of another client).
+local function SaidMoney(text)
+	text = Clean(text)
+	if type(text) ~= "string" then return nil end
+	local total, found = 0, false
+	for _, coin in ipairs({ { "GOLD_AMOUNT", 10000 }, { "SILVER_AMOUNT", 100 }, { "COPPER_AMOUNT", 1 } }) do
+		local pattern = U.FormatPattern(_G[coin[1]])
+		local count = pattern and tonumber(text:match(pattern:sub(2, -2)))
+		if count then total, found = total + count * coin[2], true end
+	end
+	return found and total > 0 and total or nil
+end
+
 local function Looting(now)
 	return lootOpen or now <= lootUntil or now - moneyHeard <= MONEY_GRACE
 end
@@ -375,12 +390,16 @@ end
 -- kept a moment for that message (they may come in either order).
 local function OnMoney()
 	local money = Clean(Safe(GetMoney))
-	if not money then return end
+	-- (unread now, hidden in a fight: read afresh next time, never counted twice)
+	if not money then lastMoney = nil return end
 	local before = lastMoney
 	lastMoney = money
 	if not before or money <= before then return end
 	local now = GetTime()
+	-- (already shown from the game's words, which came first)
+	if now - moneySaid <= MONEY_GRACE then moneySaid = -100 return end
 	if Looting(now) then
+		moneyShown = now
 		AddMoney(money - before)
 	else
 		pendingMoney = { copper = money - before, at = now }
@@ -408,9 +427,20 @@ local function OnEvent(_, event, text)
 	elseif event == "CHAT_MSG_CURRENCY" then
 		OnCurrency(text)
 	elseif event == "CHAT_MSG_MONEY" then
+		-- The amount read in the message itself (your money may be unread in a fight); else the change of your
+		-- money, before or after it.
 		local now = GetTime()
-		moneyHeard = now
-		if pendingMoney and now - pendingMoney.at <= MONEY_GRACE then AddMoney(pendingMoney.copper) end
+		local said = SaidMoney(text)
+		if pendingMoney and now - pendingMoney.at <= MONEY_GRACE then
+			AddMoney(said or pendingMoney.copper)
+		elseif now - moneyShown <= MONEY_GRACE then
+			moneyShown = -100 -- (shown already, as the loot window gave it)
+		elseif said then
+			moneySaid = now
+			AddMoney(said)
+		else
+			moneyHeard = now
+		end
 		pendingMoney = nil
 	end
 end
