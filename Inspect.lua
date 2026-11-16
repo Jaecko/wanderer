@@ -205,6 +205,10 @@ local function Inspection(unit)
 	if not CanAsk(unit) or not InReach(unit) or GetTime() - lastInspect < INSPECT_DELAY then return entry end
 	lastInspect = GetTime()
 	pendingGUID = guid
+	-- (those who never answered, long ago: let go, a crowded city would keep them all)
+	for known, at in pairs(asked) do
+		if lastInspect - at >= INSPECT_RETRY then asked[known] = nil end
+	end
 	asked[guid] = GetTime()
 	NotifyInspect(unit)
 	return entry

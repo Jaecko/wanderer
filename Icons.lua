@@ -11,7 +11,6 @@ local Safe, Clean = U.Safe, U.Clean
 
 local CELL, GAP, COLUMNS = 34, 4, 4
 local RESCAN_DELAYS = { 2, 6, 15, 30 } -- addons make their buttons late
-local CLOSE_AFTER = 1.5 -- seconds without the mouse over the drawer
 -- The game's own buttons and Wanderer's stay where they are.
 local KEEP_PREFIXES = { "Minimap", "MiniMap", "GameTime", "TimeManager", "QueueStatus", "Expansion",
 	"AddonCompartment", "GarrisonLandingPage", "Wanderer", "LFG", "Calendar",
@@ -158,7 +157,7 @@ function ns.InitIcons()
 			outside = 0
 		else
 			outside = outside + elapsed
-			if outside > CLOSE_AFTER then self:Hide() end
+			if outside > ns.Skin.DRAWER_CLOSE_AFTER then self:Hide() end
 		end
 	end)
 	local events = CreateFrame("Frame")

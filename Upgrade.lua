@@ -716,3 +716,23 @@ function ns.InitUpgrade()
 		return lines[1] ~= nil
 	end, true)
 end
+
+-- An item's square in a window (Skin.Icon): a bright green arrow on its corner when the item is better for you
+-- (as the bags show it), nothing otherwise. True when it is better.
+local UP_ARROW = "Interface\\Buttons\\Arrow-Up-Up"
+function ns.MarkUpgrade(square, link)
+	if not square then return false end
+	local better = link and ns.IsUpgrade(link) or false
+	if not square.upgrade then
+		if not better then return false end
+		-- (grey first, then a pure green: the game's arrow is golden and would muddy it)
+		square.upgrade = square:CreateTexture(nil, "OVERLAY", nil, 3)
+		square.upgrade:SetSize(18, 18)
+		square.upgrade:SetPoint("CENTER", square, "BOTTOMLEFT", 4, 4)
+		square.upgrade:SetTexture(UP_ARROW)
+		square.upgrade:SetDesaturated(true)
+		square.upgrade:SetVertexColor(0.25, 1, 0.3)
+	end
+	square.upgrade:SetShown(better)
+	return better
+end

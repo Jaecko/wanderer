@@ -192,7 +192,8 @@ end
 -- The medallion (Ink lines): a rounded square at the game's portrait's place and size, a 2 px ink border (1 px on
 -- the small frames), the face (or the class icon where the game, or the frame's exception, shows one), the level in
 -- a small dark tab at the bottom corner away from the bars (none on the small frames), the class badge in the top
--- corner towards the bars; dead, a ghost or offline: greyed. The border takes the elite's gold or the rare's silver
+-- corner towards the bars, the side's PvP sign in the bottom corner away from them while the unit is flagged for
+-- PvP (the game's own sign, under the medallion, unseen meanwhile); dead, a ghost or offline: greyed. The border takes the elite's gold or the rare's silver
 -- (the game's dragon, drawn for a round portrait, unseen meanwhile), else the block's quiet tints (threat, combat).
 -- The game's round portrait, its level circle and its level stay unseen while it stands, given back after.
 
@@ -200,11 +201,19 @@ local SQUARE = "Interface\\AddOns\\Wanderer\\Media\\PortraitSquare"
 local NARROW = "Fonts\\ARIALN.TTF"
 local TAB_GROUND = { 0.055, 0.059, 0.071, 0.92 }
 local LEVEL_COLOR = { 0.95, 0.93, 0.9 }
+local LEVEL_SIZE = 12 -- the level, a little larger than the resting tab to be read at a glance
+local SKULL = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull" -- a level hidden as far above yours
 local REST_COLOR = ns.Skin.COLORS.gold
 local REST_WORDS = "Zz"
 local ELITE_EDGE, RARE_EDGE = { 0.78, 0.62, 0.25, 1 }, { 0.7, 0.72, 0.76, 1 }
 local medals = setmetatable({}, { __mode = "k" }) -- a unit frame -> its medallion
 local SMALL = { small = true, party = true }
+-- The PvP sign of each side, the game's (its newer atlas, else its older picture: the sign in its top left part).
+local PVP_ATLAS = { Alliance = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon", Horde = "UI-HUD-UnitFrame-Player-PVP-HordeIcon",
+	FFA = "UI-HUD-UnitFrame-Player-PVP-FFAIcon" }
+local PVP_FILE = { Alliance = "Interface\\TargetingFrame\\UI-PVP-Alliance", Horde = "Interface\\TargetingFrame\\UI-PVP-Horde",
+	FFA = "Interface\\TargetingFrame\\UI-PVP-FFA" }
+local PVP_CROP = 0.62
 local FACE_CROP = 0.08 -- the edge of the game's face left out on each side
 
 -- The game's level circles anywhere in a frame (found by their picture: the paths differ from frame to frame),
@@ -255,6 +264,11 @@ local function GameRegions(entry, portrait)
 	Add(walk(frame, "TargetFrameContent", "TargetFrameContentMain", "LevelBackgroundCircle"))
 	Add(walk(frame, "TargetFrameContent", "TargetFrameContentMain", "LevelText"))
 	Add(walk(frame, "TargetFrameContainer", "BossPortraitFrameTexture"))
+	-- (the game's PvP signs: the medallion's own says it)
+	for _, content in ipairs({ { "PlayerFrameContent", "PlayerFrameContentContextual" }, { "TargetFrameContent", "TargetFrameContentContextual" } }) do
+		for _, key in ipairs({ "PVPIcon", "PvpIcon", "PrestigePortrait", "PrestigeBadge" }) do Add(walk(frame, content[1], content[2], key)) end
+	end
+	if frame == _G.PlayerFrame then Add(_G.PlayerPVPIcon) end
 	for _, circle in ipairs(LevelCircles(frame)) do Add(circle) end
 	return list
 end
@@ -297,27 +311,42 @@ local function MakeMedallion(entry, portrait)
 	medal.badge:SetSize(size, size)
 	medal.badge:SetPoint("TOP" .. towards, medal, "TOP" .. towards, towards == "LEFT" and inset + 1 or -(inset + 1), -(inset + 1))
 	medal.rim:SetPoint("CENTER", medal.badge, "CENTER")
+	-- (the PvP sign in the bottom corner away from the bars, on a dark disc as the badge)
+	medal.pvpRim = medal:CreateTexture(nil, "OVERLAY", nil, 2)
+	medal.pvpRim:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+	medal.pvpRim:SetVertexColor(0.055, 0.059, 0.071, 0.9)
+	medal.pvpRim:SetSize(size + 2, size + 2)
+	medal.pvp = medal:CreateTexture(nil, "OVERLAY", nil, 3)
+	medal.pvp:SetSize(size, size)
+	medal.pvp:SetPoint("BOTTOM" .. away, medal, "BOTTOM" .. away, away == "LEFT" and inset + 1 or -(inset + 1), inset + 1)
+	medal.pvpRim:SetPoint("CENTER", medal.pvp, "CENTER")
 	if not small then
 		-- (the level in the bottom corner towards the bars, inside the portrait; resting in the top corner away)
-		local function Tab(point, color)
+		local function Tab(point, color, fontSize)
 			local tab = CreateFrame("Frame", nil, medal)
 			tab:SetFrameLevel(medal:GetFrameLevel() + 1)
-			tab:SetSize(20, 14)
+			tab:SetSize(fontSize > 10 and 22 or 20, fontSize > 10 and 16 or 14)
 			tab:SetPoint(point, medal, point, point:find("LEFT") and inset or -inset, point:find("TOP") and -inset or inset)
 			tab.ground = tab:CreateTexture(nil, "BACKGROUND")
 			tab.ground:SetAllPoints()
 			tab.ground:SetTexture(SQUARE)
 			tab.ground:SetVertexColor(unpack(TAB_GROUND))
 			tab.text = tab:CreateFontString(nil, "OVERLAY")
-			pcall(tab.text.SetFont, tab.text, NARROW, 10, "")
+			pcall(tab.text.SetFont, tab.text, NARROW, fontSize, "")
 			tab.text:SetPoint("CENTER", tab, "CENTER", 0, 0)
 			tab.text:SetTextColor(unpack(color))
 			tab.text:SetShadowOffset(1, -1)
 			tab.text:SetShadowColor(0, 0, 0, 1)
 			return tab
 		end
-		medal.tab = Tab("BOTTOM" .. towards, LEVEL_COLOR)
-		medal.rest = Tab("TOP" .. away, REST_COLOR)
+		medal.tab = Tab("BOTTOM" .. towards, LEVEL_COLOR, LEVEL_SIZE)
+		-- (a level hidden as far above yours: the game's skull, as on its own target frame)
+		medal.tab.skull = medal.tab:CreateTexture(nil, "OVERLAY")
+		medal.tab.skull:SetSize(13, 13)
+		medal.tab.skull:SetPoint("CENTER")
+		medal.tab.skull:SetTexture(SKULL)
+		medal.tab.skull:Hide()
+		medal.rest = Tab("TOP" .. away, REST_COLOR, 10)
 		medal.rest.text:SetText(REST_WORDS)
 		medal.rest:Hide()
 	end
@@ -364,6 +393,29 @@ local function Unmedallion(entry, portrait)
 	DropHitText(medal)
 	medal:Hide()
 	for _, region in ipairs(GameRegions(entry, portrait)) do ns.UnitFramesShowArt(region) end
+end
+
+-- The side a unit is flagged for PvP with ("Alliance", "Horde", "FFA" for free for all), nil when it is not.
+local function PvpSide(unit)
+	if Clean(Safe(_G.UnitIsPVPFreeForAll, unit)) then return "FFA" end
+	if not Clean(Safe(_G.UnitIsPVP, unit)) then return nil end
+	local side = Clean(Safe(UnitFactionGroup, unit))
+	return (side == "Alliance" or side == "Horde") and side or nil
+end
+ns.PortraitPvpSide = PvpSide
+
+-- The side's PvP sign on a texture: true when drawn.
+local function DrawPvp(texture, side)
+	local atlas = PVP_ATLAS[side]
+	if atlas and U.HasAtlas(atlas) then
+		texture:SetAtlas(atlas)
+	elseif PVP_FILE[side] then
+		texture:SetTexture(PVP_FILE[side])
+		texture:SetTexCoord(0, PVP_CROP, 0, PVP_CROP)
+	else
+		return false
+	end
+	return true
 end
 
 local function Medallion(entry, portrait, unit, look)
@@ -416,6 +468,11 @@ local function Medallion(entry, portrait, unit, look)
 	badge = badge and ns.DrawClassIcon(medal.badge, class, look.iconStyle)
 	medal.badge:SetShown(badge and true or false)
 	medal.rim:SetShown(badge and true or false)
+	-- Flagged for PvP (you, your target, anyone shown): the side's sign.
+	local side = PvpSide(unit)
+	local pvp = side and DrawPvp(medal.pvp, side) or false
+	medal.pvp:SetShown(pvp)
+	medal.pvpRim:SetShown(pvp)
 	-- Resting (you only): its tab.
 	if medal.rest then
 		medal.rest:SetShown(entry.key == "player" and Clean(Safe(IsResting)) and true or false)
@@ -424,7 +481,18 @@ local function Medallion(entry, portrait, unit, look)
 	if medal.tab then
 		local words = LevelWords(unit)
 		medal.tab:SetShown(words ~= nil)
-		if words then medal.tab.text:SetText(words) end
+		if words then
+			medal.tab.text:SetText(words)
+			local hidden = words == "??"
+			medal.tab.text:SetShown(not hidden)
+			medal.tab.skull:SetShown(hidden)
+			-- (one you may fight: colored by how hard it is for you, as the label colors it; the others plain)
+			local r, g, b = unpack(LEVEL_COLOR)
+			if not hidden and Clean(Safe(UnitCanAttack, "player", unit)) then
+				r, g, b = ns.World.LevelColor(tonumber(words), false, unit)
+			end
+			medal.tab.text:SetTextColor(r, g, b)
+		end
 	end
 end
 
@@ -514,7 +582,7 @@ end
 local EVENTS = { "UNIT_PORTRAIT_UPDATE", "PORTRAITS_UPDATED", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "GROUP_ROSTER_UPDATE",
 	"UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE", "UNIT_FLAGS", "UNIT_CONNECTION", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST",
 	"UNIT_HEALTH", "UNIT_TARGET", "CVAR_UPDATE", "UNIT_PET", "UNIT_MODEL_CHANGED", "UNIT_CLASSIFICATION_CHANGED",
-	"UNIT_THREAT_SITUATION_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
+	"UNIT_THREAT_SITUATION_UPDATE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "UNIT_FACTION", "PLAYER_FLAGS_CHANGED" }
 
 function ns.InitPortraits()
 	if type(_G.UnitFramePortrait_Update) == "function" then

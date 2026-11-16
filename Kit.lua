@@ -28,8 +28,11 @@ Skin.COLORS = {
 	goldDeep = { 0.48, 0.38, 0.06 }, onGold = { 1, 0.96, 0.84 },
 	title = { 0.88, 0.85, 0.77 }, objective = { 0.7, 0.66, 0.58 }, done = { 0.6, 0.57, 0.5 },
 }
--- A row's tint under the mouse, and the chosen one's (gold): the same in every list.
-Skin.HOVER, Skin.CHOSEN = 0.05, 0.1
+-- A row's tint under the mouse (white), and the chosen one's (gold): the same in every list. (chosen 0.07: the
+-- hint and status roles keep their contrast on it)
+Skin.HOVER, Skin.CHOSEN = 0.05, 0.07
+-- A drawer opened from the bar closes by itself after this long without the mouse (seconds).
+Skin.DRAWER_CLOSE_AFTER = 1.5
 local COLORS = Skin.COLORS
 -- (Util's plain separator, in the palette's quiet color now that it is known)
 U.SEPARATOR = "  " .. U.Colorize("\194\183", COLORS.muted[1], COLORS.muted[2], COLORS.muted[3]) .. "  "
@@ -72,11 +75,15 @@ local TONES = {
 local GLYPH_SHEET = "Interface\\AddOns\\Wanderer\\Media\\Glyphs"
 local GLYPH_SHEET2 = "Interface\\AddOns\\Wanderer\\Media\\Glyphs2"
 local GLYPHS = { close = 0, back = 1, chevron = 2, check = 3, up = 4, down = 5, dot = 6, plus = 7 }
-local GLYPHS2 = { cog = 0, undo = 1, move = 2, camera = 3, grid = 4, bell = 5, star = 6, reload = 7, home = 8, eyeoff = 9 }
+local GLYPHS2 = { cog = 0, undo = 1, move = 2, camera = 3, grid = 4, bell = 5, star = 6, reload = 7, home = 8, eyeoff = 9, minus = 10, pencil = 11 }
+-- A glyph's place: its square, how many squares its sheet has, the sheet (an unknown name: the first square).
+local function GlyphPlace(name)
+	if GLYPHS[name] then return GLYPHS[name], 8, GLYPH_SHEET end
+	if GLYPHS2[name] then return GLYPHS2[name], 16, GLYPH_SHEET2 end
+	return 0, 8, GLYPH_SHEET
+end
 function Skin.SetGlyph(texture, name, flipped)
-	local index, squares, sheet = GLYPHS[name], 8, GLYPH_SHEET
-	if not index and GLYPHS2[name] then index, squares, sheet = GLYPHS2[name], 16, GLYPH_SHEET2 end
-	index = index or 0
+	local index, squares, sheet = GlyphPlace(name)
 	texture:SetTexture(sheet)
 	local left, right = index / squares, (index + 1) / squares
 	if flipped then texture:SetTexCoord(left, right, 1, 0) else texture:SetTexCoord(left, right, 0, 1) end
@@ -97,9 +104,7 @@ end
 -- A glyph inside words ("|T...|t"): Skin.GlyphText(name, role, size). role: a color's role (label unless
 -- said) or { r, g, b }; size: its height in the line (0: the line's own, the default).
 function Skin.GlyphText(name, role, size)
-	local index, squares, sheet = GLYPHS[name], 8, GLYPH_SHEET
-	if not index and GLYPHS2[name] then index, squares, sheet = GLYPHS2[name], 16, GLYPH_SHEET2 end
-	index = index or 0
+	local index, squares, sheet = GlyphPlace(name)
 	local c = type(role) == "table" and role or COLORS[role or "label"] or COLORS.label
 	size = math.floor((tonumber(size) or 0) + 0.5)
 	-- (the sheet's pixels: squares of 16 on a line)
@@ -129,13 +134,19 @@ end
 
 -- Lines and grounds ----------------------------------------------------------------------------------------
 
--- A thin frame around something: four lines, one color (edges.Color(r, g, b, a) changes it).
-function Skin.Edges(frame, r, g, b, a)
+-- A thin frame around something: four lines, one color (edges.Color(r, g, b, a) changes it). around (optional):
+-- a piece of the frame (a ground placed inside or outside it) the lines go around instead of the frame's own edge.
+function Skin.Edges(frame, r, g, b, a, around)
 	local edges = {}
 	for index, points in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
 		local edge = frame:CreateTexture(nil, "BORDER")
-		edge:SetPoint(points[1])
-		edge:SetPoint(points[2])
+		if around then
+			edge:SetPoint(points[1], around, points[1])
+			edge:SetPoint(points[2], around, points[2])
+		else
+			edge:SetPoint(points[1])
+			edge:SetPoint(points[2])
+		end
 		if index <= 2 then edge:SetHeight(1) else edge:SetWidth(1) end
 		edges[index] = edge
 	end
@@ -713,34 +724,100 @@ function Skin.Icon(parent, size)
 	return holder
 end
 
--- An amount of money: gold, silver, copper (money:ShowCopper(false) hides the copper box).
--- money:Set(copper), money:Get().
-function Skin.Money(parent, onChange)
+-- An amount of money: one box per coin, gold, silver, copper (digits only: no letters to type). Tab and Shift+Tab
+-- go from one to the next, a box taken has its digits chosen, Enter keeps the amount, Escape gives back the one
+-- before. onChange(copper, typed): every change (typed: by the player, not by Set). opts { width, height, big (the
+-- large font), tip }. money:Set(copper), money:Get(), money:ShowCopper(false) hides the copper box;
+-- money.input: HasFocus(), SetFocus(), ClearFocus() for the three boxes at once.
+function Skin.Money(parent, onChange, opts)
+	opts = opts or {}
 	local box = CreateFrame("Frame", nil, parent)
-	box:SetSize(190, 28)
-	local function Box(width, icon, anchor)
-		local input = Skin.CreateInput(box, nil, 7)
-		input:SetSize(width, 28)
+	local height = opts.height or 28
+	local width = opts.width or 190
+	box:SetSize(width, height)
+	local COIN, GAP = opts.big and 16 or 13, opts.big and 10 or 8
+	-- (silver and copper always wide enough for "99", gold for several digits, in the font they use: the
+	-- whole grows past the width asked rather than hiding a digit)
+	local coins = 3 * (COIN + 3) + 2 * GAP
+	local small = math.max(opts.big and 54 or 34, math.floor((width - coins) * 0.27))
+	local wide = math.max(opts.big and 76 or 48, width - coins - 2 * small)
+	box:SetWidth(coins + 2 * small + wide)
+	local boxes, before, setting = {}, nil, false
+	local function Taken()
+		for _, input in ipairs(boxes) do if input:IsShown() and input:HasFocus() then return true end end
+		return false
+	end
+	local function Box(boxWidth, icon, anchor, letters)
+		local input = Skin.CreateInput(box, nil, letters)
+		input:SetSize(boxWidth, height)
 		input:SetNumeric(true)
 		input:SetJustifyH("RIGHT")
+		input:SetTextInsets(4, 8, 0, 0)
+		if opts.big and Skin.FONT and Skin.FONT.xl then input:SetFontObject(Skin.FONT.xl) end
 		input.coin = box:CreateTexture(nil, "ARTWORK")
-		input.coin:SetSize(13, 13)
+		input.coin:SetSize(COIN, COIN)
 		input.coin:SetTexture(icon)
 		input.coin:SetPoint("LEFT", input, "RIGHT", 3, 0)
-		if anchor then input:SetPoint("LEFT", anchor, "RIGHT", 8, 0) else input:SetPoint("LEFT") end
-		input:SetScript("OnTextChanged", function() if onChange then onChange() end end)
-		input:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-		input:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		if anchor then input:SetPoint("LEFT", anchor, "RIGHT", GAP, 0) else input:SetPoint("LEFT") end
+		input:SetScript("OnTextChanged", function(_, typed)
+			if setting then return end
+			if onChange then onChange(box:Get(), typed and true or false) end
+		end)
+		input:SetScript("OnEditFocusGained", function(self)
+			if not before then before = box:Get() end
+			self:HighlightText()
+		end)
+		input:SetScript("OnEditFocusLost", function(self)
+			self:HighlightText(0, 0)
+			-- (an empty box reads as nothing of that coin)
+			if (self:GetText() or "") == "" then
+				setting = true
+				self:SetText("0")
+				setting = false
+			end
+			C_Timer.After(0, function() if not Taken() then before = nil end end)
+		end)
+		input:SetScript("OnEnterPressed", function() box.input:ClearFocus() end)
+		input:SetScript("OnEscapePressed", function()
+			local old = before
+			box.input:ClearFocus()
+			if old and old ~= box:Get() then
+				box:Set(old)
+				if onChange then onChange(old, true) end
+			end
+			before = nil
+		end)
+		input:SetScript("OnTabPressed", function(self)
+			local shown = {}
+			for _, other in ipairs(boxes) do if other:IsShown() then shown[#shown + 1] = other end end
+			for index, other in ipairs(shown) do
+				if other == self then
+					local step = IsShiftKeyDown() and -1 or 1
+					local nextOne = shown[(index - 1 + step) % #shown + 1]
+					nextOne:SetFocus()
+					return
+				end
+			end
+		end)
+		if opts.tip then Skin.Tooltip(input, opts.tip, "ANCHOR_TOP") end
+		boxes[#boxes + 1] = input
 		return input
 	end
-	box.gold = Box(62, "Interface\\MoneyFrame\\UI-GoldIcon")
-	box.silver = Box(38, "Interface\\MoneyFrame\\UI-SilverIcon", box.gold.coin)
-	box.copper = Box(38, "Interface\\MoneyFrame\\UI-CopperIcon", box.silver.coin)
+	box.gold = Box(wide, "Interface\\MoneyFrame\\UI-GoldIcon", nil, 7)
+	box.silver = Box(small, "Interface\\MoneyFrame\\UI-SilverIcon", box.gold.coin, 2)
+	box.copper = Box(small, "Interface\\MoneyFrame\\UI-CopperIcon", box.silver.coin, 2)
+	box.input = {
+		HasFocus = function() return Taken() end,
+		SetFocus = function() box.gold:SetFocus() end,
+		ClearFocus = function() for _, input in ipairs(boxes) do input:ClearFocus() end end,
+	}
 	function box:Set(copper)
-		copper = math.max(0, math.floor(copper or 0))
+		copper = math.max(0, math.floor(tonumber(copper) or 0))
+		setting = true
 		self.gold:SetText(tostring(math.floor(copper / 10000)))
 		self.silver:SetText(tostring(math.floor(copper / 100) % 100))
 		self.copper:SetText(tostring(copper % 100))
+		setting = false
 	end
 	function box:Get()
 		local copper = self.copper:IsShown() and (tonumber(self.copper:GetText()) or 0) or 0
@@ -749,7 +826,64 @@ function Skin.Money(parent, onChange)
 	function box:ShowCopper(shown)
 		self.copper:SetShown(shown)
 		self.copper.coin:SetShown(shown)
+		if not shown and self.padCoin == "copper" then self.padCoin = "silver" end
 	end
+	-- With a controller nothing is typed: the amount is one stop of the cross (its boxes are not stops of their
+	-- own), its left and right step one coin, faster the longer it is held, its button chooses which coin (a gold
+	-- line under it). A window may give the amount steps of its own (box.padAdjust set after): no coin chosen then.
+	local COIN_VALUE, COIN_ORDER = { gold = 10000, silver = 100, copper = 1 }, { "gold", "silver", "copper" }
+	local COIN_WORDS = { gold = "MONEY_PAD_GOLD", silver = "MONEY_PAD_SILVER", copper = "MONEY_PAD_COPPER" }
+	local MOST = 9999999 * 10000 + 9999
+	box.padCoin, box.padTip = "gold", true
+	box:EnableMouse(true)
+	for _, input in ipairs(boxes) do
+		input.padPass = true
+		input.padLine = box:CreateTexture(nil, "OVERLAY")
+		input.padLine:SetHeight(2)
+		input.padLine:SetPoint("TOPLEFT", input, "BOTTOMLEFT", 2, -1)
+		input.padLine:SetPoint("TOPRIGHT", input, "BOTTOMRIGHT", -2, -1)
+		input.padLine:SetColorTexture(Skin.RGB("gold", 1))
+		input.padLine:Hide()
+	end
+	local function Steps(self) return self.padAdjust == box.padStepCoin end
+	local function Line()
+		local chosen = U.UsingPad and U.UsingPad() and U.Hovered(box) and Steps(box)
+		for _, coin in ipairs(COIN_ORDER) do box[coin].padLine:SetShown(chosen and box.padCoin == coin and box[coin]:IsShown() or false) end
+	end
+	function box:padStepCoin(delta, repeats)
+		-- (held: ten at a time after a moment, a hundred after a longer one)
+		repeats = repeats or 0
+		local times = repeats >= 25 and 100 or repeats >= 10 and 10 or 1
+		local copper = math.min(MOST, math.max(0, self:Get() + delta * COIN_VALUE[self.padCoin] * times))
+		if copper == self:Get() then return end
+		self:Set(copper)
+		if onChange then onChange(copper, true) end
+	end
+	box.padAdjust = box.padStepCoin
+	function box:padClick()
+		if not Steps(self) then return false end
+		local shown = {}
+		for _, coin in ipairs(COIN_ORDER) do if self[coin]:IsShown() then shown[#shown + 1] = coin end end
+		for index, coin in ipairs(shown) do
+			if coin == self.padCoin then
+				self.padCoin = shown[index % #shown + 1]
+				break
+			end
+		end
+		Skin.Play("click")
+		Line()
+		Skin.ShowTip(self, self.padWords, "ANCHOR_TOP")
+		return true
+	end
+	function box:padWords()
+		if not (U.UsingPad and U.UsingPad() and Steps(self)) then return nil end
+		return { ns.L.MONEY_PAD_TITLE, ns.L[COIN_WORDS[self.padCoin]], ns.L.MONEY_PAD_COIN }
+	end
+	Skin.Tooltip(box, box.padWords, "ANCHOR_TOP")
+	box:HookScript("OnEnter", Line)
+	-- (left: once the controller's choice has moved on)
+	box:HookScript("OnLeave", function() C_Timer.After(0, Line) end)
+	box:Set(0)
 	return box
 end
 
@@ -803,8 +937,13 @@ function Skin.CloseButton(window, onClose)
 	window.closeButton = close
 	close.glyph = Skin.Glyph(close, "close", 11)
 	close.glyph:SetPoint("CENTER")
-	close:SetScript("OnEnter", function(self) self.glyph:SetVertexColor(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3]) end)
-	close:SetScript("OnLeave", function(self) self.glyph:SetVertexColor(COLORS.label[1], COLORS.label[2], COLORS.label[3]) end)
+	close:SetScript("OnEnter", function(self) self.glyph:SetVertexColor(Skin.InkColor("gold", self.paper)) end)
+	close:SetScript("OnLeave", function(self) self.glyph:SetVertexColor(Skin.InkColor("label", self.paper)) end)
+	-- (on a parchment window: in ink)
+	function close:SetPaper(on)
+		self.paper = on and true or nil
+		self.glyph:SetVertexColor(Skin.InkColor(self:IsMouseOver() and "gold" or "label", self.paper))
+	end
 	close:SetScript("OnMouseDown", function(self) self.glyph:SetPoint("CENTER", 1, -1) end)
 	close:SetScript("OnMouseUp", function(self) self.glyph:SetPoint("CENTER", 0, 0) end)
 	close:SetScript("OnClick", function()
@@ -978,7 +1117,7 @@ local function Open(open)
 	question = open
 	window.words:SetText(open.text or "")
 	window.input:SetShown(open.input ~= nil)
-	local note = open.input ~= nil and not open.copy and U.UsingPad and U.UsingPad() and ns.L.ASK_TYPE_PAD
+	local note = open.input ~= nil and not open.copy and U.UsingPad and U.UsingPad() and InCombatLockdown() and ns.L.ASK_TYPE_PAD
 	window.padNote:SetText(note or "")
 	window.padNote:SetShown(note and true or false)
 	local check = type(open.check) == "table" and open.check or nil
@@ -1002,10 +1141,14 @@ local function Open(open)
 	window:SetFrameStrata(open.strata or "DIALOG")
 	Layout(window)
 	if window:IsShown() then if window.Raise then window:Raise() end else window:Show() end
-	-- (with a controller, no key to write with: the box would keep the game's keys)
+	-- (with a controller: its keyboard under the question, words to write; the box itself never takes the keys, it
+	-- would keep the game's. In a fight, when the keyboard cannot be, the note says to use a real one.)
 	if open.input and not (U.UsingPad and U.UsingPad()) then
 		window.input:SetFocus()
 		window.input:HighlightText()
+	elseif open.input and not open.copy and Skin.PadKeyboard and Skin.PadKeyboard(window.input) then
+		window.padNote:SetShown(false)
+		Layout(window)
 	end
 end
 
@@ -1198,6 +1341,9 @@ function Skin.Table(parent, spec)
 		end
 		row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		row:SetScript("OnClick", function(self, mouse)
+			-- An item's row: the game's own modified clicks first (Shift links it in the chat, Ctrl tries it on).
+			local link = self.entry and not self.entry.header and self.entry.link
+			if mouse == "LeftButton" and U.ItemClick(link) then return end
 			if self.entry and not self.entry.header then
 				Skin.Play("click")
 				spec.onClick(self.entry, mouse)
@@ -1208,7 +1354,8 @@ function Skin.Table(parent, spec)
 		row:SetScript("OnEnter", function(self)
 			local entry = self.entry
 			if not entry or entry.header then return end
-			self.hover:Show()
+			-- (a chosen row keeps its own tint alone: the two never stack)
+			self.hover:SetShown(not self.chosen:IsShown())
 			if entry.link then
 				GameTooltip:SetOwner(self, "ANCHOR_LEFT")
 				GameTooltip:SetHyperlink(entry.link)
@@ -1244,6 +1391,7 @@ function Skin.Table(parent, spec)
 			if self.icon then self.icon:SetShown(not header) end
 			self.name:SetShown(not header)
 			self.chosen:SetShown(chosen and not header or false)
+			if self.chosen:IsShown() then self.hover:Hide() end
 			self.chosenEdges.Color(Skin.RGB("gold", chosen and not header and 0.3 or 0))
 			for key, cell in pairs(self.cells) do
 				cell:SetShown(not header)
@@ -1356,8 +1504,22 @@ function Skin.ScrollBar(parent, onOffset)
 		end)
 	end)
 	thumb:SetScript("OnMouseUp", function(self) self:SetScript("OnUpdate", nil) end)
-	thumb:SetScript("OnEnter", function(self) self.fill:SetColorTexture(Skin.RGB("gold", 0.75)) end)
-	thumb:SetScript("OnLeave", function(self) self.fill:SetColorTexture(COLORS.kicker[1], COLORS.kicker[2], COLORS.kicker[3], 0.5) end)
+	local function Rest() return Skin.InkColor("kicker", bar.paper) end
+	thumb:SetScript("OnEnter", function(self)
+		local r, g, b = Skin.InkColor("gold", bar.paper)
+		self.fill:SetColorTexture(r, g, b, bar.paper and 0.9 or 0.75)
+	end)
+	thumb:SetScript("OnLeave", function(self)
+		local r, g, b = Rest()
+		self.fill:SetColorTexture(r, g, b, bar.paper and 0.8 or 0.5)
+	end)
+	-- (on a parchment window: rail and thumb in ink, strong enough to be seen on the paper)
+	function bar:SetPaper(on)
+		self.paper = on and true or nil
+		local r, g, b = Rest()
+		rail:SetColorTexture(r, g, b, self.paper and 0.5 or 0.22)
+		thumb.fill:SetColorTexture(r, g, b, self.paper and 0.8 or 0.5)
+	end
 	bar:SetScript("OnClick", function(self)
 		local below = CursorTop() > (self:GetTop() or 0) - (thumb:GetTop() or 0) + thumb:GetHeight()
 		onOffset(math.max(0, math.min(Range(), self.offset + (below and self.shown or -self.shown))))
@@ -1565,10 +1727,15 @@ function Skin.CardRow(parent)
 	row:RegisterForClicks("LeftButtonUp")
 	row.hover = row:CreateTexture(nil, "BACKGROUND")
 	row.hover:SetAllPoints()
-	row.hover:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], Skin.CHOSEN)
+	-- (the family's one hover tint: white at Skin.HOVER; gold stays for what is chosen)
+	row.hover:SetColorTexture(1, 1, 1, Skin.HOVER)
 	row.hover:Hide()
 	row.glyph = Skin.Glyph(row, "chevron", 14)
 	row.glyph:SetPoint("LEFT", row, "LEFT", 6, 0)
+	-- (its right-hand mark: muted words, or a glyph when spec.rightGlyph names one: chevron, up, down)
+	row.mark = Skin.Glyph(row, "chevron", 11)
+	row.mark:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+	row.mark:Hide()
 	row.right = Skin.Text(row, "GameTooltipTextSmall", "muted")
 	row.right:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 	row.text = Skin.Text(row, "GameTooltipText", "soft")
@@ -1580,6 +1747,7 @@ function Skin.CardRow(parent)
 		self.text:SetTextColor(c[1], c[2], c[3])
 		local g = COLORS[on and "gold" or (self.role == "warn" and "warn" or "label")]
 		self.glyph:SetVertexColor(g[1], g[2], g[3])
+		self.mark:SetVertexColor(g[1], g[2], g[3])
 		self.hover:SetShown(on)
 	end
 	function row:Set(spec)
@@ -1589,6 +1757,9 @@ function Skin.CardRow(parent)
 		self.role = spec.role
 		self.text:SetText(spec.text or "")
 		self.right:SetText(spec.right or "")
+		self.right:SetPoint("RIGHT", self, "RIGHT", spec.rightGlyph and -24 or -8, 0)
+		self.mark:SetShown(spec.rightGlyph ~= nil)
+		if spec.rightGlyph then Skin.SetGlyph(self.mark, spec.rightGlyph) end
 		self.glyph:SetShown(spec.glyph ~= false)
 		if spec.glyph then Skin.SetGlyph(self.glyph, spec.glyph) end
 		Paint(self, false)
@@ -2182,7 +2353,7 @@ local SHADE = { 0.24, 0.15, 0.06 } -- the darker sides
 local INK_EDGE = { 0.28, 0.18, 0.08 }
 
 Skin.INK = {
-	gold = { 0.4, 0.19, 0.03 }, kicker = { 0.32, 0.22, 0.08 }, label = { 0.33, 0.24, 0.12 }, text = { 0.2, 0.13, 0.07 },
+	gold = { 0.36, 0.17, 0.02 }, kicker = { 0.32, 0.22, 0.08 }, label = { 0.33, 0.24, 0.12 }, text = { 0.2, 0.13, 0.07 },
 	soft = { 0.28, 0.2, 0.11 }, muted = { 0.36, 0.29, 0.2 }, good = { 0.05, 0.3, 0.07 }, bad = { 0.5, 0.1, 0.06 },
 	warn = { 0.4, 0.2, 0.02 }, blue = { 0.1, 0.24, 0.46 },
 	title = { 0.22, 0.14, 0.07 }, objective = { 0.3, 0.22, 0.12 }, done = { 0.38, 0.31, 0.22 },

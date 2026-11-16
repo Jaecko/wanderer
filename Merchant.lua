@@ -23,6 +23,7 @@ local POOR = (Enum and Enum.ItemQuality and Enum.ItemQuality.Poor) or 0
 local frame
 local queue, sinceSell, startMoney = {}, 0, nil
 local earned = 0 -- what the items sold are worth (the money itself may come later than the last sale)
+local soldCount = 0 -- how many items went (said with the gold)
 local repairAfterSale = false -- the repair waits for the junk's gold
 local open = false -- the merchant window is there
 
@@ -33,6 +34,8 @@ local function MerchantBuys()
 	if button then return button:IsShown() end
 	return true
 end
+
+ns.MerchantBuys = MerchantBuys
 
 local Container = C_Container or {}
 
@@ -83,9 +86,9 @@ local function Stop()
 	frame:SetScript("OnUpdate", nil)
 	if startMoney then
 		local gain = math.max((Clean(Safe(GetMoney)) or startMoney) - startMoney, earned)
-		if gain > 0 then ns.Print(L.MSG_JUNK_SOLD:format(Coins(gain))) end
+		if gain > 0 then ns.Print((soldCount == 1 and L.MSG_JUNK_SOLD_ONE or L.MSG_JUNK_SOLD):format(soldCount, Coins(gain))) end
 	end
-	startMoney, earned = nil, 0
+	startMoney, earned, soldCount = nil, 0, 0
 	-- (Fill up waited for the sale to be counted)
 	ns.RefreshProvisions()
 	if repairAfterSale then
@@ -106,6 +109,7 @@ local function OnUpdate(_, elapsed)
 	if type(info) == "table" and Clean(info.itemID) == item.id and not Clean(info.isLocked) then
 		Safe(Container.UseContainerItem, item.bag, item.slot)
 		earned = earned + (U.SellPrice(Clean(info.hyperlink)) or 0) * (Clean(info.stackCount) or 1)
+		soldCount = soldCount + (Clean(info.stackCount) or 1)
 	end
 	if not queue[1] then
 		-- The last sale needs a moment before the money is counted.

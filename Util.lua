@@ -587,7 +587,6 @@ function Util.TrainerPlan(services)
 	return chosen, spent, total
 end
 
--- Services learned, from the highest index down (the indices of the others stay right).
 -- The trainer's services chosen ({ index, cost, name, sub }) bought one a moment after the other, from the highest
 -- index down (the indices of the others stay right): each one first found again (still there and still to learn,
 -- by its name and rank when it moved), while the gold lasts (counted here: the game takes it only with the
@@ -944,7 +943,8 @@ function Util.Professions()
 		if index then name, icon, rank, most, _, _, line = Util.Safe(GetProfessionInfo, index) end
 		name = Util.Clean(name)
 		if name then
-			list[#list + 1] = { name = name, icon = Util.Clean(icon), rank = Util.Clean(rank) or 0, most = Util.Clean(most),
+			list[#list + 1] = { name = name, icon = Util.Clean(icon), rank = tonumber(Util.Clean(rank)) or 0,
+				most = tonumber(Util.Clean(most)) or tonumber(Util.Clean(rank)) or 0,
 				line = Util.Clean(line), primary = position <= 2 }
 		end
 	end
@@ -1161,15 +1161,45 @@ end
 -- where the game had placed it (none of the game's placing called from here).
 local OFF_SCREEN = -10000
 local offPoints = setmetatable({}, { __mode = "k" })
+local offWatched = setmetatable({}, { __mode = "k" })
+local offPending = setmetatable({}, { __mode = "k" })
+
+-- Out of sight again when the game places it back on the screen (another window opened: the game's panels
+-- are lined up again, this one with them, still clear but under your clicks). Next frame, never inside the
+-- game's own placing.
+local function KeepOff(frame)
+	if offWatched[frame] or not hooksecurefunc then return end
+	offWatched[frame] = true
+	hooksecurefunc(frame, "SetPoint", function(self)
+		if not offPoints[self] or offPending[self] then return end
+		local _, _, _, x = self:GetPoint(1)
+		if x == OFF_SCREEN then return end
+		offPending[self] = true
+		C_Timer.After(0, function()
+			offPending[self] = nil
+			if not offPoints[self] then return end
+			local _, _, _, now = self:GetPoint(1)
+			if now == OFF_SCREEN then return end
+			self:SetAlpha(0)
+			self:ClearAllPoints()
+			self:SetPoint("TOPLEFT", UIParent, "TOPLEFT", OFF_SCREEN, 0)
+		end)
+	end)
+end
+
 function Util.HideOffScreen(frame, hidden)
 	if not frame then return end
 	if hidden then
+		KeepOff(frame)
 		local _, _, _, x = frame:GetPoint(1)
 		if x ~= OFF_SCREEN then
 			local points = {}
 			for index = 1, frame:GetNumPoints() do points[index] = { frame:GetPoint(index) } end
 			-- (a frame without a point yet: the former places kept, if any)
 			if points[1] or not offPoints[frame] then offPoints[frame] = points end
+		elseif not offPoints[frame] then
+			-- (one with no place of its own, left out there when it came back: known as away again)
+			offPoints[frame] = {}
 		end
 		frame:SetAlpha(0)
 		frame:ClearAllPoints()
@@ -1197,6 +1227,9 @@ end
 -- A link in the chat's box (never sent: the player sends it or not); false when no box opens.
 function Util.ChatInsert(link)
 	if type(link) ~= "string" or link == "" then return false end
+	-- (Wanderer Chat's answer line first, when it is the one being written in: the link lands once)
+	local chat = rawget(_G, "WandererChat")
+	if type(chat) == "table" and type(chat.Insert) == "function" and chat.Insert(link) then return true end
 	local util = _G.ChatFrameUtil
 	local insert = _G.ChatEdit_InsertLink or (util and util.InsertLink)
 	if insert and insert(link) then return true end
@@ -1204,6 +1237,27 @@ function Util.ChatInsert(link)
 	if not open then return false end
 	open(link)
 	return true
+end
+
+-- A modified click on an item, a battle pet or a spell (link: its link, or an item's id), the game's way: Shift
+-- links it in the chat, Ctrl tries it on (the game's own keys for both). True when such a click was handled: the
+-- square or row it came from then does nothing else with it. (API 22)
+function Util.ItemClick(link)
+	if not (IsModifiedClick and Util.Clean(Util.Safe(IsModifiedClick))) then return false end
+	if type(link) == "number" then
+		local _, made = Util.ItemInfo(link)
+		link = made
+	end
+	if type(link) ~= "string" or link == "" then return false end
+	-- (a spell: only linked, Shift; nothing to try on)
+	if link:find("spell:", 1, true) or link:find("enchant:", 1, true) then
+		if not Util.Clean(Util.Safe(IsModifiedClick, "CHATLINK")) then return false end
+		Util.ChatInsert(link)
+		return true
+	end
+	if not HandleModifiedItemClick then return false end
+	-- (the game says whether it did something with it: else the click goes on to the row)
+	return Util.Clean(Util.Safe(HandleModifiedItemClick, link)) == true
 end
 
 -- A menu of the game's (MenuUtil) at a frame; false when the game has none. With a controller, a card of ours (Pad.lua).

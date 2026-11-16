@@ -427,6 +427,8 @@ local function LabelPage()
 	Slider("LABEL_SCALE", L.LABEL_SCALE, "label.scale", "%.1f", ns.RefreshAll)
 	Slider("LABEL_PADDING", L.LABEL_PADDING, "label.padding", "%d", ns.RefreshAll)
 	Under(Slider("LABEL_BG_OPACITY", L.LABEL_BG_OPACITY, "label.bgOpacity", "%d %%", ns.RefreshAll), enabled, labelOn)
+	-- (the game's windows dressed once: off, their own look comes back at the next /reload)
+	Yield(TableCheckbox("label", "gameSkins", L.LABEL_GAME_SKINS, L.LABEL_GAME_SKINS_DESC, ns.RefreshGameSkins), "gameSkins")
 
 	Header(L.SECTION_HIGHLIGHTS)
 	LabelCheckbox("highlight", L.LABEL_HIGHLIGHT, L.LABEL_HIGHLIGHT_DESC)
@@ -791,6 +793,8 @@ end
 -- list (folded).
 local function PracticalPage()
 	Page(L.PAGE_PRACTICAL, "practical")
+	-- Wanderer's merchant window (MerchantWindow.lua); off: the game's own, the automations below still there.
+	TableCheckbox("merchant", "window", L.MERCHANT_WINDOW, L.MERCHANT_WINDOW_DESC, function() ns.RefreshMerchantWindow() end)
 	Yield(TableCheckbox("merchant", "sellJunk", L.MERCHANT_SELL_JUNK, L.MERCHANT_SELL_JUNK_DESC), "sellJunk")
 	local repair = Yield(TableCheckbox("merchant", "repair", L.MERCHANT_REPAIR, L.MERCHANT_REPAIR_DESC), "repair")
 	Under(Yield(TableCheckbox("merchant", "guildRepair", L.MERCHANT_GUILD_REPAIR, L.MERCHANT_GUILD_REPAIR_DESC), "repair"),
@@ -803,6 +807,9 @@ local function PracticalPage()
 
 	Header(L.SECTION_LOOT)
 	Yield(TableCheckbox("loot", "fast", L.LOOT_FAST, L.LOOT_FAST_DESC), "fastLoot")
+	-- Wanderer's loot window and the group's rolls (LootWindow.lua, LootRolls.lua).
+	Yield(TableCheckbox("loot", "window", L.LOOT_WINDOW, L.LOOT_WINDOW_DESC, function() ns.RefreshLootWindow() end), "lootWindow")
+	Yield(TableCheckbox("loot", "rolls", L.ROLLS_WINDOW, L.ROLLS_WINDOW_DESC, function() ns.RefreshLootRolls() end), "lootRolls")
 	-- The loot feed (LootFeed.lua): what you pick up, one line each.
 	local feed = Yield(TableCheckbox("loot", "feed", L.LOOT_FEED, L.LOOT_FEED_DESC, ns.RefreshLootFeed), "lootFeed")
 	feed.descPad = L.LOOT_FEED_DESC_PAD -- (without the mouse's Shift click)
@@ -932,7 +939,7 @@ local function ProfilesPage()
 		ns.Skin.AskText(L.PROFILE_COPY_PROMPT, "", function(name) ns.CopyProfile(UniqueName(name)) end)
 	end)
 	-- (a character's own profile is never deleted: greyed while it is the one in use)
-	local delete = Button(L.PROFILE_DELETE, L.REMOVE, L.PROFILE_DELETE_DESC, DeleteAsk)
+	local delete = Button(L.PROFILE_DELETE, L.PROFILE_DELETE_BUTTON, L.PROFILE_DELETE_DESC, DeleteAsk)
 	delete.usable = function() return ns.profileName ~= ns.OwnProfile() end
 	Button(L.RESET_PROFILE, L.RESET_PROFILE_BUTTON, L.RESET_PROFILE_DESC, ResetAsk)
 	Button(L.CHARACTERS_TITLE, L.OPEN, L.CHARACTERS_DESC, function()

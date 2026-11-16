@@ -38,12 +38,12 @@ end
 local function Mine(key)
 	local root = ns.root
 	if not root then return { professions = {}, known = {} } end
-	root.reagentsKnown = root.reagentsKnown or {}
+	root.reagentsKnown = type(root.reagentsKnown) == "table" and root.reagentsKnown or {}
 	key = key or ns.CharacterKey()
 	local entry = root.reagentsKnown[key]
-	if type(entry) ~= "table" or not entry.known then entry = {} end
+	if type(entry) ~= "table" or type(entry.known) ~= "table" then entry = {} end
 	root.reagentsKnown[key] = entry
-	entry.professions = entry.professions or {}
+	entry.professions = type(entry.professions) == "table" and entry.professions or {}
 	entry.known = entry.known or {}
 	return entry
 end
@@ -101,7 +101,7 @@ function ns.ReagentUses(item)
 	local mine = Mine()
 	local others = {}
 	for key, entry in pairs(ns.root and ns.root.reagentsKnown or {}) do
-		if key ~= ns.CharacterKey() and type(entry.professions) == "table" then
+		if key ~= ns.CharacterKey() and type(entry) == "table" and type(entry.professions) == "table" then
 			for name in pairs(entry.professions) do others[name] = true end
 		end
 	end
@@ -109,7 +109,7 @@ function ns.ReagentUses(item)
 	local function Add(name)
 		if seen[name] then return end
 		seen[name] = true
-		local count = mine.known[name] and mine.known[name][item]
+		local count = type(mine.known[name]) == "table" and mine.known[name][item] or nil
 		uses[#uses + 1] = { name = name, mine = mine.professions[name] or count ~= nil, alt = others[name] or false,
 			count = count or 0 }
 	end
@@ -119,7 +119,7 @@ function ns.ReagentUses(item)
 	end
 	-- A recipe the table does not know (the game's own): still said.
 	for name, items in pairs(mine.known) do
-		if items[item] then Add(name) end
+		if type(items) == "table" and items[item] then Add(name) end
 	end
 	return uses
 end

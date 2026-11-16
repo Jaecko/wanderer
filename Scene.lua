@@ -56,6 +56,11 @@ local SHOW_EVENTS = {
 	GOSSIP_SHOW = { "CustomGossipFrameManager", "GossipFrame" }, QUEST_GREETING = { "QuestFrame" },
 	QUEST_DETAIL = { "QuestFrame" }, QUEST_PROGRESS = { "QuestFrame" }, QUEST_COMPLETE = { "QuestFrame" },
 }
+-- Windows a conversation opens (a merchant, a trainer, the flight map, the bank...): the scene ends with them.
+local WINDOW_EVENTS = {
+	MERCHANT_SHOW = true, TRAINER_SHOW = true, TAXIMAP_OPENED = true, BANKFRAME_OPENED = true, PET_STABLE_SHOW = true,
+	AUCTION_HOUSE_SHOW = true, GUILDBANKFRAME_OPENED = true,
+}
 -- Pages of a quest itself (Spoken can read them again from here).
 local QUEST_PAGES = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
 
@@ -63,6 +68,9 @@ local QUEST_ICONS = {
 	available = { atlas = "QuestNormal", texture = "Interface\\GossipFrame\\AvailableQuestIcon" },
 	complete = { atlas = "QuestTurnin", texture = "Interface\\GossipFrame\\ActiveQuestIcon" },
 	active = { atlas = "QuestActive", texture = "Interface\\GossipFrame\\IncompleteQuestIcon" },
+	-- Daily and repeatable quests: the game's blue marks.
+	repeatable = { atlas = "QuestDaily", texture = "Interface\\GossipFrame\\DailyQuestIcon" },
+	repeatableComplete = { atlas = "QuestRepeatableTurnin", texture = "Interface\\GossipFrame\\DailyActiveQuestIcon" },
 }
 
 -- Colors on the dark look and on parchment, by role.
@@ -82,7 +90,7 @@ local PAPER = {
 	mark = { 0.45, 0.26, 0.05, 0.85 }, ring = { 0.3, 0.19, 0.07, 0.75 },
 }
 
-local panel, skin, portrait, portraitRing, nameText, titleText, rule, saidText, bodyText, rewardsLabel, moneyText, keysText
+local panel, skin, portrait, portraitRing, nameText, titleText, rule, saidText, bodyText, rewardsLabel, alsoLabel, moneyText, keysText
 local replayLink, keysLink
 local PlacePanel
 local choiceRows, rewardItems, actionButtons = {}, {}, {}
@@ -205,15 +213,44 @@ end
 -- Text -------------------------------------------------------------------------------
 
 -- Pages of whole sentences, about PAGE_CHARS long. A sentence is a run of
--- words with its ending marks; line breaks separate sentences too. Only
--- plain ASCII marks are used: accented letters are never cut.
+-- words with its ending marks (and closing quotes), ended by a space or a
+-- line break: a number such as 1.5 is never cut. The line breaks are kept:
+-- a single one stays a new line, two or more a new paragraph. Only plain
+-- ASCII marks are used: accented letters are never cut.
+-- Returns the sentences and, for each, what stands before it (" ", "\n" or "\n\n").
 local function Sentences(text)
-	local list = {}
-	for sentence in text:gmatch("[^%.!%?\n]+[%.!%?]*") do
-		sentence = strtrim(sentence)
-		if sentence ~= "" then list[#list + 1] = sentence end
+	local list, breaks = {}, {}
+	local gap
+	text = text:gsub("\r\n?", "\n") .. "\n"
+	for line, newlines in text:gmatch("([^\n]*)(\n+)") do
+		local start = 1
+		line = line .. " "
+		local function Add(sentence)
+			sentence = strtrim(sentence)
+			if sentence == "" then return end
+			list[#list + 1] = sentence
+			breaks[#list] = gap or " "
+			gap = nil
+		end
+		for stop in line:gmatch("[%.!%?]+[\"'%)%]]*()%s") do
+			if stop > start then Add(line:sub(start, stop - 1)) end
+			start = stop
+		end
+		Add(line:sub(start))
+		-- (a blank line between two: a new paragraph too)
+		if list[1] then gap = (gap or #newlines >= 2) and "\n\n" or "\n" end
 	end
-	return list
+	return list, breaks
+end
+
+-- Sentences put back together, each after what stood before it.
+local function Join(sentences, breaks)
+	local parts = {}
+	for index, sentence in ipairs(sentences) do
+		if index > 1 then parts[#parts + 1] = breaks[index] or " " end
+		parts[#parts + 1] = sentence
+	end
+	return table.concat(parts)
 end
 
 local function Pages(text)
@@ -221,12 +258,15 @@ local function Pages(text)
 	text = Clean(text)
 	if not text then return { "" } end
 	local pages, current = {}, ""
-	for _, sentence in ipairs(Sentences(text)) do
-		if current ~= "" and #current + #sentence > PAGE_CHARS then
+	local sentences, breaks = Sentences(text)
+	for index, sentence in ipairs(sentences) do
+		-- (a new paragraph on a page already half full: a new page)
+		local paragraph = breaks[index] == "\n\n" and #current > PAGE_CHARS / 2
+		if current ~= "" and (#current + #sentence > PAGE_CHARS or paragraph) then
 			pages[#pages + 1] = current
 			current = sentence
 		else
-			current = current == "" and sentence or (current .. " " .. sentence)
+			current = current == "" and sentence or (current .. breaks[index] .. sentence)
 		end
 	end
 	if current ~= "" then pages[#pages + 1] = current end
@@ -238,13 +278,13 @@ end
 -- A page that is not plain sentences (a link, a color, one cut otherwise) stays as it is.
 local function Voiced(text, current)
 	if type(text) ~= "string" or U.IsSecret(text) or text:find("|", 1, true) then return text end
-	local sentences = Sentences(text)
-	if not sentences[current] or table.concat(sentences, " ") ~= text then return text end
+	local sentences, breaks = Sentences(text)
+	if not sentences[current] or Join(sentences, breaks) ~= text then return text end
 	local quiet = Hex("muted")
 	for index, sentence in ipairs(sentences) do
 		if index ~= current then sentences[index] = quiet .. sentence .. "|r" end
 	end
-	return table.concat(sentences, " ")
+	return Join(sentences, breaks)
 end
 
 -- At most a number of letters (never a letter cut in two), "..." after.
@@ -266,6 +306,7 @@ local function IsLastPage() return scene and scene.page >= #scene.pages end
 -- next time, never hidden, at their place. Forgotten after a few months, a few thousand at most.
 local SEEN_DAYS, SEEN_MOST = 120, 4000
 local SEEN_ALPHA = 0.55
+local SEEN_ALPHA_PAPER = 0.75 -- (ink on paper has less contrast to give: dimmed less, still readable)
 
 local function SeenList()
 	local root = ns.root
@@ -302,11 +343,6 @@ local function ForgetOldSeen()
 	for index = 1, count - SEEN_MOST do list[keys[index]] = nil end
 end
 
--- The character's number in its GUID (a dialogue option is known with the one who offers it).
-local function NpcID(guid)
-	return type(guid) == "string" and guid:match("^%a+%-%d+%-%d+%-%d+%-%d+%-(%d+)") or nil
-end
-
 -- Content ----------------------------------------------------------------------------
 
 -- A quest in the choices, its title colored by its level as the quest log does.
@@ -315,24 +351,31 @@ local function QuestChoice(title, questID, level, trivial, icon, action)
 		trivial = trivial and true or false, atlas = icon.atlas, icon = icon.texture, action = action }
 end
 
+-- A daily or repeatable quest of the gossip (its frequency other than the default, or said repeatable).
+local function Repeats(quest)
+	local frequency = Clean(quest.frequency)
+	return Clean(quest.repeatable) and true or (type(frequency) == "number" and frequency > 0) or false
+end
+
 -- Choices of the conversation: { label, icon, atlas, action, level, trivial, said, seen }. The quests your
--- level makes grey come last. seen: its key in the choices already read (offered quests and options).
+-- level makes grey come last. seen: its key in the choices already read (the dialogue options only: a quest
+-- offered and declined never looks done).
 local function GossipChoices(guid)
 	local choices, grey = {}, {}
-	local npc = NpcID(guid)
+	-- (the character's number in its GUID: a dialogue option is known with the one who offers it)
+	local npc = U.NpcID(guid)
 	for _, quest in ipairs(Safe(Gossip.GetActiveQuests) or {}) do
-		choices[#choices + 1] = QuestChoice(quest.title, quest.questID, quest.questLevel, false,
-			quest.isComplete and QUEST_ICONS.complete or QUEST_ICONS.active,
+		local icon = quest.isComplete and (Repeats(quest) and QUEST_ICONS.repeatableComplete or QUEST_ICONS.complete)
+			or QUEST_ICONS.active
+		choices[#choices + 1] = QuestChoice(quest.title, quest.questID, quest.questLevel, false, icon,
 			function() Safe(Gossip.SelectActiveQuest, quest.questID) end)
 	end
 	for _, quest in ipairs(Safe(Gossip.GetAvailableQuests) or {}) do
 		local trivial = Clean(quest.isTrivial) and true or false
 		local list = trivial and grey or choices
-		local choice = QuestChoice(quest.title, quest.questID, quest.questLevel, trivial, QUEST_ICONS.available,
+		list[#list + 1] = QuestChoice(quest.title, quest.questID, quest.questLevel, trivial,
+			Repeats(quest) and QUEST_ICONS.repeatable or QUEST_ICONS.available,
 			function() Safe(Gossip.SelectAvailableQuest, quest.questID) end)
-		local id = Clean(quest.questID)
-		choice.seen = type(id) == "number" and ("q" .. id) or nil
-		list[#list + 1] = choice
 	end
 	local options = Safe(Gossip.GetOptions) or {}
 	table.sort(options, function(a, b) return (a.orderIndex or 0) < (b.orderIndex or 0) end)
@@ -350,14 +393,23 @@ local function GreetingChoices()
 	local choices, grey = {}, {}
 	for index = 1, (Clean(Safe(GetNumActiveQuests)) or 0) do
 		local title, complete = Safe(GetActiveTitle, index)
-		choices[#choices + 1] = QuestChoice(title, nil, Safe(GetActiveLevel, index), false,
-			complete and QUEST_ICONS.complete or QUEST_ICONS.active, function() Safe(SelectActiveQuest, index) end)
+		local icon = QUEST_ICONS.active
+		if Clean(complete) then
+			local id = _G.GetActiveQuestID and Clean(Safe(_G.GetActiveQuestID, index))
+			local repeatable = id and C_QuestLog and C_QuestLog.IsRepeatableQuest and Clean(Safe(C_QuestLog.IsRepeatableQuest, id))
+			icon = repeatable and QUEST_ICONS.repeatableComplete or QUEST_ICONS.complete
+		end
+		choices[#choices + 1] = QuestChoice(title, nil, Safe(GetActiveLevel, index), false, icon,
+			function() Safe(SelectActiveQuest, index) end)
 	end
 	for index = 1, (Clean(Safe(GetNumAvailableQuests)) or 0) do
-		local trivial = Clean((Safe(GetAvailableQuestInfo, index))) and true or false
+		local isTrivial, frequency, isRepeatable = Safe(GetAvailableQuestInfo, index)
+		local trivial = Clean(isTrivial) and true or false
 		local list = trivial and grey or choices
+		local icon = Repeats({ frequency = frequency, repeatable = isRepeatable }) and QUEST_ICONS.repeatable
+			or QUEST_ICONS.available
 		list[#list + 1] = QuestChoice(Safe(GetAvailableTitle, index), nil, Safe(GetAvailableLevel, index), trivial,
-			QUEST_ICONS.available, function() Safe(SelectAvailableQuest, index) end)
+			icon, function() Safe(SelectAvailableQuest, index) end)
 	end
 	for _, choice in ipairs(grey) do choices[#choices + 1] = choice end
 	return choices
@@ -445,13 +497,50 @@ local function Prices(rewards)
 	return missing
 end
 
+-- The spells a quest teaches (or casts on you): { name, texture }, from whichever way the game tells them.
+local function RewardSpells()
+	local spells = {}
+	local info = _G.C_QuestInfoSystem
+	local questID = Clean(Safe(GetQuestID))
+	if info and info.GetQuestRewardSpells and info.GetQuestRewardSpellInfo and questID then
+		for _, spellID in ipairs(Safe(info.GetQuestRewardSpells, questID) or {}) do
+			local spell = Safe(info.GetQuestRewardSpellInfo, questID, spellID)
+			local name = type(spell) == "table" and Clean(spell.name)
+			if type(name) == "string" and name ~= "" then spells[#spells + 1] = { name = name, texture = Clean(spell.texture) } end
+		end
+		return spells
+	end
+	local count = _G.GetNumRewardSpells and Clean(Safe(_G.GetNumRewardSpells))
+	-- (older games: one spell at most, asked without a number)
+	if count == nil and _G.GetRewardSpell then count = 1 end
+	for index = 1, count or 0 do
+		local texture, name = Safe(_G.GetRewardSpell, index)
+		name = Clean(name)
+		if type(name) == "string" and name ~= "" then spells[#spells + 1] = { name = name, texture = Clean(texture) } end
+	end
+	return spells
+end
+
+-- What a quest gives besides its items, in words: its gold and experience on one line, then its honor, its
+-- title and the spells it teaches (each with its icon).
 local function RewardMoney(required)
 	local money = Clean(Safe(required and GetQuestMoneyToGet or GetRewardMoney)) or 0
 	local xp = not required and Clean(Safe(GetRewardXP)) or 0
 	local parts = {}
 	if money > 0 then parts[#parts + 1] = (required and L.SCENE_COSTS or L.SCENE_MONEY):format(U.Coins(money)) end
 	if xp and xp > 0 then parts[#parts + 1] = L.SCENE_XP:format(xp) end
-	return table.concat(parts, "     ")
+	if required then return table.concat(parts, "     ") end
+	local honor = _G.GetRewardHonor and Clean(Safe(_G.GetRewardHonor))
+	if type(honor) == "number" and honor > 0 then parts[#parts + 1] = L.SCENE_HONOR:format(honor) end
+	local lines = {}
+	if parts[1] then lines[1] = table.concat(parts, "     ") end
+	local title = _G.GetRewardTitle and Clean(Safe(_G.GetRewardTitle))
+	if type(title) == "string" and title ~= "" then lines[#lines + 1] = L.SCENE_TITLE:format(title) end
+	for _, spell in ipairs(RewardSpells()) do
+		local icon = spell.texture and ("|T" .. tostring(spell.texture) .. ":0|t ") or ""
+		lines[#lines + 1] = L.SCENE_SPELL:format(icon .. spell.name)
+	end
+	return table.concat(lines, "\n")
 end
 
 -- The quest's objectives and where they stand, for a quest brought back
@@ -507,7 +596,8 @@ local function Build(event, startItem)
 		s.rewards, s.money = Rewards(false), RewardMoney(false)
 		s.waitingPrices = Prices(s.rewards)
 		s.action = L.SCENE_ACCEPT
-		s.declinable = true
+		-- (a quest the game took already: nothing to decline, the game only offers to close)
+		s.declinable = not Clean(Safe(QuestGetAutoAccept))
 	elseif event == "QUEST_PROGRESS" then
 		s.title = Safe(GetTitleText)
 		s.pages = Pages(Safe(GetProgressText))
@@ -597,7 +687,14 @@ local function Continue(deliberate)
 	end
 	local kind = scene.kind
 	if kind == "QUEST_DETAIL" then
-		if Clean(Safe(QuestGetAutoAccept)) then Safe(AcknowledgeAutoAcceptQuest) else Safe(AcceptQuest) end
+		if Clean(Safe(QuestGetAutoAccept)) then
+			Safe(AcknowledgeAutoAcceptQuest)
+		elseif _G.QuestFlagsPVP and Clean(Safe(_G.QuestFlagsPVP)) then
+			-- A quest that flags you for PvP: the game's own question first, as its quest window asks it.
+			Safe(StaticPopup_Show, "CONFIRM_ACCEPT_PVP_QUEST")
+		else
+			Safe(AcceptQuest)
+		end
 	elseif kind == "QUEST_PROGRESS" then
 		if not scene.completable then return CloseConversation() end
 		-- Gold asked: never paid by a Space pressed in a hurry.
@@ -777,9 +874,10 @@ local function RewardItem(index)
 	item.best:SetSize(14, 14)
 	item.best:SetPoint("TOPRIGHT", item.border, "TOPRIGHT", 5, 5)
 	item.best:SetTexture(BEST_TEXTURE)
-	item.arrow = item:CreateTexture(nil, "OVERLAY")
-	item.arrow:SetSize(14, 14)
-	item.arrow:SetPoint("BOTTOMLEFT", item.border, "BOTTOMLEFT", -4, -4)
+	-- Better or worse than worn: a bright arrow over the icon's corner.
+	item.arrow = item:CreateTexture(nil, "OVERLAY", nil, 2)
+	item.arrow:SetSize(18, 18)
+	item.arrow:SetPoint("CENTER", item.border, "BOTTOMLEFT", 3, 3)
 	item.price = ns.Skin.CreateText(item, "GameTooltipTextSmall", ns.Skin.RGB("muted"))
 	item.price:SetJustifyH("RIGHT")
 	item.price:SetPoint("RIGHT", item, "RIGHT", -6, 0)
@@ -794,10 +892,7 @@ local function RewardItem(index)
 		if button == "RightButton" then return Leave() end
 		if button ~= "LeftButton" then return end
 		local link = Clean(Safe(GetQuestItemLink, self.kind, self.index))
-		if link and HandleModifiedItemClick and (U.IsSkipping() or (IsControlKeyDown and IsControlKeyDown())) then
-			Safe(HandleModifiedItemClick, link)
-			return
-		end
+		if link and U.ItemClick(link) then return end
 		if self.number then
 			if scene and (scene.back or not IsLastPage()) then return Choose(self.number) end
 			Select(self.number)
@@ -875,6 +970,7 @@ local function ApplyLook()
 	Paint(nameText, "name")
 	Paint(titleText, "title")
 	Paint(rewardsLabel, "label")
+	Paint(alsoLabel, "label")
 	Paint(moneyText, "text")
 	Paint(keysText, "keys")
 	Paint(replayLink.text, "label")
@@ -902,6 +998,7 @@ local function StyleWords()
 	StyleFont(saidText, layout.titleSize)
 	StyleFont(bodyText, textSize)
 	StyleFont(rewardsLabel, layout.smallSize)
+	StyleFont(alsoLabel, layout.smallSize)
 	StyleFont(moneyText, layout.smallSize)
 	StyleFont(keysText, layout.smallSize)
 end
@@ -1010,7 +1107,10 @@ local function PaintReward(item, reward, number)
 	item.compare = reward.compare
 	if reward.compare and reward.compare ~= 0 then
 		item.arrow:SetTexture(reward.compare > 0 and UP_TEXTURE or DOWN_TEXTURE)
-		item.arrow:SetVertexColor(ns.Skin.InkColor(reward.compare > 0 and "good" or "bad", paper))
+		-- (grey first, then a pure color: the game's arrow is golden and muddied the green and the red)
+		item.arrow:SetDesaturated(true)
+		local better = reward.compare > 0
+		item.arrow:SetVertexColor(better and 0.25 or 1, better and 1 or 0.3, better and 0.3 or 0.25)
 		item.arrow:Show()
 	else
 		item.arrow:Hide()
@@ -1025,44 +1125,98 @@ local function PaintReward(item, reward, number)
 	item.pickMark:SetColorTexture(mark[1], mark[2], mark[3], mark[4])
 	item.picked:SetShown(isPicked)
 	item.pickMark:SetShown(isPicked)
-	item:SetAlpha((picking and scene.selected and item.number and not isPicked) and 0.45 or 1)
+	item:SetAlpha((picking and scene.selected and item.number and not isPicked) and 0.7 or 1)
 	local r, g, b = 0.5, 0.5, 0.5
 	if reward.quality then r, g, b = U.QualityColor(reward.quality) end
-	item.border:SetColorTexture(r, g, b, 0.9)
+	local marked = true
+	if reward.compare and reward.compare > 0 then
+		r, g, b = 0.25, 1, 0.3
+	elseif reward.compare and reward.compare < 0 then
+		r, g, b = 1, 0.3, 0.25
+	elseif reward.best then
+		r, g, b = ns.Skin.RGB("gold")
+	else
+		marked = false
+	end
+	item.border:SetColorTexture(r, g, b, marked and 1 or 0.9)
+	local edge = marked and 6 or 2
+	item.border:SetSize(REWARD_ICON + edge, REWARD_ICON + edge)
 	local label = (reward.waiting and (Hex("muted") .. (RETRIEVING_ITEM_INFO or "...") .. "|r") or reward.name)
 		.. (reward.count > 1 and (" x" .. reward.count) or "")
 	if item.number then label = ("%s%d.|r %s"):format(Hex("accent"), item.number, label) end
+	-- (the levels it gains or loses by the name too: +5 in green, -3 in red)
+	if reward.compare and reward.compare ~= 0 then
+		local cr, cg, cb = ns.Skin.InkColor(reward.compare > 0 and "good" or "bad", paper)
+		label = label .. "  " .. U.Colorize((reward.compare > 0 and "+" or "") .. reward.compare, cr, cg, cb)
+	end
 	item.text:SetText(label)
 end
 
--- Rewards, in two columns (on the last page).
+-- The captions of the two groups of rewards, the game's own words as its quest window says them: the
+-- rewards to choose from (one alone is simply received), then those received with them.
+local function RewardCaptions(choices)
+	local choose
+	if choices == 1 then
+		choose = _G.REWARD_ITEMS_ONLY
+	elseif choices > 1 then
+		choose = scene.kind == "QUEST_COMPLETE" and _G.REWARD_CHOOSE or _G.REWARD_CHOICES
+	end
+	local receive = choices > 0 and _G.REWARD_ITEMS or _G.REWARD_ITEMS_ONLY
+	return choose or L.REWARDS, receive or L.REWARDS
+end
+
+-- Rewards, in two columns (on the last page): the items asked for; or the rewards to choose from, then
+-- those received with them, each group under its caption.
 local function RenderRewards(y)
 	local last, margin = layout.last, layout.margin
 	for index, item in ipairs(rewardItems) do
 		if not (last and scene.rewards[index]) then item:Hide() end
 	end
-	rewardsLabel:SetShown(last and scene.rewards[1] ~= nil)
-	if not (last and scene.rewards[1]) then return y end
-	y = y + GAP
-	rewardsLabel:SetText(scene.kind == "QUEST_PROGRESS" and L.SCENE_REQUIRED or L.REWARDS)
-	Place(rewardsLabel, y, margin)
-	y = y + U.Measure(rewardsLabel, "GetStringHeight", 12) + SMALL_GAP
-	local column = math.floor((layout.inner - GAP) / 2)
-	for index, reward in ipairs(scene.rewards) do
-		local item = RewardItem(index)
-		local chosen
-		if reward.kind == "choice" and scene.kind == "QUEST_COMPLETE" then
-			-- (the game's own number for it: a choice not given yet must never shift the others)
-			chosen = reward.index
+	local shown = last and scene.rewards[1] ~= nil
+	rewardsLabel:SetShown(shown)
+	alsoLabel:Hide()
+	if not shown then return y end
+	-- The groups: { caption, first, last } in the list of rewards (choices come first in it).
+	local groups = {}
+	if scene.kind == "QUEST_PROGRESS" then
+		groups[1] = { L.SCENE_REQUIRED, 1, #scene.rewards }
+	else
+		local choices = 0
+		for _, reward in ipairs(scene.rewards) do
+			if reward.kind == "choice" then choices = choices + 1 end
 		end
-		PaintReward(item, reward, chosen)
-		item:SetSize(column, REWARD_ICON + 4)
-		item:ClearAllPoints()
-		local col, line = (index - 1) % 2, math.floor((index - 1) / 2)
-		item:SetPoint("TOPLEFT", panel, "TOPLEFT", margin + col * (column + GAP), -(y + line * (REWARD_ICON + 8)))
-		item:Show()
+		local choose, receive = RewardCaptions(choices)
+		if choices > 0 then groups[#groups + 1] = { choose, 1, choices } end
+		if choices < #scene.rewards then groups[#groups + 1] = { receive, choices + 1, #scene.rewards } end
 	end
-	return y + math.ceil(#scene.rewards / 2) * (REWARD_ICON + 8)
+	local column = math.floor((layout.inner - GAP) / 2)
+	for number, group in ipairs(groups) do
+		local caption = number == 1 and rewardsLabel or alsoLabel
+		y = y + (number == 1 and GAP or SMALL_GAP)
+		caption:SetText(group[1])
+		caption:SetWidth(layout.inner)
+		caption:Show()
+		Place(caption, y, margin)
+		y = y + U.Measure(caption, "GetStringHeight", 12) + SMALL_GAP
+		for index = group[2], group[3] do
+			local reward = scene.rewards[index]
+			local item = RewardItem(index)
+			local chosen
+			if reward.kind == "choice" and scene.kind == "QUEST_COMPLETE" then
+				-- (the game's own number for it: a choice not given yet must never shift the others)
+				chosen = reward.index
+			end
+			PaintReward(item, reward, chosen)
+			item:SetSize(column, REWARD_ICON + 4)
+			item:ClearAllPoints()
+			local place = index - group[2]
+			local col, line = place % 2, math.floor(place / 2)
+			item:SetPoint("TOPLEFT", panel, "TOPLEFT", margin + col * (column + GAP), -(y + line * (REWARD_ICON + 8)))
+			item:Show()
+		end
+		y = y + math.ceil((group[3] - group[2] + 1) / 2) * (REWARD_ICON + 8)
+	end
+	return y
 end
 
 -- The gold of the reward (on the last page).
@@ -1086,8 +1240,9 @@ local function RenderChoices(y)
 	if not (last and scene.choices[1]) then return y end
 	y = y + GAP
 	local hover, mark = C("hover"), C("mark")
-	for index = 1, math.min(#scene.choices, MAX_CHOICES) do
-		local choice = scene.choices[index]
+	for index, choice in ipairs(scene.choices) do
+		-- (more than nine, a guard or a city's guide: all shown as the game does, the first nine numbered by their keys)
+		local numbered = index <= MAX_CHOICES
 		local row = ChoiceRow(index)
 		row.number = index
 		row.hover:SetColorTexture(hover[1], hover[2], hover[3], hover[4])
@@ -1099,11 +1254,12 @@ local function RenderChoices(y)
 		if choice.level and choice.level > 0 and type(label) == "string" then
 			label = U.Colorize(label, Tone(ns.World.LevelColor(choice.level, true)))
 		end
-		if not pcall(row.text.SetText, row.text, ("%s%d.|r  %s"):format(Hex("accent"), index, label)) then
-			row.text:SetText(("%s%d.|r"):format(Hex("accent"), index))
+		local shown = numbered and ("%s%d.|r  %s"):format(Hex("accent"), index, label) or label
+		if not pcall(row.text.SetText, row.text, shown) then
+			row.text:SetText(numbered and ("%s%d.|r"):format(Hex("accent"), index) or "?")
 		end
 		-- (already read: dimmed, at its place)
-		row:SetAlpha(ns.ChoiceSeen(choice.seen) and SEEN_ALPHA or 1)
+		row:SetAlpha(ns.ChoiceSeen(choice.seen) and (paper and SEEN_ALPHA_PAPER or SEEN_ALPHA) or 1)
 		row:SetSize(layout.inner, layout.choiceHeight)
 		local height = math.max(layout.choiceHeight, U.Measure(row.text, "GetStringHeight", 0) + 8)
 		row:SetHeight(height)
@@ -1398,10 +1554,8 @@ local function HideSpoken()
 	end
 end
 
-local Follow
-
 -- One look at the voice; true when Spoken reads the scene's words.
-Follow = function()
+local function Follow()
 	if not scene then return false end
 	local spoken = SpokenAPI()
 	if not spoken then return false end
@@ -1612,6 +1766,15 @@ end
 
 local function OnEvent(_, event, ...)
 	if event == "GOSSIP_CLOSED" or event == "QUEST_FINISHED" then return OnClosed(event) end
+	-- A window opened from the conversation (a merchant, a trainer, the flight map...): the scene ends at once,
+	-- its keys given back, never lingering over it.
+	if WINDOW_EVENTS[event] then
+		sceneToken = sceneToken + 1
+		planned = nil
+		watched = nil
+		if scene then Finish(false) end
+		return
+	end
 	-- The game took the quest (or its reward): its page is over.
 	if event == "QUEST_ACCEPTED" or event == "QUEST_TURNED_IN" then
 		watched = nil
@@ -1837,7 +2000,7 @@ function ns.InitScene()
 	portraitRing:SetTexture(RING_TEXTURE)
 	portraitRing:SetVertexColor(ns.Skin.RGB("gold", 0.55))
 	portraitRing.round = ns.Skin.RoundMask(panel, portraitRing)
-	portrait.round = ns.Skin.RoundMask(panel, portrait)
+	ns.Skin.RoundMask(panel, portrait)
 	nameText = ns.Skin.CreateText(panel, "GameTooltipHeaderText", ns.Skin.RGB("gold"))
 	titleText = ns.Skin.CreateText(panel, "GameTooltipText", ns.Skin.RGB("kicker"))
 	rule = panel:CreateTexture(nil, "ARTWORK")
@@ -1847,6 +2010,7 @@ function ns.InitScene()
 	saidText:Hide()
 	bodyText = ns.Skin.CreateText(panel, "GameTooltipText", ns.Skin.RGB("text"))
 	rewardsLabel = ns.Skin.CreateText(panel, "GameTooltipTextSmall", ns.Skin.RGB("label"))
+	alsoLabel = ns.Skin.CreateText(panel, "GameTooltipTextSmall", ns.Skin.RGB("label"))
 	moneyText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", ns.Skin.RGB("text"))
 	keysText = ns.Skin.CreateText(panel, "GameTooltipTextSmall", ns.Skin.RGB("muted"))
 	if keysText.SetWordWrap then keysText:SetWordWrap(false) end
@@ -1909,5 +2073,7 @@ function ns.InitScene()
 	for _, event in ipairs({ "GOSSIP_CLOSED", "QUEST_FINISHED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "QUEST_ACCEPTED", "QUEST_TURNED_IN" }) do
 		panel:RegisterEvent(event)
 	end
+	-- (only the windows this game has: an unknown event is refused, quietly)
+	for event in pairs(WINDOW_EVENTS) do pcall(panel.RegisterEvent, panel, event) end
 	ns.RefreshScene()
 end

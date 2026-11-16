@@ -137,6 +137,7 @@ end
 local function CreateWindow()
 	local Skin = ns.Skin
 	window = Skin.CreateWindow("WandererNews", "DIALOG")
+	Skin.Sounds(window, Skin.SOUNDS.open, Skin.SOUNDS.close)
 	Skin.Dress(window, { "CENTER", UIParent, "CENTER", 0, 60 }, nil, Close)
 	local margin = Skin.Margin() + 8
 	local icon = window:CreateTexture(nil, "ARTWORK")
@@ -173,6 +174,7 @@ function ns.ShowNews(onlyNew)
 	Layout(sections)
 	-- (came by itself after an update: it never takes the controller away, it waits to be chosen)
 	window.quiet = onlyNew and true or nil
+	window.padWaits = window.quiet
 	window:Show()
 end
 

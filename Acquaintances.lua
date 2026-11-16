@@ -61,7 +61,7 @@ local function Add(key, name, why)
 	if not key then return end
 	if why == "chosen" then Forgotten()[key] = nil elseif Forgotten()[key] then return end
 	local known = Known()
-	local entry = known[key]
+	local entry = type(known[key]) == "table" and known[key] or nil
 	if entry then
 		entry.at = time()
 		if why == "chosen" then entry.why = "chosen" end
@@ -72,8 +72,8 @@ local function Add(key, name, why)
 	local count, oldest, oldestAt, oldestChosen, chosenAt = 0, nil, math.huge, nil, math.huge
 	for other, data in pairs(known) do
 		count = count + 1
-		local at = data.at or 0
-		if data.why ~= "chosen" then
+		local at = type(data) == "table" and tonumber(data.at) or 0
+		if type(data) ~= "table" or data.why ~= "chosen" then
 			if at < oldestAt then oldest, oldestAt = other, at end
 		elseif at < chosenAt then
 			oldestChosen, chosenAt = other, at
@@ -127,7 +127,7 @@ local function LearnGroup()
 		if Clean(Safe(UnitExists, unit)) and Clean(Safe(UnitIsPlayer, unit)) and not Clean(Safe(UnitIsUnit, unit, "player")) then
 			local key, name = KeyOfUnit(unit)
 			-- (met again: kept fresh, so those you play with often are the last ever let go)
-			local entry = key and Known()[key]
+			local entry = key and type(Known()[key]) == "table" and Known()[key]
 			if entry then entry.at = time() elseif key then Add(key, name, "group") end
 		end
 	end

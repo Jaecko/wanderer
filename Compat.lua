@@ -119,6 +119,13 @@ end
 
 local function ElvOn(module) return function() return ElvModule(module) end end
 
+-- A switch of its private settings (on unless saved off).
+local function ElvPrivate(module, key)
+	local private = ElvTable("private")
+	local section = type(private) == "table" and private[module]
+	return not (type(section) == "table" and section[key] == false)
+end
+
 -- A switch inside one of its modules (on unless saved off).
 local function ElvSetting(module, key)
 	local profile = ElvTable("profile")
@@ -143,6 +150,14 @@ local function ElvMinimap()
 	local general = type(private) == "table" and private.general
 	local minimap = type(general) == "table" and general.minimap
 	return not (type(minimap) == "table" and minimap.enable == false)
+end
+
+-- ElvUI's skins of the game's windows (its private switch: on unless saved off).
+local function ElvSkins()
+	local private = ElvTable("private")
+	local skins = type(private) == "table" and private.skins
+	local blizzard = type(skins) == "table" and skins.blizzard
+	return not (type(blizzard) == "table" and blizzard.enable == false)
 end
 
 -- Auctionator's vendor price line in the tooltips (on unless saved off; its old and new names).
@@ -258,6 +273,16 @@ local OTHERS = {
 	tooltip = {
 		{ addon = ELVUI, name = "ElvUI", on = ElvOn("tooltip") },
 		{ addon = "TipTac", name = "TipTac" },
+	},
+	-- The loot window and the group's rolls, redrawn by another addon.
+	lootWindow = {
+		{ addon = "XLoot_Frame", name = "XLoot" },
+		{ addon = "Butsu", name = "Butsu" },
+		{ addon = ELVUI, name = "ElvUI", on = function() return ElvPrivate("general", "loot") end },
+	},
+	lootRolls = {
+		{ addon = "XLoot_Group", name = "XLoot" },
+		{ addon = ELVUI, name = "ElvUI", on = function() return ElvPrivate("general", "lootRoll") end },
 	},
 	-- The bags (Wanderer Bags).
 	bags = {
@@ -379,6 +404,8 @@ local OTHERS = {
 }
 -- The game's quest tracker dressed (TrackerLook.lua, Clean.lua): put away and drawn anew by Kaliel's Tracker.
 OTHERS.trackerLook = { { addon = "!KalielsTracker", name = "Kaliel's Tracker" } }
+-- The game's windows in Wanderer's colors (GameSkins.lua): left whole to the addons skinning them.
+OTHERS.gameSkins = { { addon = ELVUI, name = "ElvUI", on = ElvSkins }, { addon = "Aurora", name = "Aurora" } }
 -- (the scene asks for the books by that name)
 OTHERS.books = OTHERS.reader
 ns.COMPAT = OTHERS
@@ -404,8 +431,8 @@ end
 local ORDER = { "scenes", "reader", "questAuto", "skipGossip", "repair", "sellJunk", "sellPrice", "fastLoot", "restock", "mapSize",
 	"away", "minimapLook", "minimapButtons",
 	"lootFeed", "lootSparkle", "nodeSparkle", "meterLook", "unitFrames", "unitFramesGroup", "unitFramesCasts", "easyDestroy", "dots", "errors", "nameplates", "camera", "upgradeArrows", "tooltip",
-	"altCounts", "bags", "auctionWindow", "questTracker", "questGivers", "arrow", "chatHistory", "chatLog", "chatLook", "whispers", "mailButtons", "gearSwap",
-	"trainerWindow", "flightCard", "trackerLook" }
+	"lootWindow", "lootRolls", "altCounts", "bags", "auctionWindow", "questTracker", "questGivers", "arrow", "chatHistory", "chatLog", "chatLook", "whispers", "mailButtons", "gearSwap",
+	"trainerWindow", "flightCard", "trackerLook", "gameSkins" }
 
 -- The other addon doing this job now (its name as shown), or nil: Wanderer's to do. An extension of the
 -- family taking it is asked first.
@@ -487,7 +514,7 @@ function ns.PublishLaunchers()
 	Publish(broker, "Wanderer", {
 		type = "launcher", label = L.ADDON_TITLE, icon = ICON,
 		OnClick = function(frame, button)
-			if button == "RightButton" then ns.OpenOptions() else ns.ShowMenu(frame) end
+			if button == "RightButton" then ns.ToggleOptions() else ns.ShowMenu(frame) end
 		end,
 		OnTooltipShow = function(tooltip)
 			tooltip:AddLine(L.ADDON_TITLE)

@@ -23,10 +23,11 @@ local U = ns.Util
 ns.STYLES = { "blizzard", "classic", "royal", "minimal", "frame", "parchment" }
 local STYLES = {
 	-- The game's own tooltip frame (silver border, night-blue background).
-	blizzard = { kind = "game" },
+	-- (flat, flatEdge: its ground and edge when drawn flat, on the game's own windows, GameSkins.lua)
+	blizzard = { kind = "game", flatEdge = { 0.55, 0.56, 0.62, 1 } },
 	-- The tooltip of the original game (vanilla).
 	classic = {
-		kind = "texture", bg = { 0.06, 0.06, 0.14 }, border = { 1, 1, 1, 1 },
+		kind = "texture", bg = { 0.06, 0.06, 0.14 }, border = { 1, 1, 1, 1 }, flatEdge = { 0.55, 0.56, 0.62, 1 },
 		backdrop = {
 			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
 			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -36,7 +37,7 @@ local STYLES = {
 	},
 	-- The golden border of the game's dialog windows, on a dark background.
 	royal = {
-		kind = "texture", bg = { 1, 1, 1 }, border = { 1, 1, 1, 1 },
+		kind = "texture", bg = { 1, 1, 1 }, border = { 1, 1, 1, 1 }, flat = { 0.05, 0.045, 0.04 }, flatEdge = { 0.79, 0.64, 0.15, 1 },
 		backdrop = {
 			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
 			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Gold-Border",
@@ -46,7 +47,8 @@ local STYLES = {
 	},
 	minimal = { kind = "lines", bg = { 0, 0, 0 }, border = { 1, 1, 1, 0.85 } },
 	frame = { kind = "lines", bg = { 0.05, 0.05, 0.07 }, border = { 0.45, 0.45, 0.5, 1 } },
-	parchment = { kind = "lines", bg = { 0.2, 0.14, 0.07 }, border = { 0.7, 0.55, 0.28, 1 } },
+	-- (windows on it take a darker ground, windowBg: their hints, rows and chosen lines keep their contrast)
+	parchment = { kind = "lines", bg = { 0.2, 0.14, 0.07 }, windowBg = { 0.13, 0.09, 0.045 }, border = { 0.7, 0.55, 0.28, 1 } },
 }
 
 -- Highlights, each enabled by a setting { section, key }. "quality" takes the
@@ -100,6 +102,17 @@ Skin.TOOLTIP_MIN_OPACITY = 0.92
 -- house, the scenes, the cards...): their lines stay clear over the world, whatever the opacity chosen,
 -- which the label alone follows (and its previews, and the marks over the world).
 Skin.WINDOW_MIN_OPACITY = 0.9
+
+-- A window's ground and edge drawn flat (the game's own windows in Wanderer's colors, GameSkins.lua): the chosen
+-- style's window ground at a window's opacity, and its edge. Gives r, g, b, alpha, then the edge's r, g, b, a.
+function Skin.WindowColors()
+	local style = CurrentStyle()
+	local bg, opacity, border = Skin.GetColors(style)
+	bg = style.windowBg or style.flat or bg
+	local edge = style.flatEdge or border
+	opacity = math.max(opacity, Skin.WINDOW_MIN_OPACITY)
+	return bg[1], bg[2], bg[3], opacity, edge[1], edge[2], edge[3], edge[4] or 1
+end
 
 -- Shared metrics: every window uses the same margins, scale and fonts.
 local GAME_MARGIN = 10 -- inner margin of the game's tooltips
@@ -596,6 +609,7 @@ function Skin.CreateWindow(name, strata, parent, hud, kind)
 	if window.SetIgnoreParentAlpha then window:SetIgnoreParentAlpha(true) end
 	local skin = Skin.Attach(window)
 	skin.minOpacity = Skin.WINDOW_MIN_OPACITY
+	skin.isWindow = true
 	return window, skin
 end
 
@@ -882,8 +896,13 @@ end
 
 -- Resting look of the style, with the current highlight on top.
 function SkinMixin:ApplyStyle()
-	local bg, opacity, border = Skin.GetColors(self:Style(), self.fixedOpacity)
-	if self.minOpacity then opacity = math.max(opacity, self.minOpacity) end
+	local style = self:Style()
+	local bg, opacity, border = Skin.GetColors(style, self.fixedOpacity)
+	if self.minOpacity then
+		opacity = math.max(opacity, self.minOpacity)
+		-- (a window, not the label nor a tooltip: its style's window ground when it has one)
+		if self.isWindow and type(style) == "table" and style.windowBg then bg = style.windowBg end
+	end
 	self:ShowDecoration()
 	self:SetBackground(bg[1], bg[2], bg[3], opacity)
 	local c = self.color or border

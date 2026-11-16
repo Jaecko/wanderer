@@ -37,7 +37,7 @@ local SCAN_DELAY = 1
 local ALERT_SOUND_DELAY = 60 -- seconds before the same player can trigger the sound again
 local HEAD_OFFSET = 4
 local HOLD_GRACE = 0.4 -- seconds the label waits after a click before leaving
-local MAX_QUEST_LINES = 3
+local MAX_QUEST_LINES = 3 -- (shown, Shift shows all; all are read, so the quest's state stays right)
 -- What the label says: your choices, or in a fight (option) only what matters
 -- for it: level and difficulty, rank, health and power, the spell cast, who
 -- it looks at, a monster not yet yours, your quest objectives. A Shift look
@@ -248,7 +248,6 @@ local function DetectQuests(lines)
 				if isObjective or done then
 					local complete = done and tonumber(done) >= tonumber(total)
 					quests[#quests + 1] = { text = strtrim((line.text:gsub("^%s*%-%s*", ""))), complete = complete, who = who }
-					if #quests >= MAX_QUEST_LINES then break end
 				end
 			end
 		end
@@ -960,11 +959,21 @@ local function RenderActions(a)
 		questStatusText:SetText(style.role and Paint(L[style.text], style.role) or ("|c%s%s|r"):format(style.color, L[style.text]))
 	end
 	local quests = {}
-	for _, quest in ipairs(a.quests or {}) do
+	-- (what is still to do first, then the done ones; three lines, all while Shift is held)
+	local order = {}
+	for _, quest in ipairs(a.quests or {}) do if not quest.complete then order[#order + 1] = quest end end
+	for _, quest in ipairs(a.quests or {}) do if quest.complete then order[#order + 1] = quest end end
+	local most = U.PadShiftDown() and #order or MAX_QUEST_LINES
+	for index, quest in ipairs(order) do
+		if index > most then break end
 		local color = quest.complete and U.ColorCode(ns.Skin.RGB("muted")) or U.ColorCode(ns.Skin.RGB("gold"))
 		-- In a group: whose objective it is, in their class's color.
 		local who = quest.who and ("|c%s%s|r"):format(MemberColorCode(quest.who), L.QUEST_WHO:format(quest.who)) or ""
 		quests[#quests + 1] = ("%s %s%s%s|r"):format(IconMarkup(nil, QUEST_STYLES.objective.texture, 12), who, color, quest.text)
+	end
+	if #order > most then
+		local more = U.UsingPad() and L.QUEST_MORE_SHIFT_PAD or L.QUEST_MORE_SHIFT
+		quests[#quests + 1] = Paint(more:format(#order - most), "muted")
 	end
 	questText:SetText(table.concat(quests, "\n"))
 end
@@ -990,6 +999,22 @@ local function RefreshDynamic()
 	Layout()
 end
 
+-- A player's name with the PvP rank the game puts before it (UnitPVPName), its realm kept; the name alone
+-- when there is no rank, or when either is protected.
+local function RankedName(name)
+	if IsSecret(name) or type(name) ~= "string" then return name end
+	local ranked = _G.UnitPVPName and Clean(Safe(_G.UnitPVPName, UNIT))
+	local plain = Clean(Safe(UnitName, UNIT))
+	if type(ranked) ~= "string" or type(plain) ~= "string" or plain == "" or ranked == plain then return name end
+	local at = ranked:find(plain, 1, true)
+	if not at then return name end
+	local before, after = ranked:sub(1, at - 1), ranked:sub(at + #plain)
+	-- (a name in two words, already whole: what follows it in the game's words is not added again)
+	if after ~= "" and name:sub(#plain + 1, #plain + #after) == after then after = "" end
+	if before ~= "" and name:sub(1, #before) == before then before = "" end
+	return before .. name .. after
+end
+
 local function UpdateContent(full)
 	local name = U.FullName(UNIT)
 	if not IsSecret(name) and name == nil then return false end
@@ -1005,7 +1030,7 @@ local function UpdateContent(full)
 			nameText:SetTextColor(1, 1, 1)
 		else
 			-- SetText accepts secret values, so the name shows even when it is protected.
-			if not pcall(nameText.SetText, nameText, name) then return false end
+			if not pcall(nameText.SetText, nameText, current.isPlayer and RankedName(name) or name) then return false end
 			nameText:SetTextColor(GetUnitColor(UNIT, current.isPlayer))
 		end
 		local title = rp and ns.db.rp.showTitle and Clean(Safe(rp.GetFullTitle, rp))
@@ -1611,6 +1636,16 @@ function ns.LabelPlate()
 end
 
 local function OnEvent(_, event, ...)
+	if event == "MODIFIER_STATE_CHANGED" then
+		-- Shift held or let go: every objective, or the first three again.
+		local key = ...
+		if (key == "LSHIFT" or key == "RSHIFT") and current and current.quests and #current.quests > MAX_QUEST_LINES
+			and IsLabelActive() then
+			RenderActions(current)
+			Layout()
+		end
+		return
+	end
 	if event == "INSPECT_READY" then
 		local guid = ...
 		if not Inspect.OnReady(guid, UNIT) then return end
@@ -1760,6 +1795,7 @@ function ns.InitLabel()
 	end
 	frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 	frame:RegisterEvent("PLAYER_LOGIN")
+	frame:RegisterEvent("MODIFIER_STATE_CHANGED")
 	frame:RegisterEvent("SKILL_LINES_CHANGED")
 	frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 	frame:RegisterEvent("PLAYER_REGEN_DISABLED")

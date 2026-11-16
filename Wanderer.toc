@@ -13,7 +13,7 @@
 ## Notes-zhTW: 為你的旅程帶來沉浸與便利：隱藏名稱、豐富的滑鼠懸停標籤、安靜的對話場景、按天賦系評估物品以及許多貼心的小功能。
 ## Category: Immersion
 ## Category-frFR: Immersion
-## Version: 1.4.55
+## Version: 1.4.75
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 ## SavedVariables: WandererDB
 ## AddonCompartmentFunc: Wanderer_OnAddonCompartmentClick
@@ -62,6 +62,10 @@ Merchant.lua
 Provisions.lua
 Worth.lua
 Loot.lua
+Swap.lua
+MerchantWindow.lua
+LootWindow.lua
+LootRolls.lua
 Trainer.lua
 Dialogues.lua
 Social.lua
@@ -77,6 +81,7 @@ Chat.lua
 Todo.lua
 Copy.lua
 GameFrames.lua
+GameSkins.lua
 BarSlots.lua
 Curtain.lua
 Away.lua

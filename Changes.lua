@@ -168,13 +168,9 @@ local function Refresh()
 	if ns.RefreshThemeGrids then pcall(ns.RefreshThemeGrids) end
 end
 
--- One setting back to its reference (its way's value, else its default), as the options would set it (the same
--- in this character's other profiles; a preset or a label level brings its lines with it).
-function ns.ResetSetting(path)
-	return ns.ResetSettings({ path })
-end
-
--- Several settings back to their references at once (a row, a page): one undo for all of them.
+-- Settings back to their references (its way's value, else its default) at once (a row, a page), as the options
+-- would set them (the same in this character's other profiles; a preset or a label level brings its lines with
+-- it): one undo for all of them.
 function ns.ResetSettings(paths)
 	local defaults = {}
 	Each(function(each, _, value) defaults[each] = value end)

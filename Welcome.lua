@@ -119,11 +119,8 @@ end
 
 -- Like another character ------------------------------------------------------------------
 
--- A place's profile for this character, named as Core names them: the place, then its own profile's name.
+-- The places with a profile of their own, named as Core names them (ns.PlaceProfileName).
 local PLACE_KINDS = { world = true, city = true, dungeon = true }
-local function PlaceName(zone, own)
-	return L["PLACE_PROFILE_" .. zone:upper()] .. " (" .. own .. ")"
-end
 
 local undo -- what this character had before a copy, while the welcome is open
 local copiedFrom -- the name of the character copied
@@ -159,7 +156,7 @@ function ns.CopyCharacterSettings(from)
 		local name = theirs[zone]
 		if name and root.profiles[name] then
 			if not made[name] then
-				made[name] = PLACE_KINDS[zone] and PlaceName(zone, own) or (name .. " (" .. own .. ")")
+				made[name] = PLACE_KINDS[zone] and ns.PlaceProfileName(zone) or (name .. " (" .. own .. ")")
 				Keep(made[name])
 				root.profiles[made[name]] = U.Copy(root.profiles[name])
 			end
@@ -366,7 +363,6 @@ local function RevealCard(parent, anchor)
 	local icon = ns.Skin.Icon(card, 34)
 	icon:SetPoint("LEFT", card, "LEFT", 12, 0)
 	icon:Set(REVEAL_ICON)
-	local said
 	local button, listener
 	local title = ns.Skin.Text(card, "GameTooltipText", "gold")
 	local text = ns.Skin.Text(card, "GameTooltipTextSmall", "soft")
@@ -374,13 +370,12 @@ local function RevealCard(parent, anchor)
 		local key = RevealKey()
 		title:SetText(key and L.WELCOME_REVEAL_BOUND:format(KeyWords(key)) or L.WELCOME_REVEAL_TITLE)
 		local listening = listener and listener:Listening()
-		text:SetText(said or (listening and (U.UsingPad() and L.WELCOME_REVEAL_PRESS_DESC_PAD or L.WELCOME_REVEAL_PRESS_DESC)) or (key and (U.UsingPad() and L.WELCOME_REVEAL_BOUND_DESC_PAD or L.WELCOME_REVEAL_BOUND_DESC))
+		text:SetText((listening and (U.UsingPad() and L.WELCOME_REVEAL_PRESS_DESC_PAD or L.WELCOME_REVEAL_PRESS_DESC)) or (key and (U.UsingPad() and L.WELCOME_REVEAL_BOUND_DESC_PAD or L.WELCOME_REVEAL_BOUND_DESC))
 			or L.WELCOME_REVEAL_DESC)
 		button:SetText(listening and L.WELCOME_REVEAL_PRESS or (key and L.WELCOME_REVEAL_CHANGE or L.WELCOME_REVEAL_PICK))
 		button:Fit()
 	end
 	button = ns.Skin.Button(card, L.WELCOME_REVEAL_PICK, function()
-		said = nil
 		-- (keys are never set in a fight)
 		if not listener:Listening() and InCombatLockdown() then return ns.Skin.Play("refuse") end
 		listener:Set(not listener:Listening())
@@ -391,7 +386,6 @@ local function RevealCard(parent, anchor)
 	listener = ns.Skin.KeyListener(button, { onChange = Refresh, onKey = function(full)
 		local done, other = ns.SetRevealKey(full)
 		if done then
-			said = nil
 			ns.Skin.Play("confirm")
 		elseif other then
 			-- (another action's key: asked first, as on the Keys page)
@@ -404,8 +398,6 @@ local function RevealCard(parent, anchor)
 		end
 		Refresh()
 	end })
-	-- (the page left, the window closed: what was said goes; the listening stops with the button)
-	card:SetScript("OnHide", function() said = nil end)
 	title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 12, 0)
 	title:SetPoint("RIGHT", button, "LEFT", -12, 0)
 	title:SetJustifyH("LEFT")
@@ -1018,6 +1010,7 @@ end
 
 local function CreateWindow()
 	window = ns.Skin.CreateWindow("WandererWelcome", "DIALOG")
+	ns.Skin.Sounds(window, ns.Skin.SOUNDS.open, ns.Skin.SOUNDS.close)
 	window:SetSize(WIDTH, HEIGHT)
 	ns.Skin.Dress(window, nil, nil, Close)
 	local margin = ns.Skin.Margin() + 8

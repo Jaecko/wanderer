@@ -26,7 +26,7 @@ local function OnLootReady(_, _, autoLoot)
 	-- (what the first slot held, for the fishing notice: the window is empty by the time it reads it)
 	local _, name = Safe(GetLootSlotInfo, 1)
 	ns.lastLoot = { name = ns.Util.Clean(name), link = ns.Util.Clean(Safe(GetLootSlotLink, 1)), at = now }
-	for slot = (Safe(GetNumLootItems) or 0), 1, -1 do Safe(LootSlot, slot) end
+	for slot = (ns.Util.Clean(Safe(GetNumLootItems)) or 0), 1, -1 do Safe(LootSlot, slot) end
 end
 
 function ns.InitLoot()

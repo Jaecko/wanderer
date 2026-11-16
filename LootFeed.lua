@@ -183,7 +183,7 @@ end
 
 local function Click(row)
 	local entry = row.entry
-	if entry and entry.chatLink and HandleModifiedItemClick then Safe(HandleModifiedItemClick, entry.chatLink) end
+	if entry and entry.chatLink then U.ItemClick(entry.chatLink) end
 end
 
 local function NewRow()

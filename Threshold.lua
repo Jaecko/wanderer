@@ -41,7 +41,7 @@ local function QuestsHere(place)
 		if type(info) == "table" then
 			if info.isHeader then
 				under = Clean(info.title) == place
-			elseif under and Clean(info.title) and #found < MAX_QUESTS then
+			elseif under and Clean(info.title) then
 				found[#found + 1] = info.title
 			end
 		end
@@ -66,7 +66,12 @@ local function OnEnter()
 	seen[key] = true
 	local lines = {}
 	local quests = QuestsHere(name)
-	if quests[1] then lines[#lines + 1] = L.THRESHOLD_QUESTS:format(table.concat(quests, ", ")) end
+	if quests[1] then
+		-- (four named, the others counted)
+		local named = { unpack(quests, 1, math.min(#quests, MAX_QUESTS)) }
+		if #quests > MAX_QUESTS then named[#named + 1] = "+" .. (#quests - MAX_QUESTS) end
+		lines[#lines + 1] = L.THRESHOLD_QUESTS:format(table.concat(named, ", "))
+	end
 	local wear = ns.Wear()
 	if wear and wear < WORN then lines[#lines + 1] = L.THRESHOLD_WORN:format(wear) end
 	if lines[1] then ns.Toast(name, table.concat(lines, "\n"), { duration = 8 }) end

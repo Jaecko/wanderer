@@ -21,7 +21,8 @@ local MEDIA = "Interface\\AddOns\\Wanderer\\Media\\"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local TEXTURES = { smooth = MEDIA .. "Bar", clean = MEDIA .. "BarClean", flat = WHITE, classic = "Interface\\TargetingFrame\\UI-StatusBar" }
 local NARROW = "Fonts\\ARIALN.TTF"
-local FALLBACK_LEVEL = 10
+-- (the bar helpers shared with the health bands: DotBars.lua, loaded before)
+local Bands = ns.HealthBands
 
 -- Colours ----------------------------------------------------------------------------------------------------
 
@@ -223,10 +224,7 @@ end
 
 -- Pieces shared by every bar of the look -------------------------------------------------------------------
 
-local function Level(frame)
-	local level = Clean(Safe(frame.GetFrameLevel, frame))
-	return type(level) == "number" and level or FALLBACK_LEVEL
-end
+local Level = Bands.Level
 
 -- The part of a bar the eye sees (DotBars.lua knows the game's masked bars).
 local function Visible(bar)
@@ -408,9 +406,7 @@ function ns.UnitFramesPresent(...)
 	return list
 end
 
-local function IsBar(bar)
-	return type(bar) == "table" and not IsSecret(bar) and type(bar.GetStatusBarTexture) == "function" and bar or nil
-end
+local IsBar = Bands.IsBar
 
 local function IsText(text)
 	return type(text) == "table" and not IsSecret(text) and type(text.GetFont) == "function" and text or nil
@@ -1010,6 +1006,8 @@ local function Paint(bar, r, g, b)
 	local nr, ng, nb = Safe(bar.GetStatusBarColor, bar)
 	nr, ng, nb = Clean(nr), Clean(ng), Clean(nb)
 	if type(nr) ~= "number" or type(ng) ~= "number" or type(nb) ~= "number" then return false end
+	-- (a colour given hidden, the gradient's in a fight: never compared, refused as a hidden one read back)
+	if IsSecret(r) or IsSecret(g) or IsSecret(b) then return false end
 	return math.abs(nr - r) < 0.02 and math.abs(ng - g) < 0.02 and math.abs(nb - b) < 0.02
 end
 
@@ -2072,7 +2070,7 @@ end
 -- The game's overlays on a health bar: heal predictions, absorbs and their glows, the lost maximum, the trail.
 local OVERLAYS = { "myHealPredictionBar", "otherHealPredictionBar", "healAbsorbBar", "totalAbsorbBar", "overAbsorbGlow",
 	"overHealAbsorbGlow", "tempMaxHealthLossBar", "myHealAbsorb", "myHealAbsorbLeftShadow", "myHealAbsorbRightShadow",
-	"otherHealPrediction", "myHealPrediction", "totalAbsorb", "totalAbsorbOverlay", "overAbsorbGlow" }
+	"otherHealPrediction", "myHealPrediction", "totalAbsorb", "totalAbsorbOverlay" }
 function HealthOverlays(entry, parts)
 	local list = {}
 	for _, key in ipairs(OVERLAYS) do
@@ -2109,9 +2107,6 @@ local function StyleEntry(entry)
 	local look = UF()
 	local unit = UnitOf(entry)
 	local edged = on and Lines()
-	-- (the game's damage trail: left as the game draws it, unseen under Wanderer's block; given back if an older
-	-- build dressed it)
-	RestoreBar(parts.trail)
 	-- (the game's health overlays keep the game's place and size, never our block's: unseen while it stands; the
 	-- damage trail's own fill emptied too, since the game sets the trail's alpha itself at each hit)
 	for _, region in ipairs(HealthOverlays(entry, parts)) do
@@ -2250,21 +2245,15 @@ end
 -- Drawing and the game's moments ------------------------------------------------------------------------------
 
 local function RestoreAll()
+	-- (each frame's own pieces first, the look being off: the points and cast rows taken down, the trail given back)
+	for _, entry in ipairs(Entries()) do StyleEntry(entry) end
 	for bar in pairs(dressed) do RestoreBar(bar) end
 	for region in pairs(hiddenArt) do ShowArt(region) end
 	for text in pairs(texts) do Undress(text) end
 	for frame in pairs(compact) do StyleCompact(frame) end
 end
 
-local soon = false
-local function Soon()
-	if soon then return end
-	soon = true
-	C_Timer.After(0, function()
-		soon = false
-		if On() then StyleUnits() end
-	end)
-end
+local Soon = U.Debounce(0, function() if On() then StyleUnits() end end)
 ns.UnitFramesSoon = Soon
 
 local hookedGame = false

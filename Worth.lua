@@ -43,3 +43,28 @@ local function AddLine(tooltip, id, data)
 end
 
 function ns.InitWorth() U.OnItemTooltip(AddLine) end
+
+-- What count of an item is worth (copper): at a merchant, and at the auction house when Wanderer Auction knows
+-- its price (each nil when unknown; Wanderer Auction never needed).
+function ns.ItemWorth(link, count)
+	if not link then return nil, nil end
+	count = math.max(1, tonumber(count) or 1)
+	local vendor = U.SellPrice(link)
+	vendor = vendor and vendor > 0 and vendor * count or nil
+	local auction
+	local public = rawget(_G, "WandererAuction")
+	local price = type(public) == "table" and rawget(public, "Price")
+	if type(price) == "function" then
+		local ok, each = pcall(price, link)
+		if ok and type(each) == "number" and each > 0 then auction = each * count end
+	end
+	return vendor, auction
+end
+
+-- That worth in a few words: the auction house's price when known, else the merchant's ("" when neither).
+function ns.WorthText(link, count)
+	local vendor, auction = ns.ItemWorth(link, count)
+	if auction then return ns.L.WORTH_AUCTION:format(U.Coins(auction)) end
+	if vendor then return U.Coins(vendor) end
+	return ""
+end

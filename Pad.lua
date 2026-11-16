@@ -96,17 +96,34 @@ end
 function Pad.Point()
 	local button = Pad.On() and current
 	if button and button.GetRight then
-		local right, top = button:GetRight(), button:GetTop()
+		-- (read clean: a button's geometry may be hidden in a fight)
+		local right, top = Clean(Safe(button.GetRight, button)), Clean(Safe(button.GetTop, button))
 		local scale = button:GetEffectiveScale() or 1
-		if right and top then return right * scale, top * scale end
+		if type(right) == "number" and type(top) == "number" then return right * scale, top * scale end
 	end
 	if GetCursorPosition then return GetCursorPosition() end
 	return nil, nil
 end
 
--- A click given by the controller: the button's own click, else what a mouse does on a plain frame.
+-- Something held by the game's cursor (an item taken in hand, a spell): a press then drops it where a mouse
+-- would let go of it.
+local function CursorHolds()
+	local info = _G.GetCursorInfo
+	return info ~= nil and Clean(Safe(info)) ~= nil
+end
+
+-- A click given by the controller: the button's own click, else what a mouse does on a plain frame. A line to
+-- write in opens the controller's keyboard; what holds something in hand is dropped where it stands.
 local function Press(button, which)
 	if not button or (button.IsEnabled and button:IsEnabled() == false) then return false end
+	-- (padClick: what a press does there, when it differs from a mouse's click; false lets the click go on)
+	if button.padClick and button.padClick(button, which) ~= false then return true end
+	if button.GetObjectType and button:GetObjectType() == "EditBox" then return Pad.Keyboard(button) end
+	local drop = button.GetScript and button:GetScript("OnReceiveDrag")
+	if drop and CursorHolds() then
+		drop(button)
+		return true
+	end
 	if button.Click then
 		button:Click(which)
 		return true
@@ -132,7 +149,8 @@ end
 
 function Pad.Click()
 	if Answer("click") then return true end
-	return Press(current, "LeftButton")
+	-- (an item with no name to be bound by: its own first click all the same)
+	return Press(current, current and current.padPrimary or "LeftButton")
 end
 
 -- The chosen button's right click, only on our buttons marked padRight where they are made (a right click of their
@@ -149,6 +167,8 @@ end
 
 function Pad.RightClick()
 	if Answer("right") then return true end
+	-- (an item's second click, when it has no name to be bound by)
+	if current and current.padSecondary and not current.padRight then return Press(current, current.padSecondary) end
 	if not (current and current.padRight) then return false end
 	if current.IsProtected and current:IsProtected() then return false end
 	return Press(current, "RightButton")
@@ -182,7 +202,8 @@ local function Usable(frame)
 		if frame.IsEnabled and frame:IsEnabled() == false then return false end
 		return not (frame.IsMouseClickEnabled and frame:IsMouseClickEnabled() == false)
 	end
-	if kind == "Slider" then return not (frame.IsEnabled and frame:IsEnabled() == false) end
+	-- (a line to write in: the controller's keyboard writes in it)
+	if kind == "Slider" or kind == "EditBox" then return not (frame.IsEnabled and frame:IsEnabled() == false) end
 	if kind ~= "Frame" or not (frame.IsMouseEnabled and frame:IsMouseEnabled()) then return false end
 	return frame:GetScript("OnMouseUp") ~= nil and frame:GetScript("OnDragStart") == nil
 end
@@ -213,12 +234,41 @@ local function Walk(frame, window, area, clipLeft, clipRight, clipTop, clipBotto
 	return found
 end
 
+-- How high a frame is drawn: its layer first, then its level in that layer.
+local STRATA = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
+local function Height(frame)
+	local strata = frame.GetFrameStrata and Clean(Safe(frame.GetFrameStrata, frame))
+	local level = frame.GetFrameLevel and Clean(Safe(frame.GetFrameLevel, frame))
+	return (STRATA[strata] or 3) * 10000 + (type(level) == "number" and level or 0)
+end
+
+-- What a mouse could not reach either: a button whose middle lies under another one drawn above it (a box with a
+-- button of its own laid over it for the controller), unless one holds the other.
+local function Uncovered(found)
+	if #found < 2 then return found end
+	for _, target in ipairs(found) do target.height = Height(target.frame) end
+	local kept = {}
+	for _, target in ipairs(found) do
+		local covered = false
+		for _, other in ipairs(found) do
+			if other ~= target and other.height > target.height and target.x >= other.left and target.x <= other.right
+				and target.y <= other.top and target.y >= other.bottom
+				and not Inside(target.frame, other.frame) and not Inside(other.frame, target.frame) then
+				covered = true
+				break
+			end
+		end
+		if not covered then kept[#kept + 1] = target end
+	end
+	return kept
+end
+
 local function Targets(window)
 	local left, right, top, bottom = Rect(window)
 	if not left then return {} end
 	-- (a bar is all buttons: none of them is its background)
 	local area = windows[window] and windows[window].anySize and math.huge or (right - left) * (top - bottom)
-	return Walk(window, window, area, left, right, top, bottom, {})
+	return Uncovered(Walk(window, window, area, left, right, top, bottom, {}))
 end
 
 -- The chosen button's frame around it, and what a mouse over it would show.
@@ -378,11 +428,16 @@ end
 
 function Pad.Wheel(delta) Scroll(delta) end
 
--- A value changed by the cross's left and right (a slider, a row that says how).
+-- A key of the cross held: again after a moment, then steadily.
+local HOLD_FIRST, HOLD_NEXT, HOLD_MOST = 0.35, 0.09, 80
+local held, heldWait, heldCount
+
+-- A value changed by the cross's left and right (a slider, a row that says how). padAdjust(button, delta,
+-- repeats): repeats, how many times the key held has come again (0 at the press: a value may go faster then).
 local function Adjust(delta)
 	if not current then return false end
 	if current.padAdjust then
-		current.padAdjust(current, delta)
+		current.padAdjust(current, delta, held and heldCount or 0)
 		return true
 	end
 	if current.GetObjectType and current:GetObjectType() == "Slider" then
@@ -410,10 +465,6 @@ function Pad.Move(direction)
 		end)
 	end
 end
-
--- A key of the cross held: again after a moment, then steadily.
-local HOLD_FIRST, HOLD_NEXT, HOLD_MOST = 0.35, 0.09, 80
-local held, heldWait, heldCount
 
 local function KeyButton(name, fn)
 	local button = CreateFrame("Button", name, UIParent)
@@ -489,6 +540,17 @@ local function GameWindow()
 	return frame and Seen(frame) and frame or nil
 end
 
+-- A key of ours, also with the modifiers the game lends the controller's buttons (its settings "Shift", "Ctrl",
+-- "Alt" on a button of the pad): held, a click is a Shift + click (a link), a Ctrl + click (tried on), as with a
+-- mouse, and the key still comes to us rather than to the game's action bar its modified press is bound to.
+local MODIFIERS = { "", "SHIFT-", "CTRL-", "ALT-" }
+local function BindKey(key, action)
+	for _, modifier in ipairs(MODIFIERS) do Safe(SetOverrideBinding, closer, true, modifier .. key, action) end
+end
+local function BindClick(key, name, which)
+	for _, modifier in ipairs(MODIFIERS) do Safe(SetOverrideBindingClick, closer, true, modifier .. key, name, which) end
+end
+
 -- The keys for the button chosen: an item is clicked by its own name, as a mouse would (the game only lets an item
 -- be used that way), the rest through a key of ours.
 function BindActions()
@@ -499,26 +561,26 @@ function BindActions()
 	-- (what only the game's own key may do: padBinding says which, for now)
 	local binding = button and button.padBinding and button.padBinding(button)
 	if binding then
-		Safe(SetOverrideBinding, closer, true, "PAD1", binding)
+		BindKey("PAD1", binding)
 	elseif direct then
-		Safe(SetOverrideBindingClick, closer, true, "PAD1", name, button.padPrimary or "LeftButton")
+		BindClick("PAD1", name, button.padPrimary or "LeftButton")
 	elseif button or windows[active].click then
-		Safe(SetOverrideBindingClick, closer, true, "PAD1", "WandererPadClick")
+		BindClick("PAD1", "WandererPadClick")
 	else
-		Safe(SetOverrideBinding, closer, true, "PAD1", nil)
+		BindKey("PAD1", nil)
 	end
 	if name and button.padSecondary then
-		Safe(SetOverrideBindingClick, closer, true, "PAD4", name, button.padSecondary)
+		BindClick("PAD4", name, button.padSecondary)
 	else
-		Safe(SetOverrideBindingClick, closer, true, "PAD4", "WandererPadRight")
+		BindClick("PAD4", "WandererPadRight")
 	end
 	-- (the left button, Alt + click, the same for every addon; a window's own use of it comes first)
 	local opts = windows[active]
 	if not (opts.actions and opts.actions.PAD3) then
 		if (button and button.padAlt) or opts.alt then
-			Safe(SetOverrideBindingClick, closer, true, "PAD3", "WandererPadAlt")
+			BindClick("PAD3", "WandererPadAlt")
 		else
-			Safe(SetOverrideBinding, closer, true, "PAD3", nil)
+			BindKey("PAD3", nil)
 		end
 	end
 end
@@ -594,6 +656,18 @@ local function GameArrow()
 	if nav and nav.SetAlpha then Safe(nav.SetAlpha, nav, active and not gameTurn and 0 or 1) end
 end
 
+-- A question of the game's (StaticPopup: gold to pay, an item that binds, a roll that binds) with the controller's
+-- attention: the game's own keys answer it (its bottom button yes, its right one no), ours step aside until it is
+-- gone, else a press meant for "yes" would click the button chosen behind it. Read only, never written.
+local function GamePopup()
+	local mode = _G.GamepadMode
+	local handler = mode and mode.PopupHandler
+	local popup = handler and handler.activePopup
+	if popup and popup.IsShown and popup:IsShown() then return popup end
+	return nil
+end
+local popupUp = false -- (the last time it was looked at)
+
 local function Bindings()
 	if fighting or InCombatLockdown() then return end
 	Prune(open)
@@ -603,6 +677,14 @@ local function Bindings()
 		closer:SetScript("OnUpdate", nil)
 	end
 	Safe(ClearOverrideBindings, closer)
+	popupUp = GamePopup() ~= nil
+	if popupUp then
+		-- (heard again each moment, to come back once it is answered; a key held then is let go by the game)
+		held = nil
+		closer:SetScript("OnUpdate", Tick)
+		if switchHint then switchHint:Hide() end
+		return
+	end
 	GameArrow()
 	SwitchHint()
 	if not Pad.On() then return end
@@ -622,7 +704,7 @@ local function Bindings()
 		Safe(SetOverrideBindingClick, closer, true, "PADLTRIGGER", "WandererPadPrevious")
 	end
 	if active and not gameTurn then
-		for key, name in pairs(KEYS) do Safe(SetOverrideBindingClick, closer, true, key, name) end
+		for key, name in pairs(KEYS) do BindClick(key, name) end
 		local actions = windows[active] and windows[active].actions
 		if actions then
 			for key, action in pairs(actions) do Safe(SetOverrideBinding, closer, true, key, action) end
@@ -631,11 +713,12 @@ local function Bindings()
 	end
 end
 
--- A window that does not take the controller by itself (one that came alone, a panel beside a game's window unless
--- it says it takes it).
+-- A window that does not take the controller by itself (one that came alone: window.padWaits, or window.quiet,
+-- set before it is shown; a panel beside a game's window unless it says it takes it). window.padTakes: a window
+-- opened silently (the game's own sound rings) that is still the player's doing, the merchant's, the mailbox's.
 local function Waits(window)
 	local opts = windows[window]
-	return window.quiet or (opts.side and not opts.takes)
+	return window.padWaits or (window.quiet and not window.padTakes) or (opts.side and not opts.takes)
 end
 
 local function Eligible()
@@ -659,11 +742,17 @@ local function Focus(window)
 	Bindings()
 end
 
+local dressed = setmetatable({}, { __mode = "k" }) -- our windows (Skin.PadWindow), not pieces of the screen
+
 local function Leave(window)
 	local opts = windows[window]
 	entered[window] = nil
-	Drop(open, window)
-	Drop(closable, window)
+	-- (a window of ours entered from the touchpad and left stays one of the windows open: the triggers, the right
+	-- button still find it)
+	if not (dressed[window] and window:IsShown()) then
+		Drop(open, window)
+		Drop(closable, window)
+	end
 	if opts and opts.onLeave then pcall(opts.onLeave, window) end
 	if active == window then Focus(Eligible()) else Bindings() end
 	memory[window] = nil
@@ -687,6 +776,14 @@ function Tick(_, elapsed)
 	checkWait = checkWait - elapsed
 	if checkWait > 0 or fighting then return end
 	checkWait = CHECK_EVERY
+	-- (a question of the game's come or gone: our keys step aside, or come back)
+	local popup = GamePopup() ~= nil
+	if popup ~= popupUp then
+		Bindings()
+		if not (popup or active or gameTurn) then closer:SetScript("OnUpdate", nil) end
+		return
+	end
+	if popup then return end
 	-- (the game gives its navigation to a window of its own after ours, and its keys then pass before ours: taken back,
 	-- the triggers too, also while the game's window has its turn: they are the way back)
 	if (#open + (GameWindow() and 1 or 0) > 1 and KeyLost("PADRTRIGGER")) or (active and not gameTurn and KeyLost("PADDRIGHT")) then
@@ -722,7 +819,8 @@ end
 -- screen is only left, a panel with no cross of its own leaves its place to the game's window.
 function Pad.Close()
 	Prune(closable)
-	if active and not Holds(closable, active) then return Leave(active) end
+	-- (opts.leaves: a window entered from the touchpad that the right button only leaves, rolls still waiting)
+	if active and (not Holds(closable, active) or (entered[active] and windows[active].leaves)) then return Leave(active) end
 	local window = active or closable[#closable]
 	if window then window:SmartNavigationCloseHandler() end
 end
@@ -788,6 +886,7 @@ local function StandDown(window)
 end
 
 local function Closed(window)
+	window.padWaits = nil
 	StandDown(window)
 	entered[window] = nil
 	Drop(open, window)
@@ -808,6 +907,7 @@ function Skin.PadWindow(window, opts)
 	end
 	opts = opts or {}
 	windows[window] = opts
+	dressed[window] = true
 	window.SmartNavigationCloseHandler = function(self)
 		local cross = self.closeButton
 		if opts.close then
@@ -873,7 +973,10 @@ end
 -- { actions = { key = binding }, onLeave(window) }. False when it cannot be now.
 function Skin.PadEnter(window, opts)
 	if not window or not Pad.On() or fighting or InCombatLockdown() or not window:IsShown() then return false end
-	windows[window] = opts or {}
+	-- (a window of ours already known keeps its own answers: what is asked now is added)
+	local known = windows[window] or {}
+	for key, value in pairs(opts or {}) do known[key] = value end
+	windows[window] = known
 	entered[window] = true
 	Drop(open, window)
 	open[#open + 1] = window
@@ -931,6 +1034,194 @@ function Pad.Menu(owner, build)
 	return true
 end
 
+-- The controller's keyboard ------------------------------------------------------------------------------------
+-- A line to write in, chosen and pressed with the controller: a keyboard of ours under it (the game has none).
+-- Its keys are buttons like any other (the cross goes from one to the next, the bottom button writes); the left
+-- button erases, the top one is Enter (the line's own: a search runs, a question is answered), the right one puts the
+-- keyboard away and keeps what is written. What is written shows in the line as it goes, and in the keyboard's own
+-- line. The letters are the client's language's (KEYBOARD_LETTERS); a line of digits only gets digits.
+
+local KEY, KEY_GAP, KEYS_PER_ROW = 30, 4, 12
+local PUNCTUATION = ".,'!?:-()/&"
+local keyboard
+
+-- One character at a time (letters with accents and Cyrillic are several bytes).
+local function Characters(text)
+	local list = {}
+	for char in tostring(text or ""):gmatch("[%z\1-\127\194-\244][\128-\191]*") do list[#list + 1] = char end
+	return list
+end
+
+local function Preview(input)
+	if keyboard then keyboard.preview:SetText((input:GetText() or "") .. Skin.Colorize("|", "gold")) end
+end
+
+local function Typed(input)
+	-- (as the player's own typing: a search filters, an amount is read)
+	local changed = input:GetScript("OnTextChanged")
+	if changed then changed(input, true) end
+	Preview(input)
+end
+
+-- The line written in, still there (its window closed meanwhile: the keyboard goes with it).
+local function Line()
+	local input = keyboard and keyboard.input
+	if input and not input:IsVisible() then
+		keyboard:Hide()
+		return nil
+	end
+	return input
+end
+
+local function Write(char)
+	local input = Line()
+	if not input then return end
+	local text = input:GetText() or ""
+	local most = input.GetMaxLetters and Clean(Safe(input.GetMaxLetters, input)) or 0
+	if type(most) == "number" and most > 0 and #Characters(text) >= most then return end
+	if keyboard.capitals then
+		char = U.Upper(char)
+		keyboard.capitals = false
+		keyboard.Relabel()
+	end
+	input:SetText(text .. char)
+	Typed(input)
+end
+
+local function Erase()
+	local input = Line()
+	if not input then return end
+	local text = input:GetText() or ""
+	if text == "" then return end
+	input:SetText((text:gsub("[%z\1-\127\194-\244][\128-\191]*$", "")))
+	Typed(input)
+end
+
+-- Enter: the keyboard put away first, then the line's own answer (a question closing with it).
+local function Done()
+	local input = Line()
+	if not input then return end
+	keyboard:Hide()
+	local enter = input:GetScript("OnEnterPressed")
+	if enter then enter(input) end
+end
+
+local function KeyboardWindow()
+	if keyboard then return keyboard end
+	keyboard = Skin.CreateWindow("WandererPadKeyboard", "FULLSCREEN_DIALOG")
+	Skin.PadWindow(keyboard, { alt = function() Erase() return true end, right = function() Done() return true end })
+	Skin.Closable(keyboard, "WandererPadKeyboard")
+	-- (a click elsewhere with a mouse does not put it away: it is the controller's)
+	keyboard:SetScript("OnEvent", nil)
+	keyboard.keys, keyboard.extra = {}, {}
+	keyboard.preview = Skin.Text(keyboard, "ChatFontNormal", "text")
+	keyboard.preview:SetJustifyH("LEFT")
+	if keyboard.preview.SetWordWrap then keyboard.preview:SetWordWrap(false) end
+	local function Mark(button)
+		-- (the left and top buttons say what they do, on every key)
+		button.padAlt, button.padAltWord = Erase, "ERASE"
+		button.padRight, button.padRightWord = true, "DONE"
+		return button
+	end
+	keyboard.Mark = Mark
+	local function Special(text, fn, kind)
+		local button = Mark(Skin.Button(keyboard, text, fn, kind, 60))
+		button:SetHeight(KEY)
+		keyboard.extra[#keyboard.extra + 1] = button
+		return button
+	end
+	keyboard.caps = Special(ns.L.KEYBOARD_CAPITALS, function()
+		keyboard.capitals = not keyboard.capitals
+		keyboard.Relabel()
+	end)
+	keyboard.space = Special(ns.L.KEYBOARD_SPACE, function() Write(" ") end)
+	keyboard.space:SetWidth(150)
+	keyboard.erase = Special(ns.L.PAD_DO_ERASE, Erase)
+	keyboard.done = Special(ns.L.PAD_DO_DONE, Done, "main")
+	function keyboard.Relabel()
+		for _, button in ipairs(keyboard.keys) do
+			if button:IsShown() then button:SetText(keyboard.capitals and U.Upper(button.char) or button.char) end
+		end
+		keyboard.caps.caption:SetTextColor(Skin.RGB(keyboard.capitals and "gold" or "kicker"))
+	end
+	keyboard:HookScript("OnHide", function(self)
+		self.input, self.capitals = nil, false
+	end)
+	return keyboard
+end
+
+-- The keyboard laid out for one line: its characters in rows, the special keys under them, placed under the line.
+local function Lay(input)
+	local board = KeyboardWindow()
+	local numeric = input.IsNumeric and Clean(Safe(input.IsNumeric, input)) == true
+	local chars = Characters("1234567890")
+	if not numeric then
+		for _, char in ipairs(Characters(ns.L.KEYBOARD_LETTERS)) do chars[#chars + 1] = char end
+		for _, char in ipairs(Characters(PUNCTUATION)) do chars[#chars + 1] = char end
+	end
+	local margin = Skin.Margin() + 8
+	local width = KEYS_PER_ROW * (KEY + KEY_GAP) - KEY_GAP
+	board.preview:ClearAllPoints()
+	board.preview:SetPoint("TOPLEFT", board, "TOPLEFT", margin, -margin)
+	board.preview:SetWidth(width)
+	local top = margin + 24
+	for index, char in ipairs(chars) do
+		local button = board.keys[index]
+		if not button then
+			button = board.Mark(Skin.Button(board, "", function(self) Write(self.char) end, nil, KEY))
+			button:SetSize(KEY, KEY)
+			board.keys[index] = button
+		end
+		button.char = char
+		button:SetText(char)
+		button:SetWidth(KEY)
+		local column, row = (index - 1) % KEYS_PER_ROW, math.floor((index - 1) / KEYS_PER_ROW)
+		button:ClearAllPoints()
+		button:SetPoint("TOPLEFT", board, "TOPLEFT", margin + column * (KEY + KEY_GAP), -(top + row * (KEY + KEY_GAP)))
+		button:Show()
+	end
+	for index = #chars + 1, #board.keys do board.keys[index]:Hide() end
+	local rows = math.ceil(#chars / KEYS_PER_ROW)
+	local y = top + rows * (KEY + KEY_GAP) + 4
+	local x = margin
+	for _, button in ipairs(board.extra) do
+		local shown = not (numeric and (button == board.caps or button == board.space))
+		button:SetShown(shown)
+		if shown then
+			button:ClearAllPoints()
+			button:SetPoint("TOPLEFT", board, "TOPLEFT", x, -y)
+			x = x + button:GetWidth() + KEY_GAP * 2
+		end
+	end
+	-- (what the left and top buttons do is said under it, as under every window: SwitchHint)
+	board:SetSize(width + margin * 2, y + KEY + margin)
+	board:SetScale(Skin.Scale and Skin.Scale() or 1)
+	board:ClearAllPoints()
+	board:SetPoint("TOP", input, "BOTTOM", 0, -8)
+	board.capitals = false
+	board.Relabel()
+	return board, chars
+end
+
+-- The keyboard for this line (a line of ours, in a window of ours). False when it cannot be now (a fight).
+function Pad.Keyboard(input)
+	if not (input and input.SetText) or fighting or InCombatLockdown() then return false end
+	local board = Lay(input)
+	board.input = input
+	if input.HasFocus and input:HasFocus() then input:ClearFocus() end
+	Preview(input)
+	if board:IsShown() then
+		Pad.Refresh(board)
+	else
+		board:Show()
+	end
+	-- (the first letter chosen, not the first digit: words come before amounts)
+	local first = board.keys[11] and board.keys[11]:IsShown() and board.keys[11] or board.keys[1]
+	if first then Pad.Choose(first, board) end
+	return true
+end
+Skin.PadKeyboard = Pad.Keyboard
+
 -- The actions the game blocked for Wanderer or its extensions, kept for a look after a /reload
 -- (WandererDB.blocked, the last 20): what was blocked, when, with the controller interface or not, the game's
 -- windows open then. The game names the blocked function, never the cause: a taint log tells the rest.
@@ -961,6 +1252,15 @@ if type(_G.ShowUIPanel) == "function" then
 		if active and window and Inside(active, window) then return end
 		for piece in pairs(entered) do Leave(piece) end
 		if active then GiveToGame() end
+	end)
+end
+-- A question of the game's shown (and given the controller by the game, a moment later): our keys step aside.
+if type(_G.StaticPopup_Show) == "function" then
+	hooksecurefunc("StaticPopup_Show", function()
+		if not Pad.On() or fighting or InCombatLockdown() then return end
+		C_Timer.After(0, function()
+			if not fighting and not InCombatLockdown() and not popupUp and GamePopup() then Bindings() end
+		end)
 	end)
 end
 if type(_G.HideUIPanel) == "function" then
@@ -1073,6 +1373,8 @@ events:SetScript("OnEvent", function(_, event, ...)
 	if event == "PLAYER_REGEN_DISABLED" then
 		-- (every key given back before the lock; the marker goes with them, the game's windows are seen again)
 		for window in pairs(standing) do StandDown(window) end
+		-- (the keyboard cannot be used without our keys: put away, what is written stays)
+		if keyboard and keyboard:IsShown() then keyboard:Hide() end
 		Safe(ClearOverrideBindings, homeOwner)
 		Select(nil)
 		active, held = nil, nil
@@ -1096,6 +1398,8 @@ events:SetScript("OnEvent", function(_, event, ...)
 	if ns.RefreshSettingsWindow then ns.RefreshSettingsWindow() end
 	if ns.RefreshCard then ns.RefreshCard() end
 	if ns.RefreshLauncherHint then ns.RefreshLauncherHint() end
+	-- (in a fight the keys are the game's: nothing taken nor let go now, the fight's end focuses again)
+	if fighting or InCombatLockdown() then return end
 	if Pad.On() then return Focus(Eligible()) end
 	Select(nil)
 	active, held = nil, nil

@@ -212,6 +212,9 @@ local function Layout()
 	local Skin = ns.Skin
 	local paper = Paper()
 	Skin.Parchment(window, paper)
+	-- (its cross and its scroll bar in ink on the paper: seen, as its words)
+	if window.closeButton and window.closeButton.SetPaper then window.closeButton:SetPaper(paper) end
+	if bar.SetPaper then bar:SetPaper(paper) end
 	window:SetScale(Skin.Scale())
 	local margin = Skin.Margin() + 8
 	local inner = WIDTH - margin * 2 - Skin.SCROLL_WIDTH

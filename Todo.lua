@@ -166,13 +166,16 @@ local function Row(index)
 	if row.text.SetWordWrap then row.text:SetWordWrap(false) end
 	row.highlight = row:CreateTexture(nil, "BACKGROUND")
 	row.highlight:SetAllPoints()
-	row.highlight:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.HOVER))
+	row.highlight:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
 	row.highlight:Hide()
 	-- A click ticks (or unticks); a right click opens its menu.
 	row:SetScript("OnClick", function(self, button)
 		if not self.item then return end
 		if button == "RightButton" then
 			return OpenMenu(self)
+		-- (an item to gather: the game's modified clicks first, Shift links it, Ctrl tries it on)
+		elseif self.item.item and U.ItemClick(self.item.item) then
+			return
 		else
 			self.item.done = not self.item.done or nil
 			U.PlaySound(self.item.done and "IG_MAINMENU_OPTION_CHECKBOX_ON" or "IG_MAINMENU_OPTION_CHECKBOX_OFF")
@@ -182,7 +185,14 @@ local function Row(index)
 	row:SetScript("OnEnter", function(self)
 		self.highlight:Show()
 		self.remove:Show()
-		ns.Skin.ShowTip(self, U.UsingPad() and L.TODO_ROW_HINT_PAD or L.TODO_ROW_HINT, "ANCHOR_LEFT")
+		local hint = U.UsingPad() and L.TODO_ROW_HINT_PAD or L.TODO_ROW_HINT
+		-- (a reminder cut in its row: written whole first)
+		if self.item and self.text.IsTruncated and self.text:IsTruncated() then
+			local muted = ns.Skin.COLORS.muted
+			ns.Skin.ShowTip(self, { { self.item.text, 1, 1, 1 }, { hint, muted[1], muted[2], muted[3] } }, "ANCHOR_LEFT")
+		else
+			ns.Skin.ShowTip(self, hint, "ANCHOR_LEFT")
+		end
 	end)
 	row:SetScript("OnLeave", function(self)
 		GameTooltip:Hide()
@@ -297,19 +307,8 @@ local function CreateWindow()
 	input:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin)
 	input:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -margin - 10, margin) -- (the corner's grip beside it)
 	-- Clear the done ones, over the line.
-	clearButton = CreateFrame("Button", nil, window)
-	clearButton:SetHeight(18)
+	clearButton = ns.Skin.SmallButton(window, L.TODO_CLEAR_DONE, ClearDone, L.TODO_CLEAR_DONE_TIP, 18)
 	clearButton:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 0, 4)
-	clearButton.text = ns.Skin.CreateText(clearButton, "GameTooltipTextSmall", ns.Skin.RGB("label"))
-	clearButton.text:SetPoint("RIGHT")
-	clearButton.text:SetText(L.TODO_CLEAR_DONE)
-	clearButton:SetWidth(U.Measure(clearButton.text, "GetStringWidth", 160) + 8)
-	clearButton:SetScript("OnClick", function()
-		ns.Skin.Play("click")
-		ClearDone()
-	end)
-	clearButton:SetScript("OnEnter", function(self) self.text:SetTextColor(ns.Skin.COLORS.gold[1], ns.Skin.COLORS.gold[2], ns.Skin.COLORS.gold[3]) end)
-	clearButton:SetScript("OnLeave", function(self) self.text:SetTextColor(ns.Skin.COLORS.label[1], ns.Skin.COLORS.label[2], ns.Skin.COLORS.label[3]) end)
 	window:EnableMouseWheel(true)
 	window:SetScript("OnMouseWheel", function(_, delta)
 		offset = offset - delta
@@ -361,7 +360,8 @@ local function LoggedIn()
 		if ns.TodoPending() == 0 then return end
 		if not window then CreateWindow() end
 		if window:IsShown() then return end
-		window.quiet = true
+		-- (silently, and it waits for the controller to come to it)
+		window.quiet, window.padWaits = true, true
 		window:Show()
 	end)
 end

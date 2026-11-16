@@ -486,7 +486,10 @@ local function RefreshRow(frame)
 	if row.kind == "block" then return frame:Refresh() end
 	local usable = ns.SettingsRowUsable(row)
 	frame.usable = usable
-	frame:SetAlpha(usable and 1 or 0.45)
+	-- (only its name and its control are dimmed: why it is off and who does its job stay readable)
+	local dim = usable and 1 or 0.45
+	frame.label:SetAlpha(dim)
+	frame.desc:SetAlpha(dim)
 	local note = ns.SettingsRowNote(row)
 	frame.note:Set(note, "blue")
 	frame.note.page = note and NotePage(row) or nil
@@ -517,9 +520,8 @@ local function RefreshRow(frame)
 	end
 	if control.SetEnabled and row.kind ~= "slider" then
 		control:SetEnabled(usable)
-		-- (the row is dimmed already)
-		control:SetAlpha(1)
 	end
+	control:SetAlpha(dim)
 end
 
 -- A page's title (the home page: its general settings; the sidebar names Wanderer over it).
@@ -527,7 +529,7 @@ function ns.SettingsPageTitle(page)
 	return page.key == "home" and L.SECTION_GENERAL or page.name
 end
 
--- The quiet row folding a page's less used rows: its words, how many, a sign up or down.
+-- The quiet row folding a page's less used rows: its words, how many, a chevron (down once open).
 local function FoldFrame(canvas, count, onClick)
 	local frame = CreateFrame("Button", nil, canvas)
 	frame.rule = Skin.Rule(frame, false, 0.1)
@@ -543,7 +545,7 @@ local function FoldFrame(canvas, count, onClick)
 	frame.count = Skin.Chip(frame)
 	frame.count:Set(tostring(count), "grey")
 	frame.count:SetPoint("LEFT", frame.label, "LEFT", U.Measure(frame.label, "GetStringWidth", 100) + 8, 0)
-	frame.sign = Skin.Glyph(frame, "down", 10)
+	frame.sign = Skin.Glyph(frame, "chevron", 10)
 	frame.sign:SetPoint("RIGHT", frame, "RIGHT", -16, 0)
 	frame:SetScript("OnEnter", function(self) self.hover:Show() end)
 	frame:SetScript("OnLeave", function(self) self.hover:Hide() end)
@@ -669,7 +671,7 @@ local function PageView(page)
 			self.fold:ClearAllPoints()
 			self.fold:SetPoint("TOPLEFT", self.canvas, "TOPLEFT", 0, -y)
 			self.fold:SetSize(width, 34)
-			Skin.SetGlyph(self.fold.sign, open and "up" or "down")
+			Skin.SetGlyph(self.fold.sign, open and "down" or "chevron")
 			self.fold.top = y
 			y = y + 36
 			placed = open and 0 or placed
@@ -1252,7 +1254,7 @@ local function ResultsView()
 		self.results = ns.SearchSettings(query)
 		local count = #self.results
 		self.title:SetText(count > 0 and U.Plural(count, L.SETTINGS_RESULT_ONE, L.SETTINGS_RESULTS)
-			or L.SETTINGS_NO_RESULTS:format(query))
+			or L.SETTINGS_NO_RESULTS)
 		for index, result in ipairs(self.results) do
 			local button = Button(index)
 			button.result = result
@@ -1570,13 +1572,14 @@ function ns.OpenOptions(key)
 	end
 end
 
-function ns.CloseSettingsWindow()
-	if window and window:IsShown() then window:Hide() end
+-- The crest's right click, as the game's minimap buttons: the settings opened, or closed when open.
+function ns.ToggleOptions()
+	if window and window:IsShown() then return window:Hide() end
+	ns.OpenOptions()
 end
 
-function ns.ToggleChanges()
-	if window and window:IsShown() and current == "changes" then return window:Hide() end
-	ns.OpenOptions("changes")
+function ns.CloseSettingsWindow()
+	if window and window:IsShown() then window:Hide() end
 end
 
 -- The values read again (a profile chosen, a change made elsewhere), the page laid out again.

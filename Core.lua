@@ -123,6 +123,7 @@ local DEFAULTS = {
 		textScale = 1,
 		offset = 22,
 		bgOpacity = 55,
+		gameSkins = true, -- the game's windows Wanderer does not replace, in its colors (GameSkins.lua; off: after a /reload)
 		padding = 8,
 		font = "default",
 	},
@@ -155,6 +156,7 @@ local DEFAULTS = {
 		guildRepair = false,
 		repairReminder = true, -- back in town with worn equipment: a smith would be welcome
 		provisions = true, -- what you buy again and again, offered at merchants when low (bought on a click only)
+		window = true, -- Wanderer's merchant window in place of the game's (MerchantWindow.lua)
 	},
 	loot = {
 		fast = true,
@@ -163,6 +165,8 @@ local DEFAULTS = {
 		feedMoney = true,
 		feedReceived = true, -- quest rewards and purchases too
 		feedTime = 4, -- seconds each line stays (an epic thing longer)
+		window = true, -- Wanderer's loot window in place of the game's (LootWindow.lua)
+		rolls = true, -- Wanderer's loot rolls in place of the game's roll frames (LootRolls.lua)
 	},
 	trainer = {
 		learnAll = true,
@@ -422,8 +426,9 @@ _G.Wanderer = setmetatable({
 	-- padWheel and padRight's hint word (padRightWord), padSecondary's (padSecondaryWord), Skin.CursorPoint (where a
 	-- card opened by a click stands: the mouse, or the controller's chosen button), Skin.GlyphButton's rightWord and
 	-- Skin.Table's spec.padRight (the top button only where a right click is its own), Placeable, PlaceApply and
-	-- PlaceMode (Place.lua).
-	API = 21,
+	-- PlaceMode (Place.lua); 22 = Util.ItemClick (an item's, a battle pet's or a spell's modified click, the game's
+	-- way), Skin.DRAWER_CLOSE_AFTER, Skin.CloseButton's and Skin.ScrollBar's SetPaper (in ink on a parchment).
+	API = 23,
 	UnitNote = function(fn) ns.UnitNote(fn) end,
 	-- A place's levels and fishing (ZoneData.lua): by its area id, or by its map (onMap); no id: the whole list.
 	ZoneLevels = function(id, onMap) return ns.ZoneLevels and ns.ZoneLevels(id, onMap) end,
@@ -464,12 +469,12 @@ _G.Wanderer = setmetatable({
 	IsDebugTab = function(index) return ns.IsDebugTab(index) end,
 	-- A conversation scene shown (the words of a character, face to face).
 	InScene = function() return ns.sceneActive and true or false end,
-	-- Another addon doing one of Wanderer's jobs now ("sellJunk", "fastLoot"... see Compat.lua): its name, else
-	-- nil; and the muted line for an option left to it.
 	-- A portrait of Wanderer's look (texture, unit, where): a face, or the class icon in the unit frames' style when
 	-- the game (or the player's exception) shows one there; true when an icon. W.Skin.UnitBar(bar, look, r, g, b): a bar
 	-- in the unit frames' look. (API 15.)
 	SetPortrait = function(texture, unit, where) return ns.SetPortrait(texture, unit, where) end,
+	-- Another addon doing one of Wanderer's jobs now ("sellJunk", "fastLoot"... see Compat.lua): its name, else
+	-- nil; and the muted line for an option left to it.
 	Yields = function(feature) return ns.Yields(feature) end,
 	YieldText = function(feature) return ns.YieldText(feature) end,
 	-- fn(info) -> a line under the reading window's title, or nil (info: title, item, creator, object, zone...).
@@ -1204,6 +1209,7 @@ local function PlaceProfileName(zone)
 	local own = type(ns.root.ownProfile) == "table" and ns.root.ownProfile[ns.CharacterKey()]
 	return L["PLACE_PROFILE_" .. zone:upper()] .. " (" .. (own or ns.CharacterName()) .. ")"
 end
+ns.PlaceProfileName = PlaceProfileName
 
 -- A setting you change: the same in every profile of this character (its own and its places'), but what the
 -- places are for (the interface fading, travel, the damage meter), kept to the place where it was changed.
@@ -1313,7 +1319,7 @@ end
 local REFRESH = { "RefreshOptions", "RefreshLabel", "RefreshMinimapButton", "RefreshCinema", "RefreshTooltips", "RefreshTrainer",
 	"RefreshScreen", "RefreshSounds", "RefreshScene", "RefreshClean", "RefreshIcons", "RefreshBarSlots", "RefreshGameFrames",
 	"RefreshTargetInfo", "RefreshPlates", "RefreshDots", "RefreshHots", "RefreshAway", "RefreshMinimapLook", "RefreshTrackerLook", "RefreshCrafts",
-	"RefreshCurtain", "RefreshLootFeed" }
+	"RefreshCurtain", "RefreshLootFeed", "RefreshMerchantWindow", "RefreshLootWindow", "RefreshGameSkins" }
 
 -- (one failing is reported, the others still refreshed)
 function ns.RefreshAll()
@@ -1565,7 +1571,7 @@ end
 
 function ns.SetProfile(name, byPlace)
 	local root = ns.root
-	if not root.profiles[name] then root.profiles[name] = {} end
+	if type(root.profiles[name]) ~= "table" then root.profiles[name] = {} end
 	local profile = root.profiles[name]
 	-- 0.34: enemy names no longer come back in a fight unless asked, once for
 	-- every profile; the choice stays free after.
@@ -1818,14 +1824,16 @@ events:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 events:SetScript("OnEvent", function(_, event, arg1)
 	if event == "ADDON_LOADED" and arg1 == ADDON then
-		WandererDB = WandererDB or {}
+		-- (a saved file damaged or edited by hand: each part of the wrong kind starts again empty)
+		if type(WandererDB) ~= "table" then WandererDB = {} end
 		ns.root = WandererDB
 		Migrate(WandererDB)
+		if type(WandererDB.profiles) ~= "table" then WandererDB.profiles = {} end
 		-- What removed features left behind (the journal, its sessions, the parchment): let go.
 		for _, key in ipairs({ "journal", "questTitles", "sessions", "sessionPos", "paper" }) do WandererDB[key] = nil end
 		-- The interaction prompt is gone: the game's own setting is the
 		-- player's again, as it was before Wanderer.
-		local original = WandererDB.original
+		local original = type(WandererDB.original) == "table" and WandererDB.original or nil
 		if original and original.SoftTargetInteract ~= nil then
 			pcall(SetCVar, "SoftTargetInteract", original.SoftTargetInteract)
 			original.SoftTargetInteract = nil
@@ -1834,7 +1842,13 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		if original then
 			for cvar in pairs(SPARKLE_CVARS) do original[cvar] = nil end
 		end
+		for _, name in ipairs(ns.BY_CHARACTER) do
+			if WandererDB[name] ~= nil and type(WandererDB[name]) ~= "table" then WandererDB[name] = nil end
+		end
 		WandererDB.profileKeys = WandererDB.profileKeys or {}
+		for character, places in pairs(WandererDB.placeProfiles or {}) do
+			if type(places) ~= "table" then WandererDB.placeProfiles[character] = nil end
+		end
 		MoveCharacterKey(WandererDB)
 		SplitAccountSettings(WandererDB)
 		-- (the character's own profile first: the places' are named after it)
@@ -1844,8 +1858,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		-- Modules are built once: frames, hooks and events must never be doubled.
 		if not ns.initialized then
 			for _, init in ipairs({ "InitCompat", "InitLabel","InitOptions", "InitMinimapButton", "InitBar", "InitCinema", "InitTooltips",
-				"InitMerchant", "InitLoot", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
-				"InitTagging", "InitAcquaintances", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitTown", "InitScene", "InitReader", "InitCamera", "InitGestures", "InitCurtain", "InitCampfire", "InitAway", "InitClean", "InitMinimapLook", "InitLayer", "InitProvisions", "InitDots", "InitDotBars", "InitHots", "InitHotBars", "InitTrackerLook", "InitIcons", "InitHands", "InitCharacters", "InitWorth", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitGameFrames", "InitBarSlots", "InitNews", "InitUnitFrames", "InitPortraits", "InitPreview", "InitSparkles", "InitLootFeed", "InitEmotes", "InitWelcome" }) do
+				"InitMerchant", "InitMerchantWindow", "InitLoot", "InitLootWindow", "InitLootRolls", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
+				"InitTagging", "InitAcquaintances", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitTown", "InitScene", "InitReader", "InitCamera", "InitGestures", "InitCurtain", "InitCampfire", "InitAway", "InitClean", "InitMinimapLook", "InitLayer", "InitProvisions", "InitDots", "InitDotBars", "InitHots", "InitHotBars", "InitTrackerLook", "InitIcons", "InitHands", "InitCharacters", "InitWorth", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitGameFrames", "InitGameSkins", "InitBarSlots", "InitNews", "InitUnitFrames", "InitPortraits", "InitPreview", "InitSparkles", "InitLootFeed", "InitEmotes", "InitWelcome" }) do
 				-- (one module failing at its start is reported, the others still start)
 				if ns[init] then ns.Util.Try(ns[init]) end
 			end
@@ -1890,6 +1904,22 @@ local PRESET_ALIASES = {
 }
 
 SLASH_WANDERER1 = "/wanderer"
+-- An extension's command and its other spellings (its short alias), as it registered them with the game.
+local function SlashWords(slash)
+	local words = { slash }
+	for key in pairs(SlashCmdList) do
+		if rawget(_G, "SLASH_" .. key .. "1") == slash then
+			local index = 2
+			while type(rawget(_G, "SLASH_" .. key .. index)) == "string" do
+				words[#words + 1] = rawget(_G, "SLASH_" .. key .. index)
+				index = index + 1
+			end
+			break
+		end
+	end
+	return words
+end
+
 SlashCmdList.WANDERER = function(msg)
 	msg = strtrim((msg or ""):lower())
 	if msg == "" or msg == "options" or msg == "config" then
@@ -1950,6 +1980,8 @@ SlashCmdList.WANDERER = function(msg)
 		ns.Print(L.ENEMY_NAMES_SAID:format(L.ENEMY_NAMES, L["ENEMY_NAMES_" .. ns.db.enemyNames:upper()], tostring(ns.profileName)))
 	elseif msg == "poids" or msg == "weights" or msg == "pesos" or msg == "pesi" or msg == "gewichte" then
 		ns.ToggleWeights()
+	elseif msg == "characters" or msg == "personnages" then
+		ns.ToggleCharacters()
 	elseif msg == "objet" or msg == "item" then
 		ns.DebugUpgrade()
 	elseif msg == "clear" or msg == "effacer" then
@@ -1980,11 +2012,13 @@ SlashCmdList.WANDERER = function(msg)
 	else
 		ns.Print(L.SLASH_HELP)
 		for _, extension in ipairs(ns.EXTENSIONS) do
-			if extension.slash then ns.Print(extension.title .. ": " .. extension.slash) end
+			if extension.slash then ns.Print(extension.title .. ": " .. table.concat(SlashWords(extension.slash), ", ")) end
 		end
 	end
 end
 
-function Wanderer_OnAddonCompartmentClick(_, _, menuButton)
+-- (as the crest on the minimap: a left click the card, a right click the settings)
+function Wanderer_OnAddonCompartmentClick(_, mouseButton, menuButton)
+	if mouseButton == "RightButton" then return ns.ToggleOptions() end
 	ns.ShowMenu(menuButton)
 end

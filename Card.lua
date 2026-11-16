@@ -103,7 +103,7 @@ local function Tile(index)
 	tile.count:SetHeight(15)
 	tile.count:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -2, -2)
 	tile.dot = tile:CreateTexture(nil, "OVERLAY")
-	tile.dot:SetSize(6, 6)
+	tile.dot:SetSize(9, 9)
 	tile.dot:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 1)
 	tile.dot:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -5, -5)
 	tile.key = ns.Skin.Text(tile, "GameTooltipTextSmall", "muted")
@@ -120,7 +120,7 @@ local function Tile(index)
 	tile.Paint = Paint
 	tile:SetScript("OnEnter", function(self)
 		Paint(self, true)
-		card.ShowSummary(self.entry)
+		card.ShowSummary(self.entry, self.word.IsTruncated and self.word:IsTruncated())
 	end)
 	tile:SetScript("OnLeave", function(self)
 		Paint(self, false)
@@ -228,12 +228,12 @@ local function Tools()
 		ns.GatherIcons()
 		local owner = card.owner
 		local fromBar = owner and owner ~= _G.WandererMinimapButton and owner ~= UIParent
-		list[#list + 1] = { text = L.MENU_ICONS:format(ns.CountIcons()), glyph = "grid", right = ">",
+		list[#list + 1] = { text = L.MENU_ICONS:format(ns.CountIcons()), glyph = "grid", rightGlyph = "chevron",
 			onClick = Close(function() ns.ToggleIconDrawer(fromBar and owner or _G.WandererMinimapButton, fromBar) end) }
 	end
 	local recent = ns.RecentNotices()
 	if recent[1] then
-		list[#list + 1] = { text = L.TOAST_RECENT_COUNT:format(#recent), glyph = "bell", right = recentOpen and "^" or "v", keep = true,
+		list[#list + 1] = { text = L.TOAST_RECENT_COUNT:format(#recent), glyph = "bell", rightGlyph = recentOpen and "up" or "down", keep = true,
 			onClick = function()
 				recentOpen = not recentOpen
 				Fill()
@@ -394,7 +394,6 @@ local function OnKey(self, key)
 	local take = key == "ESCAPE" or (tile and tile:IsShown() and tile.entry ~= nil)
 	if self.SetPropagateKeyboardInput then pcall(self.SetPropagateKeyboardInput, self, not take) end
 	if key == "ESCAPE" then
-		ns.Skin.Play("close")
 		self:Hide()
 	elseif take then
 		ns.OpenCardTile(tile)
@@ -407,6 +406,8 @@ local function Create()
 	card = Skin.CreateWindow("WandererCard", "DIALOG")
 	Skin.PadWindow(card)
 	Skin.Closable(card, "WandererCard")
+	-- (open and close heard like every window, however it closes)
+	Skin.Sounds(card, Skin.SOUNDS.open, Skin.SOUNDS.close)
 	local look = Skin.Get(card)
 	if look then look.minOpacity = 0.97 end
 	card:SetWidth(WIDTH)
@@ -445,12 +446,14 @@ local function Create()
 	card.hover = Skin.Text(card, "GameTooltipTextSmall", "soft")
 	card.hover:SetJustifyH("LEFT")
 	card.hover:SetJustifyV("TOP")
-	function card.ShowSummary(entry)
+	-- (a name cut in its tile: written whole as the first line)
+	function card.ShowSummary(entry, cut)
 		if not entry then
 			card.hover:SetText(Skin.Colorize(U.UsingPad and U.UsingPad() and L.CARD_HOVER_HINT_PAD or L.CARD_HOVER_HINT, "muted"))
 			return
 		end
 		local words = {}
+		if cut and type(entry.label) == "string" then words[1] = Skin.Colorize(entry.label, "gold") end
 		local ok, lines = pcall(entry.summary or function() return {} end)
 		for _, line in ipairs(ok and type(lines) == "table" and lines or {}) do
 			if #words < HOVER_LINES and type(line.text) == "string" then words[#words + 1] = Skin.Colorize(line.text, line.role or "text") end

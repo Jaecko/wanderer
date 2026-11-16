@@ -152,8 +152,9 @@ local function OnEvent(_, event)
 		if Clean(Safe(QuestGetAutoAccept)) then
 			Safe(AcknowledgeAutoAcceptQuest)
 			acted = true
-		elseif not IsTrivialDetail() and not IsRepeatableDetail() then
-			-- Grey (trivial) and repeatable quests stay for the player to decide, as in the gossip window.
+		elseif not IsTrivialDetail() and not IsRepeatableDetail() and not (_G.QuestFlagsPVP and Clean(Safe(_G.QuestFlagsPVP))) then
+			-- Grey (trivial) and repeatable quests stay for the player to decide, as in the gossip window; a
+			-- quest that flags you for PvP too (the game asks before taking it).
 			Safe(AcceptQuest)
 			acted = true
 		end

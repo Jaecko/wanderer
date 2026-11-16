@@ -141,9 +141,37 @@ local function Position()
 	return ("%.1f, %.1f"):format(x * 100, y * 100)
 end
 
+-- The zone's state of war, as the game's minimap tells it: its color, and its line in the tooltip (the game's
+-- own words). Elsewhere (no state): golden, no line.
+local PVP_COLORS = {
+	sanctuary = { 0.41, 0.8, 0.94 }, arena = { 1, 0.1, 0.1 }, friendly = { 0.1, 1, 0.1 }, hostile = { 1, 0.1, 0.1 },
+	contested = { 1, 0.7, 0 }, combat = { 1, 0.1, 0.1 },
+}
+local function PvPState()
+	local kind, _, faction = Safe(_G.GetZonePVPInfo)
+	kind, faction = Clean(kind), Clean(faction)
+	local color = type(kind) == "string" and PVP_COLORS[kind]
+	if not color then return nil end
+	local text
+	if kind == "sanctuary" then
+		text = _G.SANCTUARY_TERRITORY
+	elseif kind == "arena" then
+		text = _G.FREE_FOR_ALL_TERRITORY
+	elseif kind == "contested" then
+		text = _G.CONTESTED_TERRITORY
+	elseif kind == "combat" then
+		text = _G.COMBAT_ZONE
+	elseif type(faction) == "string" and faction ~= "" and _G.FACTION_CONTROLLED_TERRITORY then
+		text = _G.FACTION_CONTROLLED_TERRITORY:format(faction)
+	end
+	return color, text
+end
+
 local function DrawInfo()
 	local zone = Clean(Safe(GetMinimapZoneText)) or Clean(Safe(GetZoneText)) or ""
 	info.zone:SetText(U.Upper(zone))
+	local color = PvPState() or ns.Skin.COLORS.gold
+	info.zone:SetTextColor(color[1], color[2], color[3])
 	local where = Position()
 	info.line:SetText(where and (Clock() .. U.SEPARATOR .. where) or Clock())
 end
@@ -185,9 +213,12 @@ local function MakeInfo()
 	info:SetAlpha(REST)
 	info:SetScript("OnEnter", function(self)
 		self:SetAlpha(NEAR)
-		local lines = { Clean(Safe(GetZoneText)) or "" }
+		local color, state = PvPState()
+		local lines = { color and { Clean(Safe(GetZoneText)) or "", color[1], color[2], color[3] } or Clean(Safe(GetZoneText)) or "" }
 		local sub = Clean(Safe(GetSubZoneText))
 		if sub and sub ~= "" then lines[#lines + 1] = sub end
+		-- (sanctuary, contested, held by a faction: the game's own words, in its color)
+		if state then lines[#lines + 1] = { state, color[1], color[2], color[3] } end
 		-- (the layer's line, gathered with the others)
 		ns.AddLayerLine({ AddLine = function(_, text) lines[#lines + 1] = { text, C.muted[1], C.muted[2], C.muted[3] } end })
 		lines[#lines + 1] = { L.MINIMAP_INFO_HINT, C.muted[1], C.muted[2], C.muted[3] }

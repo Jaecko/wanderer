@@ -71,7 +71,7 @@ end
 local function Entries()
 	local list = {
 		{ key = "menu", label = "Wanderer", hint = L.BAR_MENU_HINT, hintPad = L.BAR_MENU_HINT_PAD, gold = true,
-			run = function(self) ns.ShowMenu(self) end, right = function() ns.OpenOptions() end, rightWord = "OPTIONS" },
+			run = function(self) ns.ShowMenu(self) end, right = function() ns.ToggleOptions() end, rightWord = "OPTIONS" },
 		{ key = "todo", label = L.TODO_TITLE, run = function() ns.ToggleTodo() end,
 			summary = function() return ns.TodoLines() end },
 	}
@@ -282,7 +282,7 @@ local function Pulse(_, elapsed)
 	pulse, step = pulse + elapsed, step + elapsed
 	if step < 0.05 then return end
 	step = 0
-	local glow = 0.65 + 0.3 * math.sin(pulse * 3)
+	local glow = 0.85 + 0.15 * math.sin(pulse * 3) -- (0.7 to 1: seen as a pulse, never too faint to read)
 	for item in pairs(pulsing) do
 		item.text:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
 		item.text:SetAlpha(glow)

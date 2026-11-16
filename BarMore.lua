@@ -33,7 +33,7 @@ local function Row(index)
 	row.text:SetWordWrap(false)
 	row.count = Skin.CreateText(row, "GameFontNormalSmall", C.gold[1], C.gold[2], C.gold[3])
 	row.dot = row:CreateTexture(nil, "OVERLAY")
-	row.dot:SetSize(5, 5)
+	row.dot:SetSize(8, 8)
 	row.dot:SetColorTexture(C.gold[1], C.gold[2], C.gold[3], 0.9)
 	-- The star: on the bar (gold) or not (faint); a click changes it.
 	row.pin = Skin.GlyphButton(row, "star", 13, function(self) return self.on and L.BAR_UNPIN or L.BAR_PIN end, function(self)
@@ -113,7 +113,7 @@ function ns.ToggleBarMore(word)
 				self.away = 0
 			else
 				self.away = (self.away or 0) + elapsed
-				if self.away > 1.2 and not (U.UsingPad and U.UsingPad()) then self:Hide() end
+				if self.away > (Skin.DRAWER_CLOSE_AFTER or 1.5) and not (U.UsingPad and U.UsingPad()) then self:Hide() end
 			end
 		end)
 	end

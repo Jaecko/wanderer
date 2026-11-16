@@ -15,7 +15,7 @@ local Gossip = C_GossipInfo or {}
 local NpcID = ns.Util.NpcID
 
 local function Book()
-	ns.root.questBook = ns.root.questBook or {}
+	ns.root.questBook = type(ns.root.questBook) == "table" and ns.root.questBook or {}
 	return ns.root.questBook
 end
 
@@ -25,7 +25,7 @@ local function Remember(kind, questID)
 	if not questID or questID == 0 then return end
 	local npc = NpcID(Safe(UnitGUID, "npc"))
 	if not npc then return end
-	local entry = Book()[npc] or {}
+	local entry = type(Book()[npc]) == "table" and Book()[npc] or {}
 	Book()[npc] = entry
 	entry.offers = type(entry.offers) == "table" and entry.offers or {}
 	entry.receives = type(entry.receives) == "table" and entry.receives or {}
@@ -47,7 +47,7 @@ end
 -- Returns "turnin", "giver", "objective" or nil.
 function ns.GetQuestStatus(unit, guid, hasObjectiveLines)
 	local entry = Book()[NpcID(guid) or 0]
-	if entry then
+	if type(entry) == "table" then
 		for questID in pairs(type(entry.receives) == "table" and entry.receives or {}) do
 			if IsOnQuest(questID) and IsComplete(questID) then return "turnin" end
 		end
@@ -87,8 +87,9 @@ pcall(events.RegisterEvent, events, "QUEST_LOG_UPDATE")
 -- Once a session, a moment after login: the characters with nothing left in the book leave it. The book
 -- is the account's (your alts' givers stay): a quest this character has done is skipped when read, never erased.
 local function Prune()
-	if not (ns.root and ns.root.questBook) then return end
+	if not (ns.root and type(ns.root.questBook) == "table") then return end
 	for npc, entry in pairs(ns.root.questBook) do
+		if type(entry) ~= "table" then entry = {} end
 		local offers, receives = type(entry.offers) == "table" and entry.offers, type(entry.receives) == "table" and entry.receives
 		if not ((offers and next(offers)) or (receives and next(receives))) then ns.root.questBook[npc] = nil end
 	end

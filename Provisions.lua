@@ -16,6 +16,7 @@ local LOW = 1 / 3 -- carried under this share of the usual: low
 local FORGET_AFTER = 30 * 86400 -- seconds without buying it again
 
 local line, button
+local Fill, Menu
 local bought = {} -- item id -> how many bought during this visit
 local open = false
 local filling = false -- a fill under way (one at a time: a second click buys nothing more)
@@ -60,7 +61,10 @@ local function Lacking()
 	if not (store and next(store)) then return list end
 	local now = time()
 	for id, entry in pairs(store) do
-		if now - (entry.time or now) > FORGET_AFTER then store[id] = nil end
+		-- (an entry from an older or damaged save: let go)
+		if type(entry) ~= "table" or type(entry.usual) ~= "number" or now - (tonumber(entry.time) or now) > FORGET_AFTER then
+			store[id] = nil
+		end
 	end
 	for id, asked in pairs(pending) do
 		if U.ItemCount(id) >= asked.count or GetTime() - asked.at > PENDING_FOR then pending[id] = nil end
@@ -87,7 +91,20 @@ local function Lacking()
 	return list
 end
 
+-- What runs low here and its cost, for Wanderer's merchant window too: { list, cost, ready } (nil: none shown).
+local function State()
+	if not (On() and open) then return nil end
+	local list = Lacking()
+	local cost = 0
+	for _, item in ipairs(list) do cost = cost + item.cost end
+	-- (not while the junk is sold: its gain is counted from your money)
+	local ready = not filling and not next(pending) and not ns.IsSellingJunk() and (Clean(Safe(GetMoney)) or 0) >= cost
+	return { list = list, cost = cost, ready = ready }
+end
+ns.ProvisionsState = State
+
 local function Refresh()
+	if ns.DrawMerchantSoon then ns.DrawMerchantSoon() end
 	if not line then return end
 	local shown = On() and open and (not MerchantFrame.selectedTab or MerchantFrame.selectedTab == 1)
 	local list = shown and Lacking() or {}
@@ -115,7 +132,7 @@ ns.RefreshProvisions = Refresh
 
 -- What is missing bought (Wanderer's purchases: whole lots, as the price shown), one item after the other.
 -- Once at a time: a second click buys nothing more.
-local function Fill()
+function Fill()
 	if filling or ns.IsSellingJunk() then return end
 	local queue = {}
 	for _, item in ipairs(Lacking()) do queue[#queue + 1] = { index = item.index, count = item.need, id = item.id } end
@@ -157,7 +174,7 @@ local function Forget(id)
 	Refresh()
 end
 
-local function Menu(owner)
+function Menu(owner)
 	local store = Store()
 	U.Menu(owner, function(_, root)
 		root:CreateTitle(L.PROVISIONS_TITLE)
@@ -176,6 +193,11 @@ local function Build()
 	line = CreateFrame("Button", "WandererProvisions", MerchantFrame)
 	if tab1 then line:SetPoint("TOPLEFT", tab1, "BOTTOMLEFT", 6, -6) else line:SetPoint("TOPLEFT", MerchantFrame, "BOTTOMLEFT", 12, -28) end
 	line:SetWidth(math.max(MerchantFrame:GetWidth() or 0, 336) - 24)
+	-- (under the tabs it hangs over the world: a dark band fading to the right keeps it readable, as the loot lines)
+	line.band = line:CreateTexture(nil, "BACKGROUND")
+	line.band:SetPoint("TOPLEFT", line, "TOPLEFT", -6, 4)
+	line.band:SetPoint("BOTTOMRIGHT", line, "BOTTOMRIGHT", 80, -4) -- (past the words: still dark under their end)
+	Skin.FadingRule(line.band, 0.62, false, { 0.03, 0.03, 0.04 })
 	line.text = Skin.CreateText(line, "GameFontNormalSmall")
 	line.text:SetPoint("TOPLEFT")
 	line.text:SetPoint("RIGHT")
@@ -192,6 +214,9 @@ local function Build()
 		if tab then tab:HookScript("OnClick", Refresh) end
 	end
 end
+
+ns.ProvisionsFill = function() Fill() end
+ns.ProvisionsMenu = function(owner) Menu(owner) end
 
 function ns.InitProvisions()
 	if BuyMerchantItem then

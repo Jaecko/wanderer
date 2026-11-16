@@ -76,14 +76,14 @@ function ns.InitMinimapButton()
 	button.ring = ring
 	-- A small golden dot: something waits in a window (an extension's count).
 	button.unread = button:CreateTexture(nil, "OVERLAY", nil, 2)
-	button.unread:SetSize(7, 7)
+	button.unread:SetSize(10, 10)
 	button.unread:SetPoint("TOPRIGHT", button, "TOPRIGHT", -6, -6)
 	button.unread:SetColorTexture(ns.Skin.RGB("gold", 1))
 	button.unread:Hide()
 
 	button:SetScript("OnClick", function(self, mouseButton)
 		if mouseButton == "RightButton" then
-			ns.OpenOptions()
+			ns.ToggleOptions()
 		else
 			ns.ShowMenu(self)
 		end
