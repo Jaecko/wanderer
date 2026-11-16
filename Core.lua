@@ -123,7 +123,7 @@ local DEFAULTS = {
 		textScale = 1,
 		offset = 22,
 		bgOpacity = 55,
-		gameSkins = true, -- the game's windows Wanderer does not replace, in its colors (GameSkins.lua; off: after a /reload)
+		gameSkins = false, -- the game's windows Wanderer does not replace, in its colors (GameSkins.lua): asked for (off since 1.4.86: the game's own look by default)
 		padding = 8,
 		font = "default",
 	},
@@ -1659,6 +1659,11 @@ function ns.SetProfile(name, byPlace)
 	if (profile.styleVersion or 0) < 14 then
 		if type(profile.label) == "table" then profile.label.combatLight = false end
 		profile.styleVersion = 14
+	end
+	-- 1.4.86: the game's windows keep the game's own look, once for every profile (the skin stays an option).
+	if (profile.styleVersion or 0) < 15 then
+		if type(profile.label) == "table" then profile.label.gameSkins = false end
+		profile.styleVersion = 15
 	end
 	Sanitize(DEFAULTS, profile)
 	profile.cinema.combatBars = nil -- 0.18: replaced by combatOnly (every faded element)
