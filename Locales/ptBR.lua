@@ -446,12 +446,6 @@ for key, text in pairs({
 	KEYBINDS = "Teclas de atalho",
 	OPEN = "Abrir",
 
-	THREAT_PERCENT = "Ameaça %d %%",
-	THREAT_LOST = "Ameaça perdida: %s",
-	THREAT_SHOW = "Mostrar minha ameaça acima do quadro do alvo",
-	THREAT_SHOW_DESC = "Em grupo ou masmorra, durante um combate: sua parte da ameaça do alvo, na linha discreta acima do quadro do alvo, nas cores do jogo. Não aparece se o jogo já a escreve.",
-	THREAT_ALERT = "Avisar quando um monstro me deixa (masmorras)",
-	THREAT_ALERT_DESC = "Em masmorras e raides, quando um monstro que estava em você passa para outra pessoa: uma linha curta no centro da tela e um som discreto. Só se você segura os monstros (tanque, ou sem função escolhida).",
 
 	LAYOUT_STACKED = "Wanderer · Empilhado",
 	LAYOUT_CLEAN = "Wanderer · Limpo",
@@ -1033,7 +1027,6 @@ for key, text in pairs({
 	PLACING_NOTHING = "Nada a posicionar: os elementos na tela estão todos desativados.",
 	PLACING_TOAST_TOP = "Avisos",
 	PLACING_TOAST_CORNER = "Avisos no canto",
-	PLACING_THREAT = "Alerta de ameaça",
 	PLACING_TRAVEL = "Cartão de viagem",
 	PLACING_AWAY = "Cartão de descanso",
 	MENU_PLACE = "Posicionar os elementos",
@@ -1584,4 +1577,6 @@ for key, text in pairs({
 	WELCOME_NAV_EXTENSIONS = "Extensões",
 	WELCOME_NAV_READY = "Pé na estrada",
 
+	THREAT_COLORS = "A ameaça na cor da vida dos monstros",
+	THREAT_COLORS_DESC = "Em combate, a barra de vida de um monstro diz quem ele ataca: verde, está em você; amarelo, você está perdendo ou vai tomá-lo; vermelho, está em outro. Nas placas de nome, na etiqueta e no quadro do alvo.",
 }) do L[key] = text end

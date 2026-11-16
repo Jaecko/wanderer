@@ -29,7 +29,7 @@ local BASE_LIST = {
 	{ "quest.autoAccept", false }, { "quest.autoTurnIn", false }, { "quest.skipGossip", false },
 	{ "gestures.read", false }, { "gestures.levelUp", false }, { "gestures.greet", false }, { "emotes.enabled", false },
 	{ "hands.standUp", false }, { "hands.bagsClosed", false }, { "fishing.splash", false }, { "crafts.skillUps", false },
-	{ "loot.fast", true }, { "threat.show", true }, { "threat.alert", true }, { "meter.show", "own" },
+	{ "loot.fast", true }, { "threat.colors", true }, { "meter.show", "own" },
 	{ "dots.enabled", false }, { "hots.enabled", false }, { "social.acceptResurrect", false }, { "social.acceptSummon", false },
 	-- (the extensions')
 	{ "quests.mapGivers", true }, { "quests.remind", false }, { "quests.foldStory", false }, { "training.remind", false },

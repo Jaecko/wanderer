@@ -460,12 +460,6 @@ local L = {
 	KEYBINDS = "Key bindings",
 	OPEN = "Open",
 
-	THREAT_PERCENT = "Threat %d %%",
-	THREAT_LOST = "Threat lost: %s",
-	THREAT_SHOW = "Show my threat over the target frame",
-	THREAT_SHOW_DESC = "In a group or a dungeon, during a fight: your share of the target's threat, on the quiet line over the target frame, colored as the game colors it. Not shown when the game already writes it itself.",
-	THREAT_ALERT = "Alert when a monster leaves me (dungeons)",
-	THREAT_ALERT_DESC = "In dungeons and raids, when a monster that was on you turns to someone else: a short line in the middle of the screen and a soft sound. Only when you hold the monsters (tank, or no role chosen).",
 
 	LAYOUT_STACKED = "Wanderer · Stacked",
 	LAYOUT_CLEAN = "Wanderer · Clean",
@@ -1047,7 +1041,6 @@ local L = {
 	PLACING_NOTHING = "Nothing to place: the pieces on the screen are all turned off.",
 	PLACING_TOAST_TOP = "Notices",
 	PLACING_TOAST_CORNER = "Notices in the corner",
-	PLACING_THREAT = "Threat alert",
 	PLACING_TRAVEL = "Travel card",
 	PLACING_AWAY = "Resting card",
 	MENU_PLACE = "Place the pieces",
@@ -1598,6 +1591,8 @@ local L = {
 	WELCOME_NAV_EXTENSIONS = "Extensions",
 	WELCOME_NAV_READY = "Set out",
 
+	THREAT_COLORS = "Threat in the monsters' health color",
+	THREAT_COLORS_DESC = "During a fight, a monster's health bar says who it is after: green, it is on you; yellow, you are losing it or about to take it; red, it is on someone else. On the nameplates, the label and the target frame.",
 }
 
 

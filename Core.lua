@@ -260,8 +260,7 @@ local DEFAULTS = {
 		enabled = true, -- the emote bar: asked for
 	},
 	threat = {
-		show = true, -- in groups and dungeons only
-		alert = true, -- in dungeons and raids, for the one holding the monsters
+		colors = true, -- a monster's health in a fight: green on you, yellow losing or taking it, red on another (Threat.lua)
 	},
 	scene = {
 		enabled = true,

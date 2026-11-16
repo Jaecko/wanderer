@@ -371,6 +371,11 @@ local function ClassColorCode(classFile)
 end
 
 local function GetUnitColor(unit, isPlayer)
+	-- (a monster in a fight: who it is after, in its threat's color: Threat.lua)
+	if not isPlayer and ns.ThreatColor then
+		local tr, tg, tb = ns.ThreatColor(unit)
+		if tr then return tr, tg, tb end
+	end
 	if isPlayer then
 		local _, classFile = Safe(UnitClass, unit)
 		local r, g, b = U.ClassColor(Clean(classFile))

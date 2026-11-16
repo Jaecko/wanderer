@@ -446,12 +446,6 @@ for key, text in pairs({
 	KEYBINDS = "按键设置",
 	OPEN = "打开",
 
-	THREAT_PERCENT = "仇恨 %d %%",
-	THREAT_LOST = "失去仇恨：%s",
-	THREAT_SHOW = "在目标框体上方显示我的仇恨",
-	THREAT_SHOW_DESC = "在队伍或地下城战斗时：你在目标仇恨中的比例，显示在目标框体上方那行低调的文字中，使用游戏的颜色。若游戏已自行显示则不显示。",
-	THREAT_ALERT = "怪物离开我时提醒（地下城）",
-	THREAT_ALERT_DESC = "在地下城和团队中，原本攻击你的怪物转向他人时：屏幕中央出现一行简短文字和轻柔的声音。仅当你负责拉住怪物时（坦克或未选择职责）。",
 
 	LAYOUT_STACKED = "Wanderer · 堆叠",
 	LAYOUT_CLEAN = "Wanderer · 简洁",
@@ -1033,7 +1027,6 @@ for key, text in pairs({
 	PLACING_NOTHING = "没有可摆放的元素：屏幕元素均已关闭。",
 	PLACING_TOAST_TOP = "通知",
 	PLACING_TOAST_CORNER = "角落通知",
-	PLACING_THREAT = "仇恨警报",
 	PLACING_TRAVEL = "旅途卡片",
 	PLACING_AWAY = "休息卡片",
 	MENU_PLACE = "摆放元素",
@@ -1584,4 +1577,6 @@ for key, text in pairs({
 	WELCOME_NAV_EXTENSIONS = "扩展",
 	WELCOME_NAV_READY = "出发",
 
+	THREAT_COLORS = "用怪物血条颜色显示仇恨",
+	THREAT_COLORS_DESC = "战斗中，怪物的血条显示它在攻击谁：绿色，在你身上；黄色，你正在失去或即将拿到仇恨；红色，在别人身上。显示于姓名板、标签和目标框体。",
 }) do L[key] = text end

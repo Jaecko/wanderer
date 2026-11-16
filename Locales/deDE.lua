@@ -446,12 +446,6 @@ for key, text in pairs({
 	KEYBINDS = "Tastaturbelegung",
 	OPEN = "Öffnen",
 
-	THREAT_PERCENT = "Bedrohung %d %%",
-	THREAT_LOST = "Bedrohung verloren: %s",
-	THREAT_SHOW = "Meine Bedrohung über dem Zielfenster zeigen",
-	THREAT_SHOW_DESC = "In einer Gruppe oder einem Dungeon, während eines Kampfes: dein Anteil an der Bedrohung des Ziels, auf der dezenten Zeile über dem Zielfenster, in den Farben des Spiels. Nicht, wenn das Spiel sie schon selbst anzeigt.",
-	THREAT_ALERT = "Warnen, wenn mich ein Monster verlässt (Dungeons)",
-	THREAT_ALERT_DESC = "In Dungeons und Schlachtzügen, wenn sich ein Monster, das an dir war, jemand anderem zuwendet: eine kurze Zeile in der Bildschirmmitte und ein leiser Ton. Nur wenn du die Monster hältst (Tank oder keine Rolle gewählt).",
 
 	LAYOUT_STACKED = "Wanderer · Gestapelt",
 	LAYOUT_CLEAN = "Wanderer · Schlicht",
@@ -1033,7 +1027,6 @@ for key, text in pairs({
 	PLACING_NOTHING = "Nichts zu platzieren: Die Elemente auf dem Bildschirm sind alle ausgeschaltet.",
 	PLACING_TOAST_TOP = "Hinweise",
 	PLACING_TOAST_CORNER = "Hinweise in der Ecke",
-	PLACING_THREAT = "Bedrohungswarnung",
 	PLACING_TRAVEL = "Reisekarte",
 	PLACING_AWAY = "Rastkarte",
 	MENU_PLACE = "Elemente platzieren",
@@ -1584,4 +1577,6 @@ for key, text in pairs({
 	WELCOME_NAV_EXTENSIONS = "Erweiterungen",
 	WELCOME_NAV_READY = "Aufbrechen",
 
+	THREAT_COLORS = "Bedrohung in der Lebensfarbe der Monster",
+	THREAT_COLORS_DESC = "Im Kampf zeigt die Lebensleiste eines Monsters, wen es angreift: grün, es ist auf dir; gelb, du verlierst es oder ziehst es gleich; rot, es ist auf jemand anderem. Auf den Namensplaketten, dem Etikett und dem Zielrahmen.",
 }) do L[key] = text end

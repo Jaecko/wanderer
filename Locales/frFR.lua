@@ -446,12 +446,6 @@ for key, text in pairs({
 	KEYBINDS = "Raccourcis clavier",
 	OPEN = "Ouvrir",
 
-	THREAT_PERCENT = "Menace %d %%",
-	THREAT_LOST = "Menace perdue : %s",
-	THREAT_SHOW = "Afficher ma menace au-dessus du cadre de cible",
-	THREAT_SHOW_DESC = "En groupe ou en donjon, pendant un combat : votre part de la menace de la cible, sur la ligne discrète au-dessus du cadre de cible, aux couleurs du jeu. Rien si le jeu l'écrit déjà lui-même.",
-	THREAT_ALERT = "Alerte quand un monstre me quitte (donjons)",
-	THREAT_ALERT_DESC = "En donjon et en raid, quand un monstre qui était sur vous passe à quelqu'un d'autre : une courte ligne au centre de l'écran et un son discret. Seulement si vous tenez les monstres (tank, ou aucun rôle choisi).",
 
 	LAYOUT_STACKED = "Wanderer · Empilée",
 	LAYOUT_CLEAN = "Wanderer · Épurée",
@@ -1033,7 +1027,6 @@ for key, text in pairs({
 	PLACING_NOTHING = "Rien à placer : les éléments à l'écran sont tous désactivés.",
 	PLACING_TOAST_TOP = "Avis",
 	PLACING_TOAST_CORNER = "Avis dans le coin",
-	PLACING_THREAT = "Alerte de menace",
 	PLACING_TRAVEL = "Carte de voyage",
 	PLACING_AWAY = "Carte de repos",
 	MENU_PLACE = "Placer les éléments",
@@ -1584,4 +1577,6 @@ for key, text in pairs({
 	WELCOME_NAV_EXTENSIONS = "Extensions",
 	WELCOME_NAV_READY = "En route",
 
+	THREAT_COLORS = "La menace dans la couleur de vie des monstres",
+	THREAT_COLORS_DESC = "Pendant un combat, la barre de vie d'un monstre dit qui il vise : vert, il est sur vous ; jaune, vous le perdez ou allez le prendre ; rouge, il est sur un autre. Sur les barres de nom, l'étiquette et le cadre de la cible.",
 }) do L[key] = text end

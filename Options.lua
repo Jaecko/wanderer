@@ -890,8 +890,10 @@ end
 -- damage over time.
 local function GroupPage()
 	Page(L.PAGE_GROUP, "group")
-	TableCheckbox("threat", "show", L.THREAT_SHOW, L.THREAT_SHOW_DESC, ns.RefreshTargetInfo)
-	TableCheckbox("threat", "alert", L.THREAT_ALERT, L.THREAT_ALERT_DESC)
+	TableCheckbox("threat", "colors", L.THREAT_COLORS, L.THREAT_COLORS_DESC, function()
+		if ns.RefreshThreatColors then ns.RefreshThreatColors() end
+		if ns.ApplyUnitFrames then ns.ApplyUnitFrames() end
+	end)
 	TableCheckbox("buffs", "remind", L.BUFF_REMIND, L.BUFF_REMIND_DESC)
 	TableCheckbox("world", "threshold", L.THRESHOLD, L.THRESHOLD_DESC)
 

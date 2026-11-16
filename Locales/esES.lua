@@ -446,12 +446,6 @@ for key, text in pairs({
 	KEYBINDS = "Asignar teclas",
 	OPEN = "Abrir",
 
-	THREAT_PERCENT = "Amenaza %d %%",
-	THREAT_LOST = "Amenaza perdida: %s",
-	THREAT_SHOW = "Mostrar mi amenaza sobre el marco de objetivo",
-	THREAT_SHOW_DESC = "En grupo o en mazmorra, durante un combate: tu parte de la amenaza del objetivo, en la línea discreta sobre el marco de objetivo, con los colores del juego. No se muestra si el juego ya la escribe.",
-	THREAT_ALERT = "Avisar cuando un monstruo me deja (mazmorras)",
-	THREAT_ALERT_DESC = "En mazmorras y bandas, cuando un monstruo que iba a por ti pasa a otro: una breve línea en el centro de la pantalla y un sonido suave. Solo si mantienes a los monstruos (tanque, o sin rol elegido).",
 
 	LAYOUT_STACKED = "Wanderer · Apilado",
 	LAYOUT_CLEAN = "Wanderer · Despejado",
@@ -1033,7 +1027,6 @@ for key, text in pairs({
 	PLACING_NOTHING = "Nada que colocar: los elementos en pantalla están todos desactivados.",
 	PLACING_TOAST_TOP = "Avisos",
 	PLACING_TOAST_CORNER = "Avisos en la esquina",
-	PLACING_THREAT = "Alerta de amenaza",
 	PLACING_TRAVEL = "Tarjeta de viaje",
 	PLACING_AWAY = "Tarjeta de descanso",
 	MENU_PLACE = "Colocar los elementos",
@@ -1584,4 +1577,6 @@ for key, text in pairs({
 	WELCOME_NAV_EXTENSIONS = "Extensiones",
 	WELCOME_NAV_READY = "En marcha",
 
+	THREAT_COLORS = "La amenaza en el color de vida de los monstruos",
+	THREAT_COLORS_DESC = "En combate, la barra de vida de un monstruo dice a quién va: verde, está sobre ti; amarillo, lo pierdes o vas a tomarlo; rojo, está sobre otro. En las placas de nombre, la etiqueta y el marco del objetivo.",
 }) do L[key] = text end

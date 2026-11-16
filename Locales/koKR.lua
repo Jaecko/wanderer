@@ -446,12 +446,6 @@ for key, text in pairs({
 	KEYBINDS = "단축키",
 	OPEN = "열기",
 
-	THREAT_PERCENT = "위협 %d %%",
-	THREAT_LOST = "위협 잃음: %s",
-	THREAT_SHOW = "대상 창 위에 내 위협 수준 표시",
-	THREAT_SHOW_DESC = "파티나 던전에서 전투 중일 때, 대상에 대한 내 위협 비율을 대상 창 위의 은은한 줄에 게임 색상으로 표시합니다. 게임이 이미 표시하면 표시하지 않습니다.",
-	THREAT_ALERT = "몬스터가 나를 떠나면 경고 (던전)",
-	THREAT_ALERT_DESC = "던전과 공격대에서 나를 공격하던 몬스터가 다른 사람에게 넘어가면, 화면 중앙에 짧은 문구와 은은한 소리가 납니다. 몬스터를 맡는 경우에만 (방어 전담 또는 역할 미선택).",
 
 	LAYOUT_STACKED = "Wanderer · 쌓기",
 	LAYOUT_CLEAN = "Wanderer · 깔끔",
@@ -1033,7 +1027,6 @@ for key, text in pairs({
 	PLACING_NOTHING = "배치할 것이 없습니다. 화면 요소가 모두 꺼져 있습니다.",
 	PLACING_TOAST_TOP = "알림",
 	PLACING_TOAST_CORNER = "구석 알림",
-	PLACING_THREAT = "위협 경고",
 	PLACING_TRAVEL = "여행 카드",
 	PLACING_AWAY = "휴식 카드",
 	MENU_PLACE = "요소 배치",
@@ -1584,4 +1577,6 @@ for key, text in pairs({
 	WELCOME_NAV_EXTENSIONS = "확장",
 	WELCOME_NAV_READY = "출발",
 
+	THREAT_COLORS = "몬스터 생명력 색으로 위협 수준 표시",
+	THREAT_COLORS_DESC = "전투 중 몬스터의 생명력 바가 누구를 노리는지 알려 줍니다: 초록, 나를 노림; 노랑, 위협을 잃는 중이거나 곧 가져옴; 빨강, 다른 사람을 노림. 이름표, 라벨, 대상 프레임에 표시됩니다.",
 }) do L[key] = text end

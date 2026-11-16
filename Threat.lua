@@ -1,142 +1,105 @@
 local _, ns = ...
-local L = ns.L
 
--- Threat: how much a monster is after you, and a word when you lose it.
---
--- Your share of the target's threat, in a group or a dungeon and during a
--- fight, is one of the pieces of the line over the target frame
--- (TargetInfo.lua). Not when the game already writes it there itself (its
--- "threat as a number" setting).
---
--- In dungeons and raids, when a monster that was on you turns to someone
--- else, a short line appears in the middle of the screen with a soft sound.
--- Only for the one holding the monsters (a tank, or no role chosen): for the
--- others, losing a monster is good news.
---
--- The game may keep threat secret from addons; then nothing is said.
+-- Threat: the health bar of a monster in a fight says who it is after, in three colors.
+--   green: it is on you (you hold it),
+--   yellow: you are losing it, or about to take it,
+--   red: it is on someone else.
+-- On the game's nameplates, on Wanderer's label over the head and on the target's (and focus', boss') frame in
+-- Wanderer's look. Only a monster fighting with you on its list: any other keeps its own color. The game may keep
+-- threat hidden from addons in a fight; then the bar keeps its color, nothing is guessed.
+-- (Before 2026-11-16: a share in percent over the target frame and a line in the middle of the screen when a
+-- monster left you. Replaced at the user's request by these colors, as threat plates do.)
 
 local U = ns.Util
 local Safe, Clean = U.Safe, U.Clean
 
-local FADE_IN, FADE_OUT = 0.35, 0.9
-local ALERT_TIME = 2.2 -- seconds the alert stays before fading
-local ALERT_GAP = 1.5 -- seconds between two alerts
-local COLORS = { -- by the game's threat status (0 to 3)
-	[0] = { 0.75, 0.75, 0.75 }, [1] = { 1, 0.85, 0.3 }, [2] = { 1, 0.55, 0.2 }, [3] = { 1, 0.3, 0.25 },
+-- By the game's threat status (UnitThreatSituation): 0 not on you, 1 about to take it, 2 losing it, 3 on you.
+local COLORS = {
+	[0] = { 0.86, 0.22, 0.2 },
+	[1] = { 0.96, 0.78, 0.18 },
+	[2] = { 0.96, 0.78, 0.18 },
+	[3] = { 0.24, 0.78, 0.3 },
 }
+ns.THREAT_COLORS = COLORS
 
-local alert, alertText, driver
-local alertTarget, alertShown = 0, 0
-local holding = {} -- monster GUID -> true while it is on you
-local lastAlert = 0
-
--- In a group (and whether it is a dungeon or a raid).
-local function InGroupContent()
-	local inside, kind = Safe(IsInInstance)
-	kind = Clean(kind)
-	if Clean(inside) and (kind == "party" or kind == "raid") then return true, true end
-	return Clean(Safe(IsInGroup)) and true or false, false
-end
-
--- isTanking, status, percent (nil when unknown or secret).
-local function Situation(unit)
-	if not UnitDetailedThreatSituation then return end
-	local tanking, status, percent = Safe(UnitDetailedThreatSituation, "player", unit)
-	if U.IsSecret(tanking) or U.IsSecret(status) or U.IsSecret(percent) then return end
-	return tanking, status, percent
-end
-
--- The piece for the line over the target frame: text and color, or nil.
-function ns.ThreatPiece()
+local function On()
 	local db = ns.db
-	if not (db and db.enabled and db.threat.show) then return end
-	if Clean(Safe(GetCVar, "threatShowNumeric")) == "1" then return end -- the game writes it already
-	if not (Clean(Safe(UnitAffectingCombat, "player")) and Clean(Safe(UnitCanAttack, "player", "target"))) then return end
-	if not InGroupContent() then return end
-	local _, status, percent = Situation("target")
-	if not percent then return end
-	return L.THREAT_PERCENT:format(math.floor(percent + 0.5)), COLORS[status or 0] or COLORS[0]
+	return db and db.enabled and db.threat and db.threat.colors and true or false
 end
 
--- The alert --------------------------------------------------------------------------------
-
-local function Holder()
-	local role = Clean(Safe(UnitGroupRolesAssigned, "player"))
-	return role == nil or role == "TANK" or role == "NONE"
+-- The color of a monster's health for its threat now: r, g, b, or nil (not a monster in a fight with you on its
+-- list, the setting off, or the game hiding it).
+function ns.ThreatColor(unit)
+	if not (On() and unit) then return nil end
+	if Clean(Safe(UnitIsPlayer, unit)) or not Clean(Safe(UnitCanAttack, "player", unit)) then return nil end
+	if not Clean(Safe(UnitAffectingCombat, unit)) then return nil end
+	if not UnitThreatSituation then return nil end
+	local status = Safe(UnitThreatSituation, "player", unit)
+	if U.IsSecret(status) then return nil end
+	local color = COLORS[status]
+	if not color then return nil end
+	return color[1], color[2], color[3]
 end
 
-local function Alert(name)
-	if GetTime() - lastAlert < ALERT_GAP then return end
-	lastAlert = GetTime()
-	alertText:SetText(L.THREAT_LOST:format(name or "?"))
-	alertShown, alertTarget = 0, 1
-	alert:Show()
-	driver:Show()
-	U.PlaySound("UI_RAID_BOSS_WHISPER_WARNING", "SFX")
+-- The game's nameplates --------------------------------------------------------------------------------------
+
+local painted = setmetatable({}, { __mode = "k" }) -- a plate's health bar we colored -> true
+
+local function PlateBar(frame)
+	if type(frame) ~= "table" or (frame.IsForbidden and frame:IsForbidden()) then return nil end
+	local unit = frame.unit or frame.displayedUnit
+	if type(unit) ~= "string" or not unit:match("^nameplate%d+$") then return nil end
+	local bar = frame.healthBar or frame.HealthBar
+	if type(bar) ~= "table" or not bar.SetStatusBarColor or (bar.IsForbidden and bar:IsForbidden()) then return nil end
+	return bar, unit
 end
 
-local function OnThreat(unit)
-	local db = ns.db
-	if not (db and db.enabled and db.threat.alert) then return end
-	local _, instance = InGroupContent()
-	if not instance or not Holder() then return end
-	-- (who it is: its GUID; where the game hides it, dungeons, its nameplate while shown)
-	local guid = Clean(Safe(UnitGUID, unit))
-	if not guid and type(unit) == "string" and unit:match("^nameplate%d+$") then guid = "plate:" .. unit end
-	if not guid then return end
-	local tanking = Situation(unit)
-	if tanking == nil then return end
-	if tanking then
-		holding[guid] = true
-	elseif holding[guid] then
-		holding[guid] = nil
-		-- Still fighting (not dead, not reset): it went to someone else.
-		if Clean(Safe(UnitAffectingCombat, unit)) and not Clean(Safe(UnitIsDead, unit)) then
-			Alert(Clean(Safe(UnitName, unit)))
-		end
+-- A plate's health colored for its threat, or given back the game's own color (kept on the bar by the game).
+local function PaintPlate(frame)
+	local bar, unit = PlateBar(frame)
+	if not bar then return end
+	local r, g, b = ns.ThreatColor(unit)
+	if r then
+		pcall(bar.SetStatusBarColor, bar, r, g, b)
+		painted[bar] = true
+	elseif painted[bar] then
+		painted[bar] = nil
+		if type(bar.r) == "number" then pcall(bar.SetStatusBarColor, bar, bar.r, bar.g, bar.b) end
 	end
 end
 
-local function OnUpdate(_, elapsed)
-	alertShown = alertShown + elapsed
-	if alertShown > ALERT_TIME then alertTarget = 0 end
-	if ns.Skin.Fade(alert, alertTarget, elapsed, FADE_IN, FADE_OUT) <= 0 and alertTarget == 0 then
-		alert:Hide()
-		driver:Hide()
+local function PlateOf(unit)
+	local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and Safe(C_NamePlate.GetNamePlateForUnit, unit)
+	return type(plate) == "table" and plate.UnitFrame or nil
+end
+
+local function PaintAll()
+	if not (C_NamePlate and C_NamePlate.GetNamePlates) then return end
+	for _, plate in ipairs(Safe(C_NamePlate.GetNamePlates) or {}) do
+		if type(plate) == "table" and plate.UnitFrame then PaintPlate(plate.UnitFrame) end
 	end
 end
+ns.RefreshThreatColors = PaintAll
 
 function ns.InitThreat()
-	alert = CreateFrame("Frame", "WandererThreatAlert", UIParent)
-	alert:SetFrameStrata("HIGH")
-	alert:SetSize(400, 30)
-	-- (placed where you put it: Place.lua)
-	ns.Placeable({ key = "threat", label = function() return L.PLACING_THREAT end, frame = alert,
-		default = { "CENTER", "CENTER", 0, 160 },
-		enabled = function() return ns.db and ns.db.enabled and ns.db.threat.alert and true or false end })
-	ns.PlaceApply("threat", alert)
-	alert:SetAlpha(0)
-	alert:Hide()
-	if alert.SetIgnoreParentAlpha then alert:SetIgnoreParentAlpha(true) end
-	alertText = ns.Skin.CreateText(alert, "GameFontNormalLarge", ns.Skin.RGB("bad"))
-	alertText:SetPoint("CENTER")
-	alertText:SetJustifyH("CENTER")
-
-	driver = CreateFrame("Frame")
-	driver:Hide()
-	driver:SetScript("OnUpdate", OnUpdate)
-	driver:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
-	driver:RegisterEvent("PLAYER_REGEN_ENABLED")
-	pcall(driver.RegisterEvent, driver, "NAME_PLATE_UNIT_REMOVED")
-	driver:SetScript("OnEvent", function(_, event, unit)
-		if event == "PLAYER_REGEN_ENABLED" then
-			wipe(holding)
-		elseif event == "NAME_PLATE_UNIT_REMOVED" then
-			-- (its token goes to the next one shown)
-			unit = Clean(unit)
-			if unit then holding["plate:" .. unit] = nil end
-		elseif unit then
-			OnThreat(unit)
+	-- (the game colors a plate again as it likes: ours laid again right after)
+	if type(rawget(_G, "CompactUnitFrame_UpdateHealthColor")) == "function" then
+		hooksecurefunc("CompactUnitFrame_UpdateHealthColor", PaintPlate)
+	end
+	local events = CreateFrame("Frame")
+	for _, event in ipairs({ "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE", "NAME_PLATE_UNIT_ADDED",
+		"PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED" }) do
+		pcall(events.RegisterEvent, events, event)
+	end
+	events:SetScript("OnEvent", function(_, event, unit)
+		unit = Clean(unit)
+		if type(unit) == "string" and unit:match("^nameplate%d+$") then
+			local frame = PlateOf(unit)
+			if frame then PaintPlate(frame) end
+			return
 		end
+		-- (a fight over, or begun: every plate as it is now; the target's frame follows its own health)
+		if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" or not unit then PaintAll() end
+		if ns.UnitFramesSoon then ns.UnitFramesSoon() end
 	end)
 end

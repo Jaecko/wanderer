@@ -2,9 +2,9 @@ local _, ns = ...
 local L = ns.L
 
 -- One quiet line over the game's target frame, in Wanderer's look, for what
--- the target frame does not say: a monster on you that nobody has hit yet,
--- your share of its threat in a group. Pieces are joined on one line
--- ("Not yours yet · Threat 72 %"); nothing to say, nothing shown.
+-- the target frame does not say: a monster on you that nobody has hit yet
+-- ("Not yours yet"); nothing to say, nothing shown. (Its threat: the color
+-- of its health, Threat.lua.)
 --
 -- Over the frame, not under it: below, the game shows the target's buffs,
 -- debuffs and its own target. Fades in and out softly; checked a few times a
@@ -29,8 +29,6 @@ local function Pieces()
 	if ns.IsUntaggedOnYou("target") then
 		pieces[#pieces + 1] = UNTAGGED_ICON .. Hex(UNTAGGED_COLOR) .. L.UNTAGGED_MARK .. "|r"
 	end
-	local threat, color = ns.ThreatPiece()
-	if threat then pieces[#pieces + 1] = Hex(color) .. threat .. "|r" end
 	return pieces
 end
 
@@ -102,13 +100,8 @@ function ns.InitTargetInfo()
 	for _, event in ipairs({ "PLAYER_TARGET_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
 		driver:RegisterEvent(event)
 	end
-	-- The threat on your target only, and read at the next check (it changes many times a second).
-	local THREAT = { UNIT_THREAT_LIST_UPDATE = true, UNIT_THREAT_SITUATION_UPDATE = true }
-	for event in pairs(THREAT) do
-		driver:RegisterUnitEvent(event, "target")
-	end
-	driver:SetScript("OnEvent", function(_, event)
-		if THREAT[event] then since = CHECK_EVERY else Update() end
+	driver:SetScript("OnEvent", function()
+		Update()
 		driver:Show()
 	end)
 end

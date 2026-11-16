@@ -446,12 +446,6 @@ for key, text in pairs({
 	KEYBINDS = "Comandi",
 	OPEN = "Apri",
 
-	THREAT_PERCENT = "Minaccia %d %%",
-	THREAT_LOST = "Minaccia persa: %s",
-	THREAT_SHOW = "Mostra la mia minaccia sopra il riquadro del bersaglio",
-	THREAT_SHOW_DESC = "In gruppo o in spedizione, durante un combattimento: la tua parte di minaccia del bersaglio, sulla riga discreta sopra il riquadro del bersaglio, con i colori del gioco. Non mostrata se il gioco la scrive già.",
-	THREAT_ALERT = "Avvisa quando un mostro mi lascia (spedizioni)",
-	THREAT_ALERT_DESC = "In spedizioni e incursioni, quando un mostro che era su di te passa a qualcun altro: una breve riga al centro dello schermo e un suono discreto. Solo se tieni i mostri (difensore, o nessun ruolo scelto).",
 
 	LAYOUT_STACKED = "Wanderer · Impilata",
 	LAYOUT_CLEAN = "Wanderer · Essenziale",
@@ -1033,7 +1027,6 @@ for key, text in pairs({
 	PLACING_NOTHING = "Niente da posizionare: gli elementi sullo schermo sono tutti disattivati.",
 	PLACING_TOAST_TOP = "Avvisi",
 	PLACING_TOAST_CORNER = "Avvisi nell'angolo",
-	PLACING_THREAT = "Allarme minaccia",
 	PLACING_TRAVEL = "Scheda di viaggio",
 	PLACING_AWAY = "Scheda di riposo",
 	MENU_PLACE = "Posiziona gli elementi",
@@ -1584,4 +1577,6 @@ for key, text in pairs({
 	WELCOME_NAV_EXTENSIONS = "Estensioni",
 	WELCOME_NAV_READY = "In cammino",
 
+	THREAT_COLORS = "La minaccia nel colore della vita dei mostri",
+	THREAT_COLORS_DESC = "In combattimento, la barra della vita di un mostro dice chi sta attaccando: verde, è su di te; giallo, lo stai perdendo o stai per prenderlo; rosso, è su un altro. Sulle targhette, sull'etichetta e sul riquadro del bersaglio.",
 }) do L[key] = text end

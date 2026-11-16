@@ -153,6 +153,11 @@ end
 -- is a plain colour (the faded ground can follow it).
 function ns.UnitFramesHealthColor(unit, look)
 	look = look or UF() or ns.UF_PRESETS[2]
+	-- (a monster in a fight: who it is after, in its threat's color: Threat.lua)
+	if ns.ThreatColor then
+		local tr, tg, tb = ns.ThreatColor(unit)
+		if tr then return tr, tg, tb, true end
+	end
 	local isPlayer = Clean(Safe(UnitIsPlayer, unit))
 	if isPlayer and Safe(UnitIsConnected, unit) == false then return OFFLINE[1], OFFLINE[2], OFFLINE[3], true end
 	if Clean(Safe(UnitIsTapDenied, unit)) then return TAPPED[1], TAPPED[2], TAPPED[3], true end
