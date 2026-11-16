@@ -16,6 +16,9 @@ local _, ns = ...
 -- plate, in the color of their reaction; the game fades the plate with the
 -- distance, so the name comes as you come near (out of a fight).
 --
+-- A character marked with a raid symbol (skull, cross...): its plate always shows, its health bar with it,
+-- enemy or ally, whatever the settings say (never kept invisible).
+--
 -- Your group: since names are hidden, the game cannot color theirs. Over
 -- each member's quiet plate, Wanderer writes the name small, in the game's
 -- color for your group (option, on by default); never while the game writes
@@ -212,7 +215,9 @@ local function UpdatePlate(plate, elapsed, on)
 	end
 	-- (what the character is: read once while the plate carries it, and only while Wanderer looks after them)
 	local f = on and Facts(plate, unit)
-	local wanted = (f and Quiet(f)) and 0 or 1
+	-- (a raid symbol on it: always seen, its health bar with it)
+	local marked = on and Clean(Safe(GetRaidTargetIndex, unit)) ~= nil
+	local wanted = (f and not marked and Quiet(f)) and 0 or 1
 	quiet[plate] = wanted == 0
 	if wanted ~= 0 then held[drawn] = nil end -- (shown: never held, whatever it carried before)
 	local still = false
@@ -398,6 +403,8 @@ function ns.InitPlates()
 	-- (who is in your guild, a character's reaction: what the plates know of them read again)
 	pcall(events.RegisterEvent, events, "GUILD_ROSTER_UPDATE")
 	pcall(events.RegisterEvent, events, "UNIT_FACTION")
+	-- (a raid symbol put or taken: the plates looked at again; in an instance, the allies' plates may be needed)
+	pcall(events.RegisterEvent, events, "RAID_TARGET_UPDATE")
 	events:SetScript("OnEvent", function(_, event, unit)
 		local plate = (event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED") and unit and C_NamePlate
 			and Safe(C_NamePlate.GetNamePlateForUnit, unit)
@@ -432,6 +439,9 @@ function ns.InitPlates()
 			if type(changed) ~= "table" then return end
 			facts[changed] = nil
 			dirty = true
+		elseif event == "RAID_TARGET_UPDATE" then
+			dirty = true
+			if ns.Apply and not InCombatLockdown() then ns.Apply() end
 		else
 			-- (the group, the guild: every plate's character read again)
 			if event == "GROUP_ROSTER_UPDATE" or event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_REGEN_DISABLED"

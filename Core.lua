@@ -839,8 +839,24 @@ end
 -- In instances the allies' health bars are the player's own choice (the game's
 -- Nameplates options, V and Shift+V): Wanderer only turns on, out of them,
 -- the plates the label needs.
+-- A member of your group marked with a raid symbol, in an instance: the allies' plates shown while the symbol
+-- stays (the game shows them all or none there), so the marked one's health bar is seen whatever the settings.
+local function MarkedCompanion()
+	local Safe, Clean = ns.Util.Safe, ns.Util.Clean
+	local zone = ns.zone
+	if not (zone == "dungeon" or zone == "raid" or zone == "pvp") then return false end
+	local raid = Clean(Safe(IsInRaid))
+	local prefix, count = raid and "raid" or "party", raid and 40 or 4
+	if not raid and Clean(Safe(GetRaidTargetIndex, "player")) then return true end
+	for index = 1, count do
+		local unit = prefix .. index
+		if Clean(Safe(UnitExists, unit)) and Clean(Safe(GetRaidTargetIndex, unit)) then return true end
+	end
+	return false
+end
+
 local function FriendlyPlates(db)
-	return AllHeads(db) and "1" or nil
+	return (AllHeads(db) or MarkedCompanion()) and "1" or nil
 end
 
 -- Enemy names as you come near: out of a fight, the plates (and the names
