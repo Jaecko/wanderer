@@ -517,7 +517,8 @@ Skin.StepAside, Skin.Hold = StepAside, Hold -- (tests)
 -- template: another of the game's frames (a question's DialogBorderTemplate), DefaultPanelTemplate unless said.
 local function GameFrame(window, template)
 	template = template or "DefaultPanelTemplate"
-	if window.gameArt or not Skin.Game(template) then return window.gameArt end
+	-- (a piece of the screen, a bar of emotes: no window frame around it, its own look stays)
+	if window.gameArt or window.hudPiece or not Skin.Game(template) then return window.gameArt end
 	local ok, art = pcall(CreateFrame, "Frame", nil, window, template)
 	if not (ok and art) then return nil end
 	art:SetAllPoints()
@@ -687,7 +688,7 @@ function Skin.CreateWindow(name, strata, parent, hud, kind)
 	local ok, created = pcall(CreateFrame, kind, name, parent, "TooltipBackdropTemplate")
 	local window = ok and created or CreateFrame(kind, name, parent)
 	-- (a piece of the screen, always there: never given the controller's attention)
-	if hud then window.padSkip = true end
+	if hud then window.padSkip, window.hudPiece = true, true end
 	local plain = strata == "MEDIUM" or strata == "HIGH"
 	if strata and not (plain and not own) then window:SetFrameStrata(plain and "MEDIUM" or strata) end
 	if own and plain then
