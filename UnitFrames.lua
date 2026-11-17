@@ -66,7 +66,7 @@ local CAST_CLASSIC = { cast = { 1, 0.7, 0 }, channel = { 0, 1, 0 }, locked = { 0
 local GROUND = { dark = { 0.055, 0.059, 0.071, 0.85 }, classic = { 0, 0, 0, 0.6 } }
 local INK = { 0, 0, 0, 0.9 }
 local VALUE_COLOR = { 0.95, 0.93, 0.9 }
-local NAME_COLOR = ns.Skin.COLORS.text
+local NAME_COLOR = ns.Skin.SCREEN_COLORS.text
 -- (the ink line's quiet tints: a fight, resting)
 local COMBAT_EDGE, REST_EDGE = { 0.32, 0.18, 0.05, 1 }, { 0.2, 0.17, 0.1, 1 }
 
@@ -2522,7 +2522,7 @@ function ns.UnitFramesCards(parent, options)
 		card.check:SetSize(16, 16)
 		card.check:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 8)
 		ns.Skin.GlyphOn(card.check, "check")
-		card.title = ns.Skin.Text(card, "GameTooltipText", "text")
+		card.title = ns.Skin.ScreenText(card, "GameTooltipText", "text")
 		card.title:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 10, 10)
 		card.title:SetPoint("RIGHT", card.check, "LEFT", -4, 0)
 		if card.title.SetWordWrap then card.title:SetWordWrap(false) end
@@ -2570,8 +2570,8 @@ function ns.UnitFramesCards(parent, options)
 		local current = uf and (uf.enabled and ns.UnitFramesPreset() or (options.withGame and "game")) or nil
 		for _, card in ipairs(self.cards) do
 			local chosen = card.key == current
-			if chosen then card.background:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN)) else card.background:SetColorTexture(1, 1, 1, 0.04) end
-			card.title:SetTextColor(unpack(chosen and ns.Skin.COLORS.gold or ns.Skin.COLORS.text))
+			if chosen then card.background:SetColorTexture(ns.Skin.ScreenRGB("gold", ns.Skin.CHOSEN)) else card.background:SetColorTexture(1, 1, 1, 0.04) end
+			card.title:SetTextColor(unpack(chosen and ns.Skin.SCREEN_COLORS.gold or ns.Skin.SCREEN_COLORS.text))
 			card.check:SetShown(chosen)
 		end
 		self.current = current
@@ -2587,7 +2587,7 @@ end
 
 -- The settings page's pieces -----------------------------------------------------------------------------------
 
-local function Colorize(words) return ns.Skin.Colorize(words, "label") end
+local function Colorize(words) return ns.Skin.ScreenColorize(words, "label") end
 
 local STATUS_TEXT = { NUMERIC = "UF_VALUES_NUMERIC", PERCENT = "UF_VALUES_PERCENT", BOTH = "UF_VALUES_BOTH", NONE = "UF_VALUES_NONE" }
 
@@ -2627,7 +2627,7 @@ function ns.UnitFramesGameCard(canvas)
 	for index = 1, 3 do
 		-- (the game look: the game's small white words after their gold names)
 		local game = ns.Skin.GameWindows()
-		local line = ns.Skin.Text(card, game and "GameFontHighlightSmall" or "GameTooltipTextSmall", game and "text" or "soft")
+		local line = ns.Skin.ScreenText(card, game and "GameFontHighlightSmall" or "GameTooltipTextSmall", game and "text" or "soft")
 		line:SetJustifyH("LEFT")
 		if line.SetWordWrap then line:SetWordWrap(false) end
 		card.lines[index] = line
@@ -2694,7 +2694,7 @@ function ns.UnitFramesPreview(holder)
 	card.rows = {}
 	local previous
 	for index, row in ipairs(rows) do
-		local name = ns.Skin.Text(card, "GameTooltipTextSmall", "text")
+		local name = ns.Skin.ScreenText(card, "GameTooltipTextSmall", "text")
 		name:SetText(row.name)
 		if previous then name:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -10) else name:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -12) end
 		local sample = Sample(card, row.height)
@@ -2731,7 +2731,7 @@ function ns.UnitFramesPreview(holder)
 	card.castIcon:SetPoint("RIGHT", card.cast, "LEFT", -6, 0)
 	card.castIcon:SetTexture("Interface\\Icons\\Spell_Frost_FrostBolt02")
 	card.castIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	card.castText = ns.Skin.Text(card.cast, "GameTooltipTextSmall", "text")
+	card.castText = ns.Skin.ScreenText(card.cast, "GameTooltipTextSmall", "text")
 	card.castText:SetPoint("LEFT", card.cast, "LEFT", 4, 0)
 	card.castText:SetText(L.UF_SAMPLE_CAST)
 	function card:Draw()

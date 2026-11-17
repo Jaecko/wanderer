@@ -68,7 +68,7 @@ local U = ns.Util
 local Safe, Clean, IsSecret = U.Safe, U.Clean, U.IsSecret
 local Measure, IsOverWorld, HasAtlas = U.Measure, U.IsOverWorld, U.HasAtlas
 -- Words in one of the family's colors (its role).
-local function Paint(text, role) return ns.Skin.Colorize(text, role) end
+local function Paint(text, role) return ns.Skin.ScreenColorize(text, role) end
 
 -- The game draws a text a little wider than it measures it (more so at some
 -- interface scales): the label keeps a margin, so nothing ever overflows.
@@ -971,7 +971,7 @@ local function RenderActions(a)
 	local most = U.PadShiftDown() and #order or MAX_QUEST_LINES
 	for index, quest in ipairs(order) do
 		if index > most then break end
-		local color = quest.complete and U.ColorCode(ns.Skin.RGB("muted")) or U.ColorCode(ns.Skin.RGB("gold"))
+		local color = quest.complete and U.ColorCode(ns.Skin.ScreenRGB("muted")) or U.ColorCode(ns.Skin.ScreenRGB("gold"))
 		-- In a group: whose objective it is, in their class's color.
 		local who = quest.who and ("|c%s%s|r"):format(MemberColorCode(quest.who), L.QUEST_WHO:format(quest.who)) or ""
 		quests[#quests + 1] = ("%s %s%s%s|r"):format(IconMarkup(nil, QUEST_STYLES.objective.texture, 12), who, color, quest.text)
@@ -1752,7 +1752,7 @@ function ns.InitLabel()
 	rankIcon:SetSize(RANK_ICON_SIZE, RANK_ICON_SIZE)
 	rankIcon:Hide()
 
-	nameText = CreateLine("GameTooltipHeaderText", ns.Skin.RGB("gold"))
+	nameText = CreateLine("GameTooltipHeaderText", ns.Skin.ScreenRGB("gold"))
 	rankIcon:SetPoint("RIGHT", nameText, "LEFT", -4, 0)
 	alertText = CreateLine("GameTooltipText")
 	titleText = CreateLine("GameTooltipText")
@@ -1777,7 +1777,7 @@ function ns.InitLabel()
 	-- The target block (laid out on its own, after the lines).
 	target.line = frame:CreateTexture(nil, "ARTWORK")
 	target.line:SetHeight(1)
-	target.line:SetColorTexture(ns.Skin.RGB("gold", 0.25))
+	target.line:SetColorTexture(ns.Skin.ScreenRGB("gold", 0.25))
 	target.portrait = ns.Skin.RoundPortrait(frame, TARGET_PORTRAIT)
 	targetText = CreateLine("GameTooltipTextSmall", 0.8, 0.8, 0.8)
 	target.info = CreateLine("GameTooltipTextSmall", 0.65, 0.65, 0.65)

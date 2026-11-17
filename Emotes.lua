@@ -77,7 +77,7 @@ local function Tip(button)
 	local entry = button.entry
 	local lines = { L["EMOTE_" .. entry.token] or entry.token }
 	local target = Clean(Safe(UnitName, "target"))
-	if target then lines[#lines + 1] = { L.EMOTES_TOWARD:format(target), ns.Skin.RGB("soft") } end
+	if target then lines[#lines + 1] = { L.EMOTES_TOWARD:format(target), ns.Skin.ScreenRGB("soft") } end
 	local typed = Command(entry.token)
 	if typed then lines[#lines + 1] = { typed, 0.56, 0.53, 0.46 } end
 	return lines
@@ -142,7 +142,7 @@ local function Button(index, entry)
 		and pcall(button.SetHighlightTexture, button, "Interface\\Buttons\\ButtonHilight-Square", "ADD")
 	if not gameLight then
 		button:SetScript("OnEnter", function(self)
-			local gold = ns.Skin.COLORS.gold
+			local gold = ns.Skin.SCREEN_COLORS.gold
 			self.square.edges.Color(gold[1], gold[2], gold[3], 0.9)
 		end)
 		button:SetScript("OnLeave", function(self) self.square.edges.Color(1, 1, 1, 0.2) end)

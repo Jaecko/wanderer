@@ -89,7 +89,7 @@ end
 local function ItemNote(link, quality, count, classID, kind, subKind, slot)
 	if quality == 0 then
 		local price = U.SellPrice(link)
-		if price and price > 0 then return U.Coins(price * count, ns.Skin.COLORS.muted) end
+		if price and price > 0 then return U.Coins(price * count, ns.Skin.SCREEN_COLORS.muted) end
 	end
 	if classID == QUEST_CLASS then return L.LOOT_FEED_QUEST_ITEM end
 	local words = Clean(subKind) or Clean(kind)
@@ -136,13 +136,13 @@ end
 
 local function Fill(row)
 	local entry = row.entry
-	local gold = ns.Skin.COLORS.gold
+	local gold = ns.Skin.SCREEN_COLORS.gold
 	local r, g, b
 	if entry.kind == "money" then
 		r, g, b = gold[1], gold[2], gold[3]
 		row.icon:Set(CoinIcon(entry.copper))
 		row.icon.edges.Color(r, g, b, 0.6)
-		row.name:SetText(U.Coins(entry.copper, ns.Skin.COLORS.text))
+		row.name:SetText(U.Coins(entry.copper, ns.Skin.SCREEN_COLORS.text))
 		row.name:SetTextColor(1, 1, 1)
 		row.count:SetText("")
 	else
@@ -206,11 +206,11 @@ local function NewRow()
 	ns.Skin.FadingRule(row.pulse, 0, false)
 	row.icon = ns.Skin.Icon(row, ICON_SIZE)
 	row.icon:SetPoint("LEFT", row, "LEFT", 8, 0)
-	row.name = ns.Skin.Text(row, "GameTooltipText")
+	row.name = ns.Skin.ScreenText(row, "GameTooltipText")
 	if row.name.SetWordWrap then row.name:SetWordWrap(false) end
-	row.count = ns.Skin.Text(row, "GameTooltipText", "soft")
+	row.count = ns.Skin.ScreenText(row, "GameTooltipText", "soft")
 	row.count:SetPoint("LEFT", row.name, "RIGHT", 4, 0)
-	row.note = ns.Skin.Text(row, "GameTooltipTextSmall", "muted")
+	row.note = ns.Skin.ScreenText(row, "GameTooltipTextSmall", "muted")
 	row.note:SetPoint("TOPLEFT", row, "LEFT", 8 + ICON_SIZE + 8, -1)
 	row.note:SetPoint("RIGHT", row, "RIGHT", -8, 0)
 	if row.note.SetWordWrap then row.note:SetWordWrap(false) end

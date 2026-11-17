@@ -47,6 +47,22 @@ local GAME_COLORS = {
 	good = { "GREEN_FONT_COLOR", 0.1, 1, 0.1 }, bad = { "RED_FONT_COLOR", 1, 0.1, 0.1 },
 	warn = { "ORANGE_FONT_COLOR", 1, 0.5, 0.25 }, blue = { "LIGHTBLUE_FONT_COLOR", 0.53, 0.67, 1 },
 }
+-- The pieces of the screen that are no windows (the bar of links, the loot recap, the objectives, the chat, the
+-- arrow, the minimap, the label): Wanderer's own colors in either look, never the game's windows' ones.
+Skin.SCREEN_COLORS = WANDERER_COLORS
+function Skin.ScreenRGB(role, alpha)
+	local c = WANDERER_COLORS[role] or WANDERER_COLORS.text
+	if alpha then return c[1], c[2], c[3], alpha end
+	return c[1], c[2], c[3]
+end
+function Skin.ScreenColorize(text, role)
+	local c = WANDERER_COLORS[role] or WANDERER_COLORS.text
+	return U.Colorize(text, c[1], c[2], c[3])
+end
+function Skin.ScreenText(parent, template, role)
+	local c = WANDERER_COLORS[role or "text"] or WANDERER_COLORS.text
+	return Skin.CreateText(parent, template or "GameTooltipText", c[1], c[2], c[3])
+end
 Skin.gamePalette = false
 function Skin.UsePalette(game)
 	game = game and true or false

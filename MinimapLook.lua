@@ -170,14 +170,14 @@ end
 local function DrawInfo()
 	local zone = Clean(Safe(GetMinimapZoneText)) or Clean(Safe(GetZoneText)) or ""
 	info.zone:SetText(U.Upper(zone))
-	local color = PvPState() or ns.Skin.COLORS.gold
+	local color = PvPState() or ns.Skin.SCREEN_COLORS.gold
 	info.zone:SetTextColor(color[1], color[2], color[3])
 	local where = Position()
 	info.line:SetText(where and (Clock() .. U.SEPARATOR .. where) or Clock())
 end
 
 local function MakeInfo()
-	local C = ns.Skin.COLORS
+	local C = ns.Skin.SCREEN_COLORS
 	info = CreateFrame("Button", "WandererMinimapInfo", MinimapCluster)
 	info:SetSize(220, 44)
 	info:RegisterForClicks("AnyUp")

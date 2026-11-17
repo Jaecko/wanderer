@@ -145,7 +145,7 @@ local function ShowHover(item)
 		hoverCard:EnableMouse(false)
 		hoverCard.title = Skin.CreateText(hoverCard, "GameTooltipHeaderText", C.gold[1], C.gold[2], C.gold[3])
 		hoverCard.lines = {}
-		hoverCard.hint = Skin.Text(hoverCard, "GameTooltipTextSmall", "muted")
+		hoverCard.hint = Skin.ScreenText(hoverCard, "GameTooltipTextSmall", "muted")
 	end
 	local card, m = hoverCard, 10
 	card:SetScale(Skin.Scale())
@@ -154,10 +154,10 @@ local function ShowHover(item)
 	card.title:SetPoint("TOPLEFT", card, "TOPLEFT", m, -m)
 	local y = m + U.Measure(card.title, "GetStringHeight", 14) + 4
 	for index, line in ipairs(lines) do
-		local text = card.lines[index] or Skin.Text(card, "GameTooltipText", "text")
+		local text = card.lines[index] or Skin.ScreenText(card, "GameTooltipText", "text")
 		card.lines[index] = text
 		text:SetWidth(HOVER_WIDTH - m * 2)
-		text:SetText(Skin.Colorize(line.text, line.role or "text"))
+		text:SetText(Skin.ScreenColorize(line.text, line.role or "text"))
 		text:ClearAllPoints()
 		text:SetPoint("TOPLEFT", card, "TOPLEFT", m, -y)
 		text:Show()
@@ -357,7 +357,7 @@ end
 function ns.BarActive() return ns.db.enabled and ns.db.world.bar and true or false end
 
 function ns.InitBar()
-	C = ns.Skin.COLORS
+	C = ns.Skin.SCREEN_COLORS
 	bar = CreateFrame("Frame", "WandererBar", UIParent)
 	bar:SetHeight(HEIGHT)
 	bar:SetFrameStrata("MEDIUM")
