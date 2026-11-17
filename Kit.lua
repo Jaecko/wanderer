@@ -91,6 +91,16 @@ function Skin.ChosenTint(texture)
 	if not Skin.GameAtlas(texture, "Options_List_Active") then texture:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], Skin.CHOSEN) end
 	return texture
 end
+-- A list's fold sign in the game look: the game's own small plus and minus squares (its options' list, its old quest
+-- log), on the texture given (14 px). False (nothing done) in Wanderer's look: its chevron then.
+function Skin.FoldSign(texture, folded)
+	if not Skin.GameWindows() then return false end
+	texture:SetTexture(folded and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up")
+	texture:SetTexCoord(0, 1, 0, 1)
+	texture:SetSize(14, 14)
+	texture:SetVertexColor(1, 1, 1)
+	return true
+end
 -- (the game look drawn: its windows' frames there)
 function Skin.GameWindows() return Skin.Game("DefaultPanelTemplate") end
 -- (Util's plain separator, in the palette's quiet color now that it is known)
