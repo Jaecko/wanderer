@@ -2625,7 +2625,9 @@ function ns.UnitFramesGameCard(canvas)
 	card.kicker:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
 	card.lines = {}
 	for index = 1, 3 do
-		local line = ns.Skin.Text(card, "GameTooltipTextSmall", "soft")
+		-- (the game look: the game's small white words after their gold names)
+		local game = ns.Skin.GameWindows()
+		local line = ns.Skin.Text(card, game and "GameFontHighlightSmall" or "GameTooltipTextSmall", game and "text" or "soft")
 		line:SetJustifyH("LEFT")
 		if line.SetWordWrap then line:SetWordWrap(false) end
 		card.lines[index] = line

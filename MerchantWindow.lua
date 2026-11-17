@@ -428,6 +428,8 @@ local function Create()
 	window.money:SetPoint("RIGHT", window.game, "LEFT", -18, 0)
 	-- The tabs, over a thin rule.
 	local rule = Skin.Rule(window)
+	-- (the game look: the game's own divider, from its options' list)
+	if Skin.GameWindows() then Skin.GameAtlas(rule, "Options_HorizontalDivider") end
 	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 68))
 	rule:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	window.tabs = Skin.Tabs(window, { { "goods", L.MERCHANT_TAB_GOODS }, { "buyback", L.MERCHANT_TAB_BUYBACK } },

@@ -53,7 +53,7 @@ function GridMixin:Refresh()
 		local selected = card.theme.key == currentKey
 		-- The chosen style: golden card and title, with a check mark.
 		if selected then
-			card.background:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN))
+			ns.Skin.ChosenTint(card.background)
 			card.title:SetTextColor(ns.Skin.COLORS.gold[1], ns.Skin.COLORS.gold[2], ns.Skin.COLORS.gold[3])
 		else
 			card.background:SetColorTexture(1, 1, 1, 0.04)
@@ -141,7 +141,7 @@ local function CreateCard(grid, index, theme)
 	card.background:SetAllPoints()
 	card.hover = card:CreateTexture(nil, "BACKGROUND", nil, 1)
 	card.hover:SetAllPoints()
-	card.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+	ns.Skin.HoverTint(card.hover)
 	card.hover:Hide()
 	CreatePreview(card, theme, grid.cardHeight - 50)
 	card.check = card:CreateTexture(nil, "OVERLAY")

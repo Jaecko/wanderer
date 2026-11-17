@@ -34,6 +34,49 @@ Skin.HOVER, Skin.CHOSEN = 0.05, 0.07
 -- A drawer opened from the bar closes by itself after this long without the mouse (seconds).
 Skin.DRAWER_CLOSE_AFTER = 1.5
 local COLORS = Skin.COLORS
+
+-- The game look's words: the game's own colors (its gold titles and labels, white text, grey hints, its green, red,
+-- orange and blue), read from the game when it has them. Changed in place: every piece reading a role follows.
+-- (the objectives' list keeps its own: it is no window)
+local WANDERER_COLORS = {}
+for role, c in pairs(COLORS) do WANDERER_COLORS[role] = { c[1], c[2], c[3] } end
+local GAME_COLORS = {
+	gold = { "NORMAL_FONT_COLOR", 1, 0.82, 0 }, kicker = { "NORMAL_FONT_COLOR", 1, 0.82, 0 },
+	label = { "NORMAL_FONT_COLOR", 1, 0.82, 0 }, text = { "HIGHLIGHT_FONT_COLOR", 1, 1, 1 },
+	soft = { "VERY_LIGHT_GRAY_COLOR", 0.9, 0.9, 0.9 }, muted = { "LIGHTGRAY_FONT_COLOR", 0.6, 0.6, 0.6 },
+	good = { "GREEN_FONT_COLOR", 0.1, 1, 0.1 }, bad = { "RED_FONT_COLOR", 1, 0.1, 0.1 },
+	warn = { "ORANGE_FONT_COLOR", 1, 0.5, 0.25 }, blue = { "LIGHTBLUE_FONT_COLOR", 0.53, 0.67, 1 },
+}
+Skin.gamePalette = false
+function Skin.UsePalette(game)
+	game = game and true or false
+	if Skin.gamePalette == game then return end
+	Skin.gamePalette = game
+	for role, c in pairs(COLORS) do
+		local from = WANDERER_COLORS[role]
+		local wanted = game and GAME_COLORS[role]
+		if wanted then
+			local color = rawget(_G, wanted[1])
+			local ok, r, g, b = false, nil, nil, nil
+			if type(color) == "table" and color.GetRGB then ok, r, g, b = pcall(color.GetRGB, color) end
+			if ok and type(r) == "number" then c[1], c[2], c[3] = r, g, b else c[1], c[2], c[3] = wanted[2], wanted[3], wanted[4] end
+		elseif from then
+			c[1], c[2], c[3] = from[1], from[2], from[3]
+		end
+	end
+end
+
+-- The game look's rows: the game's own hover and chosen pictures (its options' list), else Wanderer's tints.
+function Skin.HoverTint(texture)
+	if not Skin.GameAtlas(texture, "Options_List_Hover") then texture:SetColorTexture(1, 1, 1, Skin.HOVER) end
+	return texture
+end
+function Skin.ChosenTint(texture)
+	if not Skin.GameAtlas(texture, "Options_List_Active") then texture:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], Skin.CHOSEN) end
+	return texture
+end
+-- (the game look drawn: its windows' frames there)
+function Skin.GameWindows() return Skin.Game("DefaultPanelTemplate") end
 -- (Util's plain separator, in the palette's quiet color now that it is known)
 U.SEPARATOR = "  " .. U.Colorize("\194\183", COLORS.muted[1], COLORS.muted[2], COLORS.muted[3]) .. "  "
 
@@ -122,6 +165,12 @@ end
 
 -- A small title in capitals (a section, a column): muted, or in a role's color.
 function Skin.Caps(parent, text, role)
+	-- (the game look: the game's small gold titles, GameFontNormalSmall, written as they are)
+	if Skin.GameWindows() then
+		local caps = Skin.Text(parent, "GameFontNormalSmall", role or "label")
+		caps:SetText(text or "")
+		return caps
+	end
 	local caps = Skin.Text(parent, "GameTooltipTextSmall", role or "muted")
 	caps:SetText(U.Upper(text or ""))
 	return caps
@@ -160,7 +209,13 @@ end
 -- A thin golden rule, across or down (placed by its owner).
 function Skin.Rule(parent, vertical, alpha)
 	local rule = parent:CreateTexture(nil, "ARTWORK")
-	rule:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], alpha or 0.16)
+	-- (the game look: across, the game's options' divider; down, a quiet grey line, the game drawing none in gold)
+	if not (vertical or alpha) and Skin.GameAtlas(rule, "Options_HorizontalDivider") then
+		rule:SetHeight(1)
+		return rule
+	end
+	if Skin.GameWindows() then rule:SetColorTexture(1, 1, 1, (alpha or 0.16) * 0.6)
+	else rule:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], alpha or 0.16) end
 	if vertical then rule:SetWidth(1) else rule:SetHeight(1) end
 	return rule
 end
@@ -177,6 +232,18 @@ end
 
 -- A soft panel (a card): a light ground, a thin edge.
 function Skin.Panel(parent)
+	if Skin.Game("InsetFrameTemplate") then
+		-- The game look: the game's sunken area (InsetFrameTemplate, its dark ground and its frame). Wanderer's ground
+		-- and edges are kept, clear, for the windows that tint them (a chosen card, a hovered one).
+		local ok, panel = pcall(CreateFrame, "Frame", nil, parent, "InsetFrameTemplate")
+		if ok and panel then
+			panel.ground = panel:CreateTexture(nil, "BACKGROUND", nil, 2)
+			panel.ground:SetAllPoints()
+			panel.ground:SetColorTexture(1, 1, 1, 0)
+			panel.edges = Skin.Edges(panel, 1, 1, 1, 0)
+			return panel
+		end
+	end
 	local panel = CreateFrame("Frame", nil, parent)
 	panel.ground = panel:CreateTexture(nil, "BACKGROUND")
 	panel.ground:SetAllPoints()
@@ -197,7 +264,9 @@ function Skin.Chip(parent)
 		self:SetShown(text ~= nil)
 		if not text then return end
 		local t = TONES[tone or "grey"] or TONES.grey
-		self.ground:SetColorTexture(t[1], t[2], t[3], t[4])
+		-- (the game look: the words in their tone on a plain dark ground, as the game's own small labels)
+		if Skin.GameWindows() then self.ground:SetColorTexture(0, 0, 0, 0.5)
+		else self.ground:SetColorTexture(t[1], t[2], t[3], t[4]) end
 		self.text:SetTextColor(t[5], t[6], t[7])
 		self.text:SetText(text)
 		self:SetWidth(U.Measure(self.text, "GetStringWidth", 40) + 14)
@@ -479,7 +548,54 @@ end
 
 -- A choice on or off: a small box with its label beside it (a click on either). get() is read each time it is
 -- drawn (check:Refresh()), set(value) called on a click; tip: its tooltip.
+-- The game's checkbox (its options' own, MinimalCheckboxTemplate) in a box of the game look: a click on it does
+-- what a click on the row does (the row holds the state; the box only shows it).
+local GAME_CHECK = 26
+local function GameCheckBox(owner, size)
+	local ok, box = pcall(CreateFrame, "CheckButton", nil, owner, "MinimalCheckboxTemplate")
+	if not (ok and box) then return nil end
+	box:SetSize(size, size)
+	box:SetScript("OnClick", function(self)
+		-- (the row decides: the box drawn back as it was, then the row clicked)
+		self:SetChecked(not self:GetChecked())
+		owner:Click()
+	end)
+	-- (the row hovered lights the box, as the game's options do)
+	owner:HookScript("OnEnter", function() if box.LockHighlight then box:LockHighlight() end end)
+	owner:HookScript("OnLeave", function() if box.UnlockHighlight then box:UnlockHighlight() end end)
+	owner:HookScript("OnEnable", function() box:Enable() end)
+	owner:HookScript("OnDisable", function() box:Disable() end)
+	return box
+end
+
 function Skin.Check(parent, label, get, set, tip)
+	if Skin.Game("MinimalCheckboxTemplate") then
+		local check = CreateFrame("Button", nil, parent)
+		check:SetHeight(18)
+		check.box = GameCheckBox(check, GAME_CHECK)
+		if check.box then
+			check.box:SetPoint("LEFT", check, "LEFT", -4, 0)
+			-- (its words in the game's white, beside the box)
+			check.text = Skin.CreateText(check, "GameFontHighlight")
+			check.text:SetPoint("LEFT", check.box, "RIGHT", 2, 0)
+			check.mark = check.box.GetCheckedTexture and check.box:GetCheckedTexture() or check.box
+			function check:Refresh() self.box:SetChecked(get() and true or false) end
+			function check:SetLabel(text)
+				self.text:SetText(text)
+				self:SetWidth(text == "" and GAME_CHECK - 8 or GAME_CHECK - 4 + U.Measure(self.text, "GetStringWidth", 160))
+			end
+			check:SetScript("OnClick", function(self)
+				set(not get())
+				Skin.Play("mark")
+				self:Refresh()
+			end)
+			if tip then Skin.Tooltip(check, tip) end
+			check:SetLabel(label)
+			check:Refresh()
+			return check
+		end
+		check:Hide()
+	end
 	local check = CreateFrame("Button", nil, parent)
 	check:SetHeight(18)
 	check.box = CreateFrame("Frame", nil, check)
@@ -517,6 +633,23 @@ end
 -- size: "small" (28 x 14, a card's heading) or the settings' (36 x 18).
 function Skin.Switch(parent, onClick, size)
 	local small = size == "small"
+	if Skin.Game("MinimalCheckboxTemplate") then
+		-- The game has no switch: its answer is its checkbox. switch:Set(on) checks it.
+		local switch = CreateFrame("Button", nil, parent)
+		switch:SetSize(small and 22 or 26, small and 22 or 26)
+		switch.box = GameCheckBox(switch, small and 22 or 26)
+		if switch.box then
+			switch.box:SetAllPoints()
+			function switch:Set(on)
+				self.on = on and true or false
+				self.box:SetChecked(self.on)
+			end
+			switch:SetScript("OnClick", onClick)
+			switch:Set(false)
+			return switch
+		end
+		switch:Hide()
+	end
 	local switch = CreateFrame("Button", nil, parent)
 	switch:SetSize(small and 28 or 36, small and 14 or 18)
 	switch.track = switch:CreateTexture(nil, "BACKGROUND")
@@ -595,7 +728,80 @@ end
 -- the mouse. tip: its tooltip (Skin.ShowTip's lines), under the cut choice when there is one (one tooltip:
 -- never Skin.Tooltip on top of it).
 local DROPDOWN_MAX = 220
+-- A choice cut short: whole under the mouse, in gold, its tooltip under it (both looks).
+local function DropdownTip(box, caption, tip)
+	box:HookScript("OnEnter", function(self)
+		local words = tip
+		if type(words) == "function" then
+			local ok, made = pcall(words, self)
+			words = ok and made or nil
+		end
+		if not (caption.IsTruncated and caption:IsTruncated()) then return Skin.ShowTip(self, words) end
+		local lines = { self.chosenLabel or "" }
+		local gold = COLORS.gold
+		if type(words) == "table" then
+			for index, line in ipairs(words) do
+				lines[#lines + 1] = (index == 1 and type(line) ~= "table") and { line, gold[1], gold[2], gold[3] } or line
+			end
+		elseif words ~= nil and words ~= "" then
+			lines[2] = { tostring(words), 1, 1, 1 }
+		end
+		Skin.ShowTip(self, lines)
+	end)
+	box:HookScript("OnLeave", function(self) if GameTooltip:IsOwned(self) then GameTooltip:Hide() end end)
+end
+
+-- The game's list (WowStyle1DropdownTemplate, its menu of round choices): the same box's methods.
+local function GameDropdown(parent, choices, get, set, placeholder, minimum, maximum, tip)
+	local ok, box = pcall(CreateFrame, "DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+	if not (ok and box and box.SetupMenu) then return nil end
+	maximum = maximum or DROPDOWN_MAX
+	box.caption = type(box.Text) == "table" and box.Text or nil
+	if not box.caption then
+		box.caption = Skin.CreateText(box, "GameFontHighlight")
+		box.caption:SetPoint("LEFT", box, "LEFT", 8, 0)
+		box.caption:SetPoint("RIGHT", box, "RIGHT", -22, 0)
+	end
+	box:SetupMenu(function(_, root)
+		for _, choice in ipairs(choices()) do
+			root:CreateRadio(choice.label, function() return get() == choice.id end, function()
+				set(choice.id)
+				Skin.Play("click")
+				-- (drawn again once the menu has answered)
+				C_Timer.After(0, function() box:Refresh() end)
+			end)
+		end
+	end)
+	function box:Fit()
+		local wanted = U.Measure(self.caption, "GetStringWidth", 60) + 34
+		self:SetWidth(math.min(maximum, math.max(minimum or 0, wanted)))
+	end
+	function box:Refresh()
+		local label = placeholder or ""
+		for _, choice in ipairs(choices()) do
+			if choice.id == get() then label = choice.label end
+		end
+		self.chosenLabel = label
+		if self.OverrideText then self:OverrideText(label) else self.caption:SetText(label) end
+		self:Fit()
+	end
+	-- (the pad's press opens the menu: the game's list opens on the mouse's press, not its click)
+	function box:padClick()
+		if self.OpenMenu then self:OpenMenu() end
+		return true
+	end
+	-- (the window's code says SetText to some lists: their words)
+	function box:SetText(text) if self.OverrideText then self:OverrideText(text) else self.caption:SetText(text) end end
+	DropdownTip(box, box.caption, tip)
+	box:Refresh()
+	return box
+end
+
 function Skin.Dropdown(parent, choices, get, set, placeholder, minimum, maximum, tip)
+	if Skin.Game("WowStyle1DropdownTemplate") then
+		local made = GameDropdown(parent, choices, get, set, placeholder, minimum, maximum, tip)
+		if made then return made end
+	end
 	local box
 	box = Skin.Button(parent, "", function(self)
 		U.Menu(self, function(_, root)
@@ -642,33 +848,78 @@ function Skin.Dropdown(parent, choices, get, set, placeholder, minimum, maximum,
 		self:SetText(label)
 		self:Fit()
 	end
-	-- (a choice cut short: whole under the mouse, in gold, its tooltip under it)
-	box:HookScript("OnEnter", function(self)
-		local words = tip
-		if type(words) == "function" then
-			local ok, made = pcall(words, self)
-			words = ok and made or nil
-		end
-		if not (caption.IsTruncated and caption:IsTruncated()) then return Skin.ShowTip(self, words) end
-		local lines = { self.chosenLabel or "" }
-		local gold = COLORS.gold
-		if type(words) == "table" then
-			for index, line in ipairs(words) do
-				lines[#lines + 1] = (index == 1 and type(line) ~= "table") and { line, gold[1], gold[2], gold[3] } or line
-			end
-		elseif words ~= nil and words ~= "" then
-			lines[2] = { tostring(words), 1, 1, 1 }
-		end
-		Skin.ShowTip(self, lines)
-	end)
-	box:HookScript("OnLeave", function(self) if GameTooltip:IsOwned(self) then GameTooltip:Hide() end end)
+	DropdownTip(box, caption, tip)
 	box:Refresh()
 	return box
 end
 
 -- A row of choices, one of them chosen (in gold): { { key, label }, ... }; onPick(key). bar:Select(key),
 -- bar:SetLabels({ label, ... }).
+-- One of the game's options' tabs (MinimalTabTemplate): its words in button.text, chosen with button:SetSelected.
+local function GameTab(owner)
+	local ok, tab = pcall(CreateFrame, "Button", nil, owner, "MinimalTabTemplate")
+	if not (ok and tab) then return nil end
+	tab.text = type(tab.Text) == "table" and tab.Text or nil
+	if not tab.text then
+		tab.text = Skin.CreateText(tab, "GameFontNormalSmall")
+		tab.text:SetPoint("BOTTOM", tab, "BOTTOM", 0, 4)
+	end
+	tab.text:SetJustifyH("CENTER")
+	-- (chosen or not, the game's own drawing: its pictures, its words lifted and whitened)
+	function tab:Choose(on)
+		if self.SetSelected then self:SetSelected(on and true or false) end
+		if not self.SetSelected or not self.UpdateAtlas then
+			local c = COLORS[on and "text" or "gold"]
+			self.text:SetTextColor(c[1], c[2], c[3])
+		end
+	end
+	return tab
+end
+
 function Skin.Choices(parent, list, onPick, height)
+	if Skin.Game("MinimalTabTemplate") then
+		local bar = CreateFrame("Frame", nil, parent)
+		bar:SetHeight(height or 32)
+		bar.buttons = {}
+		local previous
+		for _, choice in ipairs(list) do
+			local key = choice[1]
+			local button = GameTab(bar)
+			if not button then bar.buttons = nil break end
+			button:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
+			if previous then button:SetPoint("LEFT", previous, "RIGHT", 4, 0) else button:SetPoint("LEFT", bar, "LEFT", 0, 0) end
+			button:SetHeight(height or 32)
+			button:SetScript("OnClick", function()
+				Skin.Play("click")
+				bar:Select(key)
+				onPick(key)
+			end)
+			button.key = key
+			bar.buttons[#bar.buttons + 1] = button
+			previous = button
+		end
+		if bar.buttons then
+			function bar:SetLabels(labels)
+				local width = 0
+				for index, button in ipairs(self.buttons) do
+					button.text:SetText(labels[index] or "")
+					local w = math.max(56, U.Measure(button.text, "GetStringWidth", 50) + 40)
+					button:SetWidth(w)
+					width = width + w + (index > 1 and 4 or 0)
+				end
+				self:SetWidth(math.max(1, width))
+			end
+			function bar:Select(key)
+				self.chosen = key
+				for _, button in ipairs(self.buttons) do button:Choose(button.key == key) end
+			end
+			local labels = {}
+			for index, choice in ipairs(list) do labels[index] = choice[2] end
+			bar:SetLabels(labels)
+			return bar
+		end
+		bar:Hide()
+	end
 	local bar = CreateFrame("Frame", nil, parent)
 	bar:SetHeight(height or 32)
 	bar.ground = bar:CreateTexture(nil, "BACKGROUND")
@@ -736,10 +987,30 @@ function Skin.Icon(parent, size)
 	holder.texture:SetPoint("TOPLEFT", 1, -1)
 	holder.texture:SetPoint("BOTTOMRIGHT", -1, 1)
 	holder.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-	holder.edges = Skin.Edges(holder, 1, 1, 1, 0.2)
+	if Skin.GameWindows() then
+		-- The game's item square: the icon whole on a dark slot, the game's own frame around it in the quality's
+		-- color (the bags' WhiteIconFrame, as SetItemButtonQuality draws it). edges.Color tints that frame.
+		holder.ground:SetColorTexture(0, 0, 0, 0.6)
+		holder.texture:SetAllPoints()
+		local frame = holder:CreateTexture(nil, "OVERLAY")
+		frame:SetAllPoints()
+		frame:SetTexture("Interface\\Common\\WhiteIconFrame")
+		holder.border = frame
+		holder.edges = { Color = function(r, g, b, a)
+			frame:SetVertexColor(r, g, b, a or 1)
+			frame:SetShown((a or 1) > 0)
+		end }
+		holder.edges.Color(1, 1, 1, 0.2)
+	else
+		holder.edges = Skin.Edges(holder, 1, 1, 1, 0.2)
+	end
 	function holder:Set(icon, quality)
 		self.texture:SetTexture(icon)
-		if quality then
+		if quality and self.border then
+			-- (the game frames from the uncommon up; below, a faint plain frame)
+			local r, g, b = U.QualityColor(quality)
+			if quality >= 2 then self.edges.Color(r, g, b, 1) else self.edges.Color(1, 1, 1, 0.2) end
+		elseif quality then
 			local r, g, b = U.QualityColor(quality)
 			self.edges.Color(r, g, b, 0.85)
 		else
@@ -918,10 +1189,12 @@ function Skin.SummaryLine(parent, anchor, label, big)
 	line:SetHeight(big and 22 or 16)
 	if anchor then line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6) else line:SetPoint("TOPLEFT", parent, "TOPLEFT", 14, -12) end
 	line:SetPoint("RIGHT", parent, "RIGHT", -14, 0)
-	line.label = Skin.Text(line, big and "GameTooltipText" or "GameTooltipTextSmall", big and "soft" or "muted")
+	-- (the game look: the character sheet's lines, the name in gold, the value in white)
+	local game = Skin.GameWindows()
+	line.label = Skin.Text(line, big and "GameTooltipText" or "GameTooltipTextSmall", game and "label" or (big and "soft" or "muted"))
 	line.label:SetPoint("LEFT")
 	line.label:SetText(label)
-	line.value = Skin.Text(line, big and "GameTooltipHeaderText" or "GameTooltipTextSmall", big and "good" or "soft")
+	line.value = Skin.Text(line, big and "GameTooltipHeaderText" or "GameTooltipTextSmall", big and "good" or (game and "text" or "soft"))
 	line.value:SetPoint("RIGHT")
 	return line
 end
@@ -1078,6 +1351,8 @@ local function AskWindow()
 	if Skin.PadWindow then Skin.PadWindow(ask, { close = function() if ask.no and ask.no:IsShown() then ask.no:Click() else ask:Hide() end end }) end
 	ask:SetSize(380, 120)
 	ask:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+	-- (the game look: the game's own dialog frame, the one of its questions)
+	Skin.GameFrame(ask, "DialogBorderTemplate")
 	ask:EnableMouse(true)
 	ask.words = Skin.Text(ask, "GameTooltipText", "text")
 	ask.words:SetJustifyH("CENTER")
@@ -1099,7 +1374,7 @@ local function AskWindow()
 		ask:Hide()
 		if open and open.refuse then open.refuse() end
 	end, nil, 110)
-	ask.no:SetHeight(36)
+	if not ask.gameArt then ask.no:SetHeight(36) end
 	-- A line to write in, for the questions that ask for words.
 	ask.input = Skin.CreateInput(ask, nil, 255, {
 		onEnter = function() if ask.yes:IsEnabled() then ask.yes:Click() end end,
@@ -1359,11 +1634,11 @@ function Skin.Table(parent, spec)
 		row:SetPoint("RIGHT", list, "RIGHT", -BAR, 0)
 		row.chosen = row:CreateTexture(nil, "BACKGROUND")
 		row.chosen:SetAllPoints()
-		row.chosen:SetColorTexture(COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], Skin.CHOSEN)
+		Skin.ChosenTint(row.chosen)
 		row.chosenEdges = Skin.Edges(row, Skin.RGB("gold", 0))
 		row.hover = row:CreateTexture(nil, "BACKGROUND", nil, 1)
 		row.hover:SetAllPoints()
-		row.hover:SetColorTexture(1, 1, 1, Skin.HOVER)
+		Skin.HoverTint(row.hover)
 		row.hover:Hide()
 		if iconSize > 0 then
 			row.icon = Skin.Icon(row, iconSize)
@@ -1449,7 +1724,8 @@ function Skin.Table(parent, spec)
 			self.name:SetShown(not header)
 			self.chosen:SetShown(chosen and not header or false)
 			if self.chosen:IsShown() then self.hover:Hide() end
-			self.chosenEdges.Color(Skin.RGB("gold", chosen and not header and 0.3 or 0))
+			-- (the game's chosen picture has its own edge)
+			self.chosenEdges.Color(Skin.RGB("gold", chosen and not header and not Skin.GameWindows() and 0.3 or 0))
 			for key, cell in pairs(self.cells) do
 				cell:SetShown(not header)
 				cell:SetText(values and values[key] or "")
@@ -1511,7 +1787,44 @@ end
 -- when everything fits); onOffset(offset) is called while it is dragged or clicked. Placed by its owner
 -- (TOPRIGHT and BOTTOMRIGHT); Skin.SCROLL_WIDTH is the room it takes.
 Skin.SCROLL_WIDTH = BAR
+-- The game's thin bar (MinimalScrollBar, its options' and lists' own: its rail, thumb, arrows at both ends), driven
+-- the same way: bar:Set(total, shown, offset), onOffset(offset) when the player moves it.
+local function GameScrollBar(parent, onOffset)
+	local ok, bar = pcall(CreateFrame, "EventFrame", nil, parent, "MinimalScrollBar")
+	if not (ok and bar and bar.SetScrollPercentage and bar.RegisterCallback) then return nil end
+	-- (bar.part: how much is shown; never "shown", a frame's own word in the tests' game)
+	bar.total, bar.part, bar.offset = 0, 0, 0
+	local setting = false
+	local function Range() return math.max(0, bar.total - bar.part) end
+	local mixin = rawget(_G, "ScrollBarMixin")
+	local event = mixin and mixin.Event and mixin.Event.OnScroll or "OnScroll"
+	bar:RegisterCallback(event, function(_, percentage)
+		if setting or Range() <= 0 then return end
+		onOffset(math.max(0, math.min(1, tonumber(percentage) or 0)) * Range())
+	end, bar)
+	if ns.Pad then ns.Pad.Ignore(bar) end
+	bar:Hide()
+	function bar:Set(total, shown, offset)
+		self.total, self.part, self.offset = total or 0, shown or 0, offset or 0
+		local range = Range()
+		self:SetShown(range > 0)
+		if range <= 0 then return end
+		setting = true
+		-- (the thumb as long as the part shown; an arrow's step, one unit of the list)
+		self:SetVisibleExtentPercentage(self.part / self.total)
+		if self.SetPanExtentPercentage then self:SetPanExtentPercentage(1 / range) end
+		self:SetScrollPercentage(math.min(1, self.offset / range), true)
+		setting = false
+	end
+	function bar:SetPaper() end
+	return bar
+end
+
 function Skin.ScrollBar(parent, onOffset)
+	if Skin.Game("MinimalScrollBar") then
+		local made = GameScrollBar(parent, onOffset)
+		if made then return made end
+	end
 	local bar = CreateFrame("Button", nil, parent)
 	bar:SetWidth(BAR - 2)
 	local rail = bar:CreateTexture(nil, "BACKGROUND")
@@ -1593,7 +1906,29 @@ function Skin.Tabs(parent, list, onPick)
 	local tabs = CreateFrame("Frame", nil, parent)
 	tabs:SetHeight(30)
 	tabs.byKey, tabs.order, tabs.made = {}, {}, {}
+	-- The game look: the game's options' tabs (MinimalTabTemplate), standing on the rule under them.
+	local game = Skin.Game("MinimalTabTemplate")
+	local function MakeGameTab()
+		local tab = GameTab(tabs)
+		if not tab then return nil end
+		tab:SetHeight(30)
+		tab.badge = Skin.Chip(tab)
+		tab.badge:SetPoint("LEFT", tab.text, "RIGHT", 6, 0)
+		-- (the gold line of Wanderer's tabs, never shown: the game's chosen tab is its own picture)
+		tab.line = tab:CreateTexture(nil, "ARTWORK")
+		tab.line:Hide()
+		tab.gameTab = true
+		tab:SetScript("OnClick", function(self)
+			Skin.Play("click")
+			tabs:Select(self.key)
+			onPick(self.key)
+		end)
+		return tab
+	end
 	local function MakeTab()
+		local made = game and MakeGameTab()
+		if made then return made end
+		game = false
 		local tab = CreateFrame("Button", nil, tabs)
 		tab:SetHeight(30)
 		tab.text = Skin.CreateText(tab, "GameFontNormal")
@@ -1637,13 +1972,22 @@ function Skin.Tabs(parent, list, onPick)
 	function tabs:Layout()
 		local previous, width = nil, 0
 		local words = 0
+		local gameTabs = self.order[1] and self.order[1].gameTab
 		for _, tab in ipairs(self.order) do
-			tab:SetWidth(U.Measure(tab.text, "GetStringWidth", 60) + (tab.badge:IsShown() and tab.badge:GetWidth() + 8 or 0))
+			-- (the game's tab: its words with room for its rounded sides)
+			tab:SetWidth(U.Measure(tab.text, "GetStringWidth", 60) + (tab.badge:IsShown() and tab.badge:GetWidth() + 8 or 0) + (tab.gameTab and 40 or 0))
 			words = words + tab:GetWidth()
 		end
 		-- (self.fit: the room there is; the tabs come closer rather than leave their window)
 		local gap = 26
-		if self.fit and #self.order > 1 then gap = math.max(8, math.min(26, math.floor((self.fit - words) / (#self.order - 1)))) end
+		if gameTabs then
+			gap = 4
+			-- (too many for the room: the game's tabs narrower, never out of their window)
+			if self.fit and words + gap * (#self.order - 1) > self.fit and #self.order > 0 then
+				local cut = math.ceil((words + gap * (#self.order - 1) - self.fit) / #self.order)
+				for _, tab in ipairs(self.order) do tab:SetWidth(math.max(40, tab:GetWidth() - cut)) end
+			end
+		elseif self.fit and #self.order > 1 then gap = math.max(8, math.min(26, math.floor((self.fit - words) / (#self.order - 1)))) end
 		for _, tab in ipairs(self.order) do
 			tab:ClearAllPoints()
 			if previous then tab:SetPoint("LEFT", previous, "RIGHT", gap, 0) else tab:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0) end
@@ -1656,9 +2000,17 @@ function Skin.Tabs(parent, list, onPick)
 		self.chosen = key
 		for _, tab in ipairs(self.order) do
 			local on = tab.key == key
-			local c = on and COLORS.gold or COLORS.label
-			tab.text:SetTextColor(c[1], c[2], c[3])
-			tab.line:SetShown(on)
+			if tab.gameTab then
+				tab:Choose(on)
+				-- (a count beside the words: the words a little left, the pair centered)
+				if tab.badge:IsShown() then
+					tab.text:SetPoint("BOTTOM", tab, "BOTTOM", -math.floor((tab.badge:GetWidth() + 6) / 2), on and 6 or 4)
+				end
+			else
+				local c = on and COLORS.gold or COLORS.label
+				tab.text:SetTextColor(c[1], c[2], c[3])
+				tab.line:SetShown(on)
+			end
 		end
 	end
 	function tabs:SetBadge(key, count, tone)
@@ -1666,6 +2018,7 @@ function Skin.Tabs(parent, list, onPick)
 		if not tab then return end
 		tab.badge:Set(count and count > 0 and tostring(count) or nil, tone or "red")
 		self:Layout()
+		if tab.gameTab then self:Select(self.chosen) end
 	end
 	function tabs:SetLabel(key, label)
 		local tab = self.byKey[key]
@@ -1784,8 +2137,8 @@ function Skin.CardRow(parent)
 	row:RegisterForClicks("LeftButtonUp")
 	row.hover = row:CreateTexture(nil, "BACKGROUND")
 	row.hover:SetAllPoints()
-	-- (the family's one hover tint: white at Skin.HOVER; gold stays for what is chosen)
-	row.hover:SetColorTexture(1, 1, 1, Skin.HOVER)
+	-- (the family's one hover tint: white at Skin.HOVER, the game's own in its look; gold stays for what is chosen)
+	Skin.HoverTint(row.hover)
 	row.hover:Hide()
 	row.glyph = Skin.Glyph(row, "chevron", 14)
 	row.glyph:SetPoint("LEFT", row, "LEFT", 6, 0)

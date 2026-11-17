@@ -137,11 +137,16 @@ local function Button(index, entry)
 		self.square:SetPoint("CENTER", 1, -1)
 	end)
 	button:SetScript("OnMouseUp", function(self) self.square:SetPoint("CENTER", 0, 0) end)
-	button:SetScript("OnEnter", function(self)
-		local gold = ns.Skin.COLORS.gold
-		self.square.edges.Color(gold[1], gold[2], gold[3], 0.9)
-	end)
-	button:SetScript("OnLeave", function(self) self.square.edges.Color(1, 1, 1, 0.2) end)
+	-- (the game look: the game's button light under the mouse, as on its own buttons; Wanderer's gold frame else)
+	local gameLight = ns.Skin.GameWindows() and button.SetHighlightTexture
+		and pcall(button.SetHighlightTexture, button, "Interface\\Buttons\\ButtonHilight-Square", "ADD")
+	if not gameLight then
+		button:SetScript("OnEnter", function(self)
+			local gold = ns.Skin.COLORS.gold
+			self.square.edges.Color(gold[1], gold[2], gold[3], 0.9)
+		end)
+		button:SetScript("OnLeave", function(self) self.square.edges.Color(1, 1, 1, 0.2) end)
+	end
 	ns.Skin.Tooltip(button, Tip, "ANCHOR_TOP")
 	return button
 end

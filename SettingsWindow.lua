@@ -104,6 +104,11 @@ local function Slider(parent, row, onValue)
 	fill:SetPoint("LEFT", track, "LEFT")
 	fill:SetPoint("RIGHT", thumb, "CENTER")
 	fill:SetColorTexture(ns.Skin.RGB("gold", 0.9))
+	-- (the game look: the game's thin slider, its bar and its knob, no fill)
+	if Skin.GameWindows() and Skin.GameAtlas(track, "_Minimal_SliderBar_Middle", true) then
+		Skin.GameAtlas(thumb, "Minimal_SliderBar_Button", true)
+		fill:Hide()
+	end
 	holder.value = Skin.Text(holder, "GameTooltipText", "gold")
 	holder.value:SetJustifyH("RIGHT")
 	holder.value:SetWidth(54)
@@ -222,10 +227,24 @@ end
 
 local ShowView, Relayout, BuildNav
 
+-- (the game look: a rule drawn as the game's settings divider, as under its pages' titles; Wanderer's gold line else)
+local function GameRule(rule)
+	if Skin.GameWindows() then Skin.GameAtlas(rule, "Options_HorizontalDivider", true) end
+	return rule
+end
+
 -- A page's title over its content, a few words under it (intro), a chip beside the title (a version).
 local function Heading(view, title, intro)
 	local canvas = view.canvas
-	view.title = Skin.CreateText(canvas, "GameFontNormalLarge", ns.Skin.RGB("gold"))
+	if Skin.GameWindows() then
+		-- (the game look: the game's settings page title, large and white, its divider under it)
+		view.title = Skin.CreateText(canvas, "GameFontHighlightHuge", ns.Skin.RGB("text"))
+		view.divider = canvas:CreateTexture(nil, "ARTWORK")
+		if not Skin.GameAtlas(view.divider, "Options_HorizontalDivider", true) then view.divider = nil end
+		if view.divider then view.divider:Hide() end
+	else
+		view.title = Skin.CreateText(canvas, "GameFontNormalLarge", ns.Skin.RGB("gold"))
+	end
 	view.title:SetText(title or "")
 	-- (one line from the start: measured as one line at the first layout)
 	if view.title.SetWordWrap then view.title:SetWordWrap(false) end
@@ -241,11 +260,20 @@ local function LayoutHeading(view, width)
 	view.chip:ClearAllPoints()
 	view.chip:SetPoint("LEFT", view.title, "LEFT", U.Measure(view.title, "GetStringWidth", 120) + 10, 0)
 	local y = 2 + Height(view.title, 18)
+	-- (the game look: its divider under the title, the intro a little lower for it)
+	local below = 8
+	if view.divider then
+		view.divider:ClearAllPoints()
+		view.divider:SetPoint("LEFT", view.canvas, "TOPLEFT", 0, -(y + 6))
+		view.divider:SetPoint("RIGHT", view.canvas, "TOPLEFT", width - 6, -(y + 6))
+		view.divider:Show()
+		below = 14
+	end
 	if view.intro:IsShown() then
 		view.intro:SetWidth(width - 10)
 		view.intro:ClearAllPoints()
-		view.intro:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", 0, -(y + 8))
-		y = y + 8 + Height(view.intro)
+		view.intro:SetPoint("TOPLEFT", view.canvas, "TOPLEFT", 0, -(y + below))
+		y = y + below + Height(view.intro)
 	end
 	return y + HEADING_GAP
 end
@@ -255,7 +283,7 @@ local function SectionFrame(canvas, text)
 	local frame = CreateFrame("Frame", nil, canvas)
 	frame.caps = Skin.Caps(frame, text, "kicker")
 	frame.caps:SetPoint("LEFT", frame, "LEFT", 0, 0)
-	frame.rule = Skin.Rule(frame, false, 0.14)
+	frame.rule = GameRule(Skin.Rule(frame, false, 0.14))
 	frame.rule:SetPoint("LEFT", frame.caps, "RIGHT", 10, 0)
 	frame.rule:SetPoint("RIGHT", frame, "RIGHT", -6, 0)
 	return frame
@@ -275,7 +303,7 @@ local function RowFrame(canvas, label, desc)
 	local frame = CreateFrame("Button", nil, canvas)
 	frame.hover = frame:CreateTexture(nil, "BACKGROUND")
 	frame.hover:SetAllPoints()
-	frame.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+	Skin.HoverTint(frame.hover)
 	frame.hover:Hide()
 	frame.flash = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
 	frame.flash:SetAllPoints()
@@ -532,12 +560,12 @@ end
 -- The quiet row folding a page's less used rows: its words, how many, a chevron (down once open).
 local function FoldFrame(canvas, count, onClick)
 	local frame = CreateFrame("Button", nil, canvas)
-	frame.rule = Skin.Rule(frame, false, 0.1)
+	frame.rule = GameRule(Skin.Rule(frame, false, 0.1))
 	frame.rule:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
 	frame.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, 0)
 	frame.hover = frame:CreateTexture(nil, "BACKGROUND")
 	frame.hover:SetAllPoints()
-	frame.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+	Skin.HoverTint(frame.hover)
 	frame.hover:Hide()
 	frame.label = Skin.Text(frame, "GameTooltipText", "soft")
 	frame.label:SetText(L.SETTINGS_MORE)
@@ -1123,7 +1151,7 @@ local function NewsView()
 			block.name:SetText(section.name)
 			block.chip = Skin.Chip(self.canvas)
 			block.chip:Set(L.NEWS_VERSION:format(section.version), section.new and "gold" or "grey")
-			block.rule = Skin.Rule(self.canvas, false, 0.14)
+			block.rule = GameRule(Skin.Rule(self.canvas, false, 0.14))
 			for _, line in ipairs(section.lines) do
 				local mark = self.canvas:CreateTexture(nil, "ARTWORK")
 				mark:SetSize(5, 5)
@@ -1229,7 +1257,7 @@ local function ResultsView()
 		button:SetHeight(42)
 		button.hover = button:CreateTexture(nil, "BACKGROUND")
 		button.hover:SetAllPoints()
-		button.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+		Skin.HoverTint(button.hover)
 		button.hover:Hide()
 		button.label = Skin.Text(button, "GameTooltipText", "text")
 		button.label:SetPoint("TOPLEFT", button, "TOPLEFT", 10, -6)
@@ -1342,9 +1370,10 @@ local function SelectNav(key)
 	for _, button in ipairs(navButtons) do
 		local on = button.key == key
 		button.chosen:SetShown(on)
-		button.bar:SetShown(on)
-		-- (an extension not installed: muted)
+		button.bar:SetShown(on and not Skin.GameWindows())
+		-- (an extension not installed: muted; the game look: the game's sidebar, gold names, the chosen one white)
 		local c = on and Skin.COLORS.gold or (button.muted and Skin.COLORS.muted or Skin.COLORS.soft)
+		if Skin.GameWindows() then c = on and Skin.COLORS.text or (button.muted and Skin.COLORS.muted or Skin.COLORS.gold) end
 		button.text:SetTextColor(c[1], c[2], c[3])
 	end
 end
@@ -1366,7 +1395,7 @@ local function NavButton(index)
 	button:SetHeight(NAV_ROW)
 	button.chosen = button:CreateTexture(nil, "BACKGROUND")
 	button.chosen:SetAllPoints()
-	button.chosen:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN))
+	Skin.ChosenTint(button.chosen)
 	button.bar = button:CreateTexture(nil, "ARTWORK")
 	button.bar:SetColorTexture(ns.Skin.RGB("gold", 1))
 	button.bar:SetWidth(2)
@@ -1374,9 +1403,9 @@ local function NavButton(index)
 	button.bar:SetPoint("BOTTOMLEFT")
 	button.hover = button:CreateTexture(nil, "BACKGROUND", nil, 1)
 	button.hover:SetAllPoints()
-	button.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+	Skin.HoverTint(button.hover)
 	button.hover:Hide()
-	button.text = Skin.Text(button, "GameTooltipText", "soft")
+	button.text = Skin.Text(button, Skin.GameWindows() and "GameFontNormal" or "GameTooltipText", "soft")
 	button.text:SetPoint("LEFT", button, "LEFT", 12, 0)
 	button.text:SetPoint("RIGHT", button, "RIGHT", -28, 0)
 	button.count = Skin.Text(button, "GameTooltipTextSmall", "muted")
@@ -1402,7 +1431,10 @@ function BuildNav()
 	if navCount == #entries then return end
 	navCount = #entries
 	local y, used = 0, 0
-	for _, caption in ipairs(navCaptions) do caption:Hide() end
+	for _, caption in ipairs(navCaptions) do
+		caption:Hide()
+		if caption.ground then caption.ground:Hide() end
+	end
 	local captions = 0
 	for _, entry in ipairs(entries) do
 		if entry.caption then
@@ -1411,11 +1443,25 @@ function BuildNav()
 			if not caption then
 				caption = Skin.Caps(navCanvas, "", "muted")
 				navCaptions[captions] = caption
+				-- (the game look: the game's sidebar group header, its ground and its white words, as written)
+				if Skin.GameWindows() then
+					caption:SetFontObject("GameFontHighlight")
+					caption:SetTextColor(Skin.RGB("text"))
+					caption.ground = navCanvas:CreateTexture(nil, "BACKGROUND")
+					if not Skin.GameAtlas(caption.ground, "Options_CategoryHeader_1") then caption.ground = nil end
+				end
 			end
-			caption:SetText(U.Upper(entry.caption))
+			caption:SetText(Skin.GameWindows() and entry.caption or U.Upper(entry.caption))
+			if caption.ground then
+				caption.ground:ClearAllPoints()
+				caption.ground:SetPoint("LEFT", caption, "LEFT", -12, 0)
+				caption.ground:SetPoint("RIGHT", navCanvas, "RIGHT", 0, 0)
+				caption.ground:SetHeight(22)
+			end
 			caption:ClearAllPoints()
 			caption:SetPoint("TOPLEFT", navCanvas, "TOPLEFT", 12, -(y + (captions > 1 and 14 or 2)))
 			caption:Show()
+			if caption.ground then caption.ground:Show() end
 			y = y + (captions > 1 and 14 or 2) + 18
 		else
 			used = used + 1
@@ -1522,6 +1568,8 @@ local function Create()
 	local get = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
 	window.version:SetText(get and U.Safe(get, "Wanderer", "Version") or "")
 	window.rule = Skin.Rule(window, true, 0.12)
+	-- (the game look: no gold line between the sidebar and the page, as in the game's settings)
+	if Skin.GameWindows() then window.rule:SetAlpha(0) end
 	search = Skin.CreateInput(window, nil, 40, {
 		hint = L.SETTINGS_SEARCH,
 		onChange = function(input) OnSearch(input) end,

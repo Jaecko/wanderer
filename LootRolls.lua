@@ -93,7 +93,12 @@ local function Card(index)
 		if card.info then U.ItemClick(card.info.link) end
 	end)
 	card.icon.padTip = true
-	card.count = Skin.Text(card.icon, "GameTooltipTextSmall", "text")
+	if Skin.GameWindows() then
+		-- (the game look: the game's own count on an item square)
+		card.count = Skin.CreateText(card.icon, "NumberFontNormal")
+	else
+		card.count = Skin.Text(card.icon, "GameTooltipTextSmall", "text")
+	end
 	card.count:SetPoint("BOTTOMRIGHT", card.icon, "BOTTOMRIGHT", -2, 2)
 	card.name = Skin.CreateText(card, "GameTooltipText")
 	card.name:SetPoint("TOPLEFT", card.icon, "TOPRIGHT", 10, 0)
@@ -161,7 +166,12 @@ local function Paint(card, roll)
 		button.key = key == "greed" and greedKey or key
 		button:SetShown(key ~= "disenchant" or info.disenchant or (info.reasons.disenchant or 0) > 0)
 		local chosen = roll.chosen == button.key
-		button.caption:SetTextColor(Skin.RGB(chosen and "gold" or "kicker"))
+		if Skin.GameWindows() then
+			-- (the game look: the game's button keeps its own words, greyed when closed; the choice made stays lit)
+			if chosen and button.LockHighlight then button:LockHighlight() elseif button.UnlockHighlight then button:UnlockHighlight() end
+		else
+			button.caption:SetTextColor(Skin.RGB(chosen and "gold" or "kicker"))
+		end
 	end
 	if info.transmog then card.buttons.greed:SetLabel(G("TRANSMOGRIFY") or L.ROLL_GREED) else card.buttons.greed:SetLabel(G("GREED") or L.ROLL_GREED) end
 	card.buttons.greed:SetWidth(78)

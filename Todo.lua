@@ -166,7 +166,7 @@ local function Row(index)
 	if row.text.SetWordWrap then row.text:SetWordWrap(false) end
 	row.highlight = row:CreateTexture(nil, "BACKGROUND")
 	row.highlight:SetAllPoints()
-	row.highlight:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+	ns.Skin.HoverTint(row.highlight)
 	row.highlight:Hide()
 	-- A click ticks (or unticks); a right click opens its menu.
 	row:SetScript("OnClick", function(self, button)

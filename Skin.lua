@@ -29,10 +29,17 @@ function Skin.GameLook()
 	local label = ns.db and ns.db.label
 	if not label then return true end -- (before the settings are read: the default, not kept)
 	lookRead = label.windowLook ~= "wanderer"
+	-- (the game's colors for the words, once its windows are there: Kit.lua)
+	if Skin.UsePalette then Skin.UsePalette(lookRead and Skin.HasTemplate("DefaultPanelTemplate")) end
 	return lookRead
 end
-local templates = {}
-function Skin.ForgetLook() lookRead = nil wipe(templates) end -- (tests)
+local templates, atlases = {}, {}
+function Skin.ForgetLook() -- (tests)
+	lookRead = nil
+	wipe(templates)
+	wipe(atlases)
+	if Skin.UsePalette then Skin.UsePalette(false) end
+end
 
 function Skin.HasTemplate(name)
 	if templates[name] == nil then
@@ -46,6 +53,20 @@ end
 -- A part of the game's, when the game look is chosen and the game has its template.
 function Skin.Game(template)
 	return Skin.GameLook() and Skin.HasTemplate(template)
+end
+
+-- One of the game's pictures (an atlas) on a texture, when the game look is chosen and the game has it (true then);
+-- false and nothing done otherwise, the caller drawing Wanderer's way. useSize: the picture's own size.
+function Skin.GameAtlas(texture, atlas, useSize)
+	if not (texture and Skin.GameLook()) then return false end
+	if atlases[atlas] == nil then
+		local lib = rawget(_G, "C_Texture")
+		local info = lib and lib.GetAtlasInfo and U.Safe(lib.GetAtlasInfo, atlas)
+		atlases[atlas] = info ~= nil and info ~= false
+	end
+	if not atlases[atlas] then return false end
+	texture:SetAtlas(atlas, useSize and true or false)
+	return true
 end
 
 -- Styles ------------------------------------------------------------------------
@@ -493,9 +514,11 @@ Skin.StepAside, Skin.Hold = StepAside, Hold -- (tests)
 -- game's panel manager, locked during a fight. Returns the cross.
 -- The game's own window frame under a window (its metal edges, its rock ground, its title bar), Wanderer's
 -- drawing put away. Its title is the heading's (Skin.Header). Nothing of the window moves.
-local function GameFrame(window)
-	if window.gameArt or not Skin.Game("DefaultPanelTemplate") then return window.gameArt end
-	local ok, art = pcall(CreateFrame, "Frame", nil, window, "DefaultPanelTemplate")
+-- template: another of the game's frames (a question's DialogBorderTemplate), DefaultPanelTemplate unless said.
+local function GameFrame(window, template)
+	template = template or "DefaultPanelTemplate"
+	if window.gameArt or not Skin.Game(template) then return window.gameArt end
+	local ok, art = pcall(CreateFrame, "Frame", nil, window, template)
 	if not (ok and art) then return nil end
 	art:SetAllPoints()
 	art:SetFrameLevel(math.max((window:GetFrameLevel() or 1) - 1, 0))
@@ -549,29 +572,46 @@ end
 -- empty and not written in), onChange(input, typed), onEnter(input), onEscape(input) } (Enter and Escape
 -- let go of it by default).
 function Skin.CreateInput(parent, name, maxLetters, opts)
-	local input = CreateFrame("EditBox", name, parent)
-	input:SetHeight(24)
+	-- (the game look: the game's own line to write in, InputBoxTemplate, its three pieces of frame)
+	local game = Skin.Game("InputBoxTemplate")
+	local input
+	if game then
+		local ok, made = pcall(CreateFrame, "EditBox", name, parent, "InputBoxTemplate")
+		input = ok and made or nil
+		game = input ~= nil
+	end
+	input = input or CreateFrame("EditBox", name, parent)
+	input:SetHeight(game and 22 or 24)
 	input:SetFontObject(Skin.FontFor("ChatFontNormal"))
 	input:SetAutoFocus(false)
 	input:SetMaxLetters(maxLetters or 255)
-	input:SetTextInsets(8, 8, 0, 0)
+	input:SetTextInsets(game and 2 or 8, game and 2 or 8, 0, 0)
 	input.background = input:CreateTexture(nil, "BACKGROUND")
 	input.background:SetAllPoints()
 	input.background:SetColorTexture(0, 0, 0, 0.35)
-	input.edges = Skin.Edges(input, Skin.RGB("gold", 0.12))
-	input:HookScript("OnEditFocusGained", function(self)
-		self.edges.Color(Skin.RGB("gold", 0.55))
-		self.background:SetColorTexture(0, 0, 0, 0.45)
-	end)
-	input:HookScript("OnEditFocusLost", function(self)
-		self.edges.Color(Skin.RGB("gold", 0.12))
-		self.background:SetColorTexture(0, 0, 0, 0.35)
-	end)
+	if game then
+		-- (the game's frame is its own: Wanderer's ground and edges kept, unseen, for the windows that tint them)
+		input.background:Hide()
+		input.edges = { Color = function() end }
+	else
+		input.edges = Skin.Edges(input, Skin.RGB("gold", 0.12))
+	end
+	if not game then
+		input:HookScript("OnEditFocusGained", function(self)
+			self.edges.Color(Skin.RGB("gold", 0.55))
+			self.background:SetColorTexture(0, 0, 0, 0.45)
+		end)
+		input:HookScript("OnEditFocusLost", function(self)
+			self.edges.Color(Skin.RGB("gold", 0.12))
+			self.background:SetColorTexture(0, 0, 0, 0.35)
+		end)
+	end
 	if not opts then return input end
 	if opts.hint then
 		local muted = Skin.COLORS.muted
-		input.hint = Skin.CreateText(input, "GameTooltipTextSmall", muted[1], muted[2], muted[3])
-		input.hint:SetPoint("LEFT", input, "LEFT", 8, 0)
+		-- (the game's grey hint, GameFontDisableSmall, in the game look)
+		input.hint = Skin.CreateText(input, game and "GameFontDisableSmall" or "GameTooltipTextSmall", muted[1], muted[2], muted[3])
+		input.hint:SetPoint("LEFT", input, "LEFT", game and 2 or 8, 0)
 		input.hint:SetText(opts.hint)
 		input:HookScript("OnEditFocusGained", function(self) self.hint:Hide() end)
 		input:HookScript("OnEditFocusLost", function(self) self.hint:SetShown((self:GetText() or "") == "") end)

@@ -461,6 +461,8 @@ local function Create()
 		card.hover:SetText(words[1] and table.concat(words, "\n") or Skin.Colorize(L.BAR_CLICK_OPEN, "muted"))
 	end
 	card.rule = Skin.Rule(card, false, 0.14)
+	-- (the game look: the game's settings divider)
+	if Skin.GameWindows() then Skin.GameAtlas(card.rule, "Options_HorizontalDivider", true) end
 	card.foot = Skin.Text(card, "GameTooltipTextSmall", "muted")
 	card:SetScript("OnKeyDown", OnKey)
 	card:HookScript("OnShow", function() Keys(true) end)

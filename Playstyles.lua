@@ -584,7 +584,7 @@ local function CreateCard(grid, index, key)
 	card.background:SetAllPoints()
 	card.hover = card:CreateTexture(nil, "BACKGROUND", nil, 1)
 	card.hover:SetAllPoints()
-	card.hover:SetColorTexture(1, 1, 1, ns.Skin.HOVER)
+	Skin.HoverTint(card.hover)
 	card.hover:Hide()
 	card.edges = Skin.Edges(card, 1, 1, 1, 0.07)
 	card.icon = Skin.Icon(card, ICON_SIZE)
@@ -739,7 +739,7 @@ function GridMixin:Refresh()
 	for _, card in ipairs(self.cards) do
 		local chosen = card.key == current
 		if chosen then
-			card.background:SetColorTexture(ns.Skin.RGB("gold", ns.Skin.CHOSEN))
+			ns.Skin.ChosenTint(card.background)
 			card.title:SetTextColor(ns.Skin.COLORS.gold[1], ns.Skin.COLORS.gold[2], ns.Skin.COLORS.gold[3])
 		else
 			card.background:SetColorTexture(1, 1, 1, 0.04)
@@ -784,7 +784,8 @@ local function Fill(slots, from, entries, room)
 end
 
 local function Caption(slot, text)
-	slot:SetText(U.Upper(text))
+	-- (the game look: the game's small gold titles, written as they are, as Skin.Caps)
+	slot:SetText(ns.Skin.GameWindows() and text or U.Upper(text))
 	slot:SetTextColor(unpack(ns.Skin.COLORS.kicker))
 end
 
