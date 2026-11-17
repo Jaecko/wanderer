@@ -161,8 +161,14 @@ local function Create()
 	title:SetJustifyH("LEFT")
 	if title.SetWordWrap then title:SetWordWrap(false) end
 	window.count = Skin.Text(window, "GameTooltipTextSmall", "muted")
-	window.count:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
-	window.top = margin + 58
+	-- (the game look: the title is in the game's bar, so the count takes its place, the list right under it)
+	if Skin.GameWindows() then
+		window.count:SetPoint("BOTTOMLEFT", title, "BOTTOMLEFT", 0, 1)
+		window.top = margin + 10
+	else
+		window.count:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+		window.top = margin + 58
+	end
 	list = Skin.Table(window, {
 		width = WIDTH - margin * 2, rows = MADE_ROWS, rowHeight = ROW, titles = false,
 		columns = { { key = "worth", title = "", width = 92 } },

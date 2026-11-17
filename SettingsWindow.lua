@@ -1535,6 +1535,9 @@ local function Arrange()
 	window:SetSize(width, height)
 	local margin = Skin.Margin() + 8
 	local top = margin + 46
+	-- (the game look: the heading in the game's title bar, the search and the page just under its edge; the
+	-- version and the "?" on the page title's line, at its right)
+	if Skin.GameWindows() then top = 10 end
 	search:ClearAllPoints()
 	search:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -top)
 	search:SetWidth(SIDEBAR)
@@ -1564,7 +1567,12 @@ local function Create()
 	local _, _, margin = Skin.Header(window, L.ADDON_TITLE, L.SETTINGS_TITLE)
 	Skin.Help(window, L.SETTINGS_HELP, "HEADING")
 	window.version = Skin.Text(window, "GameTooltipTextSmall", "muted")
-	window.version:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin - 44, -margin) -- (left of the help's "?")
+	if Skin.GameWindows() and window.help then
+		-- (the game look: the "?" in the window's top corner, the version on its line)
+		window.version:SetPoint("RIGHT", window.help, "LEFT", -6, 0)
+	else
+		window.version:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin - 44, -margin) -- (left of the help's "?")
+	end
 	local get = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
 	window.version:SetText(get and U.Safe(get, "Wanderer", "Version") or "")
 	window.rule = Skin.Rule(window, true, 0.12)

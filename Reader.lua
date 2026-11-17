@@ -25,6 +25,7 @@ local SEPARATOR = 30 -- room between two pages
 local MAX_PAGES = 60 -- a book never read further (a page that never ends)
 local WHEEL_STEP = 48 -- pixels a turn of the wheel scrolls
 local USED_WITHIN = 3 -- seconds: an item used this long before the text opened is the one read
+local NOTE_TOP, RULE_TOP = 8, 6 -- (the game look: the note's top, else the line's, under the title bar's edge)
 
 local window, kicker, title, noteText, rule, scroll, content, bar
 local pageTexts, separators = {}, {}
@@ -234,7 +235,13 @@ local function Layout()
 	local r, g, b = Skin.InkColor("gold", paper)
 	rule:SetColorTexture(r, g, b, paper and 0.35 or 0.16)
 	rule:ClearAllPoints()
-	rule:SetPoint("TOPLEFT", noteText:IsShown() and noteText or title, "BOTTOMLEFT", 0, -8)
+	local game = Skin.GameWindows()
+	if game and not noteText:IsShown() then
+		-- (the game look: the title in the game's bar, the line just under its edge)
+		rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -RULE_TOP)
+	else
+		rule:SetPoint("TOPLEFT", noteText:IsShown() and noteText or title, "BOTTOMLEFT", 0, -8)
+	end
 	rule:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 
 	-- The pages, one under the other, a thin line and their number between them.
@@ -282,7 +289,13 @@ local function Layout()
 
 	local header = U.Measure(kicker, "GetStringHeight", 10) + 3 + U.Measure(title, "GetStringHeight", 14)
 		+ (noteText:IsShown() and (4 + U.Measure(noteText, "GetStringHeight", 12)) or 0) + 8 + 1 + 10
-	window:SetSize(WIDTH, margin * 2 + header + view)
+	if game then
+		-- (the game look: the note in the title's place, else only the line)
+		header = (noteText:IsShown() and (NOTE_TOP + U.Measure(noteText, "GetStringHeight", 12) + 8) or RULE_TOP) + 1 + 10
+		window:SetSize(WIDTH, margin + header + view)
+	else
+		window:SetSize(WIDTH, margin * 2 + header + view)
+	end
 	Skin.Get(window):Layout()
 
 	-- Back at the page you stopped at, once it has come.
@@ -389,7 +402,12 @@ function ns.InitReader()
 	kicker, title = Skin.Header(window, L.READER_KICKER)
 	if title.SetWordWrap then title:SetWordWrap(true) end
 	noteText = Skin.Text(window, "GameTooltipTextSmall", "good")
-	noteText:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+	if Skin.GameWindows() then
+		-- (the game look: the title in the game's bar, the note in its place)
+		noteText:SetPoint("TOPLEFT", window, "TOPLEFT", Skin.Margin() + 8, -NOTE_TOP)
+	else
+		noteText:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+	end
 	noteText:Hide()
 	rule = window:CreateTexture(nil, "ARTWORK")
 	rule:SetHeight(1)

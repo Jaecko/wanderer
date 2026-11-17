@@ -18,6 +18,7 @@ local STEP, FINE = 0.1, 0.01 -- a point of a characteristic
 local STEP_PERCENT, FINE_PERCENT = 1, 0.1 -- a percent
 local GOLD = ns.Skin.COLORS.gold
 local QUIET = ns.Skin.COLORS.muted
+local HINT_TOP = 8 -- (the game look: the hint's top, on the line of the cog and the "?")
 
 local window, kicker, title, hint, rule, footer, roles, calcCheck, calcRule
 local calcLines = {} -- the calculated weights said in a few lines
@@ -224,14 +225,26 @@ Refresh = function()
 	local className = class and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class] or ""
 	hint:SetText((ns.Pad and ns.Pad.On() and L.WEIGHTS_HINT_PAD or L.WEIGHTS_HINT):format(className))
 	-- The scales, as tabs.
+	local game = ns.Skin.GameWindows()
 	local y = margin + U.Measure(kicker, "GetStringHeight", 10) + 3 + U.Measure(title, "GetStringHeight", 16) + 4
 		+ U.Measure(hint, "GetStringHeight", 12) + 8
+	-- (the game look: the hint in the title's place; the game's tabs, their art higher than their frame, a little
+	-- under it)
+	if game then y = HINT_TOP + U.Measure(hint, "GetStringHeight", 12) + 12 end
 	local bar = Tabs(scales)
 	bar:ClearAllPoints()
 	bar:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -y)
 	bar:Select(scale and scale.id)
 	bar:Show()
 	y = y + bar:GetHeight() + 6
+	-- (the game look: the tabs standing on the divider, what you play under it)
+	if game then
+		y = y - 6
+		rule:ClearAllPoints()
+		rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -y)
+		rule:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin, -y)
+		y = y + 10
+	end
 	-- What you play (your choice): its weights are the ones shown.
 	local several = #ns.PlayChoices() > 1
 	roles:SetShown(several)
@@ -244,10 +257,12 @@ Refresh = function()
 		roles:Refresh()
 		y = y + 34
 	end
-	rule:ClearAllPoints()
-	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -y)
-	rule:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin, -y)
-	y = y + 10
+	if not game then
+		rule:ClearAllPoints()
+		rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -y)
+		rule:SetPoint("TOPRIGHT", window, "TOPRIGHT", -margin, -y)
+		y = y + 10
+	end
 	-- Calculated for you, or fixed: said first.
 	y = LayoutCalculated(scale, margin, y)
 	-- The characteristics: the ones weighed first, then the others, quiet.
@@ -312,8 +327,14 @@ local function CreateWindow()
 	kicker, title, margin = ns.Skin.Header(window, L.WEIGHTS_KICKER, nil, { margin = 6, settings = "tooltips" })
 	ns.Skin.Help(window, L.WEIGHTS_HELP, "HEADING")
 	hint = ns.Skin.Text(window, "GameTooltipTextSmall", "muted")
-	hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-	hint:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+	if ns.Skin.GameWindows() and window.help then
+		-- (the game look: the title in the game's bar, the hint in its place, left of the "?" and the cog)
+		hint:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -HINT_TOP)
+		hint:SetPoint("RIGHT", window.help, "LEFT", -8, 0)
+	else
+		hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+		hint:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
+	end
 	hint:SetJustifyH("LEFT")
 	if hint.SetWordWrap then hint:SetWordWrap(true) end
 	rule = window:CreateTexture(nil, "ARTWORK")

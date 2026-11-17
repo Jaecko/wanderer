@@ -249,9 +249,12 @@ local function Create()
 	window:SetSize(WIDTH, 200)
 	local _, title, margin = Skin.Header(window, L.ROLLS_KICKER, "", { margin = 6, settings = "practical" }, "GameFontNormalLarge")
 	window.title, window.margin = title, margin
-	window.top = margin + 48
+	-- (the game look: the heading in the game's bar, the button on one line level with the cog, the cards under it)
+	local game = Skin.GameWindows()
+	window.top = game and 32 or margin + 48
 	window.game = ns.SwapButton(window, swap)
-	window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 50), -margin + 2)
+	if game then window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -32, -3)
+	else window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 50), -margin + 2) end
 	window.more = Skin.Text(window, "GameTooltipTextSmall", "muted")
 	window.more:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", margin, margin + 2)
 	-- (with a controller, how to come to them)

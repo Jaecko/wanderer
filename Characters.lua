@@ -402,7 +402,10 @@ local function Create()
 	window.total = Skin.Text(window, "GameTooltipText", "gold")
 	window.total:SetPoint("TOPRIGHT", list, "BOTTOMRIGHT", -Skin.SCROLL_WIDTH, -8)
 	window.total:SetJustifyH("RIGHT")
-	window:SetSize(WIDTH, margin * 2 + 30 + 12 + list:GetHeight() + 8 + 18)
+	-- (the heading's room: its kicker and title; in the game look they stand in the game's title bar, the
+	-- invisible title's foot about 20 under the window's top)
+	local head = Skin.GameWindows() and 20 or margin + 30
+	window:SetSize(WIDTH, head + 12 + list:GetHeight() + 8 + 18 + margin)
 	window:HookScript("OnShow", function(self)
 		self:SetScale(Skin.Scale())
 		Note()

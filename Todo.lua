@@ -32,9 +32,16 @@ local sizing = false -- its corner being dragged
 -- The size you gave it (nil: as tall as its lines).
 local function Size() return ns.root and ns.Mine().todoSize end
 
+-- From the window's top to its title's foot (the game look: the heading in the game's title bar, the
+-- invisible title's foot about 20 under the window's top).
+local function Head(margin)
+	if ns.Skin.GameWindows() then return 20 end
+	return margin + 14 + 18
+end
+
 -- What is around the lines: heading, the line to write, the button over it.
 local function Chrome(margin)
-	return margin * 2 + 14 + 18 + 8 + 10 + 24 + (clearButton:IsShown() and 22 or 0)
+	return Head(margin) + margin + 8 + 10 + 24 + (clearButton:IsShown() and 22 or 0)
 end
 
 -- The rows shown at once: those that fit in the height you gave, else the usual number.
@@ -222,7 +229,8 @@ Refresh = function()
 	local shown = math.min(visible, #list)
 	if scrollBar then
 		scrollBar:ClearAllPoints()
-		scrollBar:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin - 8), -(margin + 30))
+		-- (the game look: level with the first line, under the cog)
+		scrollBar:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin - 8), ns.Skin.GameWindows() and -(Head(margin) + 8) or -(margin + 30))
 		scrollBar:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 10, 28)
 		scrollBar:Set(#list, visible, offset)
 	end

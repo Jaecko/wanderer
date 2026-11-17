@@ -422,15 +422,19 @@ local function Create()
 		Skin.Within(type(saved) == "table" and saved[2] or HEIGHT, MIN_HEIGHT, MAX_HEIGHT))
 	local _, title, margin = Skin.Header(window, L.MERCHANT_KICKER, "", { margin = 10, settings = "practical" }, "GameFontNormalLarge")
 	window.title, window.margin = title, margin
+	-- (the game look: the heading in the game's bar, its actions on one line level with the cog, the tabs under it)
+	local game = Skin.GameWindows()
+	local ruleTop = game and margin + 44 or margin + 68
 	window.game = ns.SwapButton(window, swap)
-	window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 54), -margin + 2)
+	if game then window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -32, -3)
+	else window.game:SetPoint("TOPRIGHT", window, "TOPRIGHT", -(margin + 54), -margin + 2) end
 	window.money = Skin.Text(window, "GameTooltipText", "soft")
 	window.money:SetPoint("RIGHT", window.game, "LEFT", -18, 0)
 	-- The tabs, over a thin rule.
 	local rule = Skin.Rule(window)
 	-- (the game look: the game's own divider, from its options' list)
-	if Skin.GameWindows() then Skin.GameAtlas(rule, "Options_HorizontalDivider") end
-	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -(margin + 68))
+	if game then Skin.GameAtlas(rule, "Options_HorizontalDivider") end
+	rule:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -ruleTop)
 	rule:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	window.tabs = Skin.Tabs(window, { { "goods", L.MERCHANT_TAB_GOODS }, { "buyback", L.MERCHANT_TAB_BUYBACK } },
 		function(name) ns.ShowMerchantPage(name) end)
@@ -552,7 +556,7 @@ local function Create()
 		list:ClearAllPoints()
 		list:SetPoint("TOPLEFT", band:IsShown() and band or search, "BOTTOMLEFT", 0, -12)
 		list:SetWidth(width - margin * 2)
-		local top = margin + 68 + 10 + 24 + 12 + (band:IsShown() and 56 or 0)
+		local top = ruleTop + 10 + 24 + 12 + (band:IsShown() and 56 or 0)
 		list:Fit(self:GetHeight() - top - (margin + 16 + 26 + 10))
 		self.hint:SetText(U.UsingPad and U.UsingPad() and L.MERCHANT_HINT_PAD or L.MERCHANT_HINT)
 	end

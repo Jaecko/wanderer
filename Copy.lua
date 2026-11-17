@@ -46,7 +46,12 @@ local function CreateWindow()
 	local _, title, margin = Skin.Header(window, L.ADDON_TITLE, L.COPY_TITLE)
 	title:SetPoint("RIGHT", window, "RIGHT", -36, 0)
 	hint = Skin.Text(window, "GameTooltipTextSmall", "muted")
-	hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+	if Skin.GameWindows() then
+		-- (the game look: the title in the game's bar, the hint in its place)
+		hint:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -8)
+	else
+		hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+	end
 	hint:SetPoint("RIGHT", window, "RIGHT", -margin, 0)
 	hint:SetText(L.COPY_HINT)
 	-- (the kit's scroll bar, as in every Wanderer list)
