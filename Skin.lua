@@ -19,16 +19,16 @@ local BADGE_GAP = 6 -- transparent space between a badge and the cut border
 local U = ns.Util
 
 -- The windows' look ---------------------------------------------------------------
--- "game": Wanderer's windows made of the game's own parts (its frames, title bar, cross, buttons...), each
+-- "game" (a choice): Wanderer's windows made of the game's own parts (its frames, title bar, cross, buttons...), each
 -- inherited from the game's own template so that it is the game's to the pixel (Forever's own variants
--- included); "wanderer": Wanderer's drawing. Read once: the windows are built once, a change shows after a
+-- included); "wanderer" (the default): Wanderer's drawing. Read once: the windows are built once, a change shows after a
 -- /reload. A part whose template the game no longer has is drawn Wanderer's way, never an error.
 local lookRead
 function Skin.GameLook()
 	if lookRead ~= nil then return lookRead end
 	local label = ns.db and ns.db.label
-	if not label then return true end -- (before the settings are read: the default, not kept)
-	lookRead = label.windowLook ~= "wanderer"
+	if not label then return false end -- (before the settings are read: the default, not kept)
+	lookRead = label.windowLook == "game"
 	-- (the game's colors for the words, once its windows are there: Kit.lua)
 	if Skin.UsePalette then Skin.UsePalette(lookRead and Skin.HasTemplate("DefaultPanelTemplate")) end
 	return lookRead

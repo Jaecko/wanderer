@@ -428,11 +428,11 @@ local function LabelPage()
 	Slider("LABEL_PADDING", L.LABEL_PADDING, "label.padding", "%d", ns.RefreshAll)
 	Under(Slider("LABEL_BG_OPACITY", L.LABEL_BG_OPACITY, "label.bgOpacity", "%d %%", ns.RefreshAll), enabled, labelOn)
 	-- (the windows are built once: a new look shows after a /reload, asked on Wanderer's card)
-	Dropdown("WINDOW_LOOK", L.WINDOW_LOOK, L.WINDOW_LOOK_DESC, "game",
-		{ { "game", L.WINDOW_LOOK_GAME }, { "wanderer", L.WINDOW_LOOK_WANDERER } },
-		function() return ns.db.label.windowLook or "game" end,
+	Dropdown("WINDOW_LOOK", L.WINDOW_LOOK, L.WINDOW_LOOK_DESC, "wanderer",
+		{ { "wanderer", L.WINDOW_LOOK_WANDERER }, { "game", L.WINDOW_LOOK_GAME } },
+		function() return ns.db.label.windowLook or "wanderer" end,
 		function(value)
-			if (ns.db.label.windowLook or "game") == value then return end
+			if (ns.db.label.windowLook or "wanderer") == value then return end
 			ns.db.label.windowLook = value
 			if ns.NeedReload then ns.NeedReload(L.WINDOW_LOOK) end
 		end)

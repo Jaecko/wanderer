@@ -530,8 +530,15 @@ end
 
 -- The look: the label's style, then the unit frames' (UnitFrames.lua): offered as cards, nothing chosen for you
 -- (the game's own frames until one is picked).
+local LookRow -- (made further down, with the screen's rows)
 local function LookPage()
 	local page = Page("look", "WELCOME_STEP_LOOK", "WELCOME_LOOK_DESC")
+	-- First, how Wanderer's windows are drawn: its own look or the game's (seen after a reload, asked then).
+	local windows = LookRow(page, { "WINDOW_LOOK", function() return ns.db.label.windowLook or "wanderer" end, function(value)
+		if (ns.db.label.windowLook or "wanderer") == value then return end
+		ns.db.label.windowLook = value
+		if ns.NeedReload then ns.NeedReload(L.WINDOW_LOOK) end
+	end, keys = { "wanderer", "game" }, words = "WINDOW_LOOK_" }, page.rule)
 	local grid = ns.CreateThemeGrid(page, { columns = 3, cardHeight = 96, quiet = true })
 	local caption = ns.Skin.Caps(page, L.WELCOME_UNIT_FRAMES, "kicker")
 	caption:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, -12)
@@ -539,10 +546,11 @@ local function LookPage()
 	local frames = ns.UnitFramesCards and ns.UnitFramesCards(page, { withGame = true, cardHeight = 74 })
 	refreshers.look = function()
 		local width = page:GetWidth() > 0 and page:GetWidth() or WIDTH - 2 * (ns.Skin.Margin() + 8)
-		grid:Layout(page.rule, width, 12)
+		windows:Refresh()
+		grid:Layout(windows, width, 8)
 		grid:Refresh()
 		caption:ClearAllPoints()
-		caption:SetPoint("TOPLEFT", page.rule, "BOTTOMLEFT", 0, -(12 + grid:Height() + 14))
+		caption:SetPoint("TOPLEFT", windows, "BOTTOMLEFT", 0, -(8 + grid:Height() + 14))
 		caption:SetPoint("RIGHT", page, "RIGHT", 0, 0)
 		-- (another addon drawing the unit frames: nothing offered here)
 		local yielded = ns.Yields("unitFrames") ~= nil
@@ -667,7 +675,7 @@ end
 
 -- A look chosen among three (the game's, discreet, Wanderer's style): its name and line at the left, the choices
 -- at the right, the one now in gold.
-local function LookRow(page, look, previous)
+function LookRow(page, look, previous)
 	local row = CreateFrame("Frame", nil, page)
 	row:SetHeight(ROW_HEIGHT)
 	row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -4)
