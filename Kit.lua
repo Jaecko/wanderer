@@ -1253,7 +1253,8 @@ function Skin.CloseButton(window, onClose)
 		local close = CreateFrame("Button", nil, window, "UIPanelCloseButtonNoScripts")
 		close:SetSize(28, 28)
 		close:SetPoint("TOPRIGHT", window.gameArt or window, "TOPRIGHT", 0, 3)
-		close:SetFrameLevel((window:GetFrameLevel() or 1) + 10)
+		-- (the game draws its frame's edges at level 500 and its title bar at 510: the cross over both)
+		close:SetFrameLevel(math.max(515, (window:GetFrameLevel() or 1) + 10))
 		close.gameCross = true
 		close.wandererClose = true
 		window.closeButton = close
