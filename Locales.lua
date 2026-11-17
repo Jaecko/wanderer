@@ -1594,6 +1594,10 @@ local L = {
 	THREAT_COLORS = "Threat in the monsters' health color",
 	THREAT_COLORS_DESC = "During a fight, a monster's health bar says who it is after: green, it is on you; yellow, you are losing it or about to take it; red, it is on someone else. On the nameplates, the label and the target frame.",
 
+	WINDOW_LOOK = "Look of the windows",
+	WINDOW_LOOK_DESC = "How Wanderer's windows and those of its extensions are drawn: in the game's own design (its frames, title bars, crosses and buttons), or in Wanderer's. Shows after a reload of the interface.",
+	WINDOW_LOOK_GAME = "The game's",
+	WINDOW_LOOK_WANDERER = "Wanderer's",
 }
 
 

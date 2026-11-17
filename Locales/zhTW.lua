@@ -1580,4 +1580,8 @@ for key, text in pairs({
 	THREAT_COLORS = "以怪物血條顏色顯示仇恨",
 	THREAT_COLORS_DESC = "戰鬥中，怪物的血條顯示它在攻擊誰：綠色，在你身上；黃色，你正在失去或即將拿到仇恨；紅色，在別人身上。顯示於名條、標籤與目標框架。",
 
+	WINDOW_LOOK = "視窗外觀",
+	WINDOW_LOOK_DESC = "Wanderer 及其擴充的視窗如何繪製：使用遊戲原本的設計（邊框、標題列、關閉按鈕和按鈕），或使用 Wanderer 的設計。重新載入介面後生效。",
+	WINDOW_LOOK_GAME = "遊戲的",
+	WINDOW_LOOK_WANDERER = "Wanderer 的",
 }) do L[key] = text end

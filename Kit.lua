@@ -410,6 +410,31 @@ end
 -- A button: "main" (gold, the one of its window), else quiet (an outline). Dimmed while it cannot be used.
 -- button:Fit() makes it as wide as its words (at least minimum).
 function Skin.Button(parent, text, onClick, kind, minimum)
+	if Skin.Game("UIPanelButtonTemplate") then
+		-- The game's red button (its options' own): its three pieces, its pressed and greyed looks, its fonts.
+		local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+		button:SetHeight(22)
+		button:SetText(text or "")
+		button.caption = button:GetFontString()
+		if not button.caption then
+			-- (a game that gives the button no words yet: its own, in the game's button font)
+			button.caption = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			button:SetFontString(button.caption)
+			button:SetText(text or "")
+		end
+		-- (a ground nobody sees: some windows tint it)
+		button.ground = button:CreateTexture(nil, "BACKGROUND", nil, -8)
+		button.ground:Hide()
+		function button:Fit()
+			self:SetWidth(math.max(minimum or 0, U.Measure(self.caption, "GetStringWidth", 60) + 40))
+		end
+		button:Fit()
+		button:SetScript("OnClick", function(self, ...)
+			Skin.Play(kind == "main" and "confirm" or "click")
+			onClick(self, ...)
+		end)
+		return button
+	end
 	local button = CreateFrame("Button", nil, parent)
 	button:SetHeight(kind == "main" and 36 or 30)
 	button.ground = button:CreateTexture(nil, "BACKGROUND")
@@ -925,12 +950,43 @@ function Skin.Header(window, kickerText, titleText, extra, titleTemplate)
 	kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
 	local title = Skin.CreateText(window, titleTemplate or "GameTooltipHeaderText", Skin.RGB("gold"))
 	title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
+	if Skin.GameLook() and (window.gameArt or Skin.HasTemplate("DefaultPanelTemplate")) then
+		-- In the game's own frame: the title in its title bar, as the game's windows say theirs. The kicker and the
+		-- title stay where they were, unseen and drawn up into the bar: what stands under them keeps its place.
+		kicker:SetAlpha(0)
+		title:SetAlpha(0)
+		kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, 8)
+		local setText = title.SetText
+		function title:SetText(text)
+			setText(self, text)
+			window.wandererTitle = text
+			if window.gameArt and window.gameArt.SetTitle then window.gameArt:SetTitle(text or "") end
+		end
+		if options.settings and window.cog then
+			window.cog:ClearAllPoints()
+			window.cog:SetPoint("TOPRIGHT", window, "TOPRIGHT", -26, -1)
+		end
+	end
 	if titleText then title:SetText(titleText) end
 	return kicker, title, margin
 end
 
 -- The cross in a window's corner.
 function Skin.CloseButton(window, onClose)
+	if Skin.Game("UIPanelCloseButtonNoScripts") then
+		-- (the game's red cross, where Forever puts it on its own windows: 28 by 28 at its top right)
+		local close = CreateFrame("Button", nil, window, "UIPanelCloseButtonNoScripts")
+		close:SetSize(28, 28)
+		close:SetPoint("TOPRIGHT", window, "TOPRIGHT", 0, 3)
+		close.wandererClose = true
+		window.closeButton = close
+		function close:SetPaper() end
+		close:SetScript("OnClick", function()
+			if not window.wandererSounds then Skin.Play("close") end
+			if onClose then onClose() else window:Hide() end
+		end)
+		return close
+	end
 	local close = CreateFrame("Button", nil, window)
 	close:SetSize(24, 24)
 	close:SetPoint("TOPRIGHT", window, "TOPRIGHT", -4, -4)

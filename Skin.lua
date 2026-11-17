@@ -18,6 +18,36 @@ local BADGE_GAP = 6 -- transparent space between a badge and the cut border
 
 local U = ns.Util
 
+-- The windows' look ---------------------------------------------------------------
+-- "game": Wanderer's windows made of the game's own parts (its frames, title bar, cross, buttons...), each
+-- inherited from the game's own template so that it is the game's to the pixel (Forever's own variants
+-- included); "wanderer": Wanderer's drawing. Read once: the windows are built once, a change shows after a
+-- /reload. A part whose template the game no longer has is drawn Wanderer's way, never an error.
+local lookRead
+function Skin.GameLook()
+	if lookRead ~= nil then return lookRead end
+	local label = ns.db and ns.db.label
+	if not label then return true end -- (before the settings are read: the default, not kept)
+	lookRead = label.windowLook ~= "wanderer"
+	return lookRead
+end
+local templates = {}
+function Skin.ForgetLook() lookRead = nil wipe(templates) end -- (tests)
+
+function Skin.HasTemplate(name)
+	if templates[name] == nil then
+		local util = rawget(_G, "C_XMLUtil")
+		local info = util and util.GetTemplateInfo and U.Safe(util.GetTemplateInfo, name)
+		templates[name] = info ~= nil and info ~= false
+	end
+	return templates[name]
+end
+
+-- A part of the game's, when the game look is chosen and the game has its template.
+function Skin.Game(template)
+	return Skin.GameLook() and Skin.HasTemplate(template)
+end
+
 -- Styles ------------------------------------------------------------------------
 
 ns.STYLES = { "blizzard", "classic", "royal", "minimal", "frame", "parchment" }
@@ -461,7 +491,28 @@ Skin.StepAside, Skin.Hold = StepAside, Hold -- (tests)
 -- this character's spot "save" when given, else at point), closed by its cross and by
 -- Escape. The cross closes directly (or calls onClose), never through the
 -- game's panel manager, locked during a fight. Returns the cross.
+-- The game's own window frame under a window (its metal edges, its rock ground, its title bar), Wanderer's
+-- drawing put away. Its title is the heading's (Skin.Header). Nothing of the window moves.
+local function GameFrame(window)
+	if window.gameArt or not Skin.Game("DefaultPanelTemplate") then return window.gameArt end
+	local ok, art = pcall(CreateFrame, "Frame", nil, window, "DefaultPanelTemplate")
+	if not (ok and art) then return nil end
+	art:SetAllPoints()
+	art:SetFrameLevel(math.max((window:GetFrameLevel() or 1) - 1, 0))
+	art:EnableMouse(false)
+	window.gameArt = art
+	if window.wandererTitle and art.SetTitle then art:SetTitle(window.wandererTitle) end
+	local skin = Skin.Get(window)
+	if skin then
+		skin.gamePanel = true
+		skin:ApplyStyle()
+	end
+	return art
+end
+Skin.GameFrame = GameFrame
+
 function Skin.Dress(window, point, save, onClose)
+	GameFrame(window)
 	window:EnableMouse(true)
 	window:SetMovable(true)
 	window:SetClampedToScreen(true)
@@ -745,6 +796,8 @@ end
 -- or the backdrop support falls back to Wanderer's lines.
 function SkinMixin:Kind()
 	if not self.active then return "off" end
+	-- (a window in the game's own frame: the frame draws it all, Skin.Dress)
+	if self.gamePanel then return "panel" end
 	local kind = self:Style().kind
 	if kind == "game" and not self.nineSlice then return "lines" end
 	if kind == "texture" and not self.art then return "lines" end
@@ -792,7 +845,8 @@ end
 -- only faded.
 function SkinMixin:ShowDecoration()
 	local kind = self:Kind()
-	-- On parchment (the scene, the reader): the paper alone, none of the style's drawing.
+	-- On parchment (the scene, the reader): the paper alone, none of the style's drawing. In the game's own frame:
+	-- that frame alone.
 	if self.parchment then kind = "paper" end
 	local lines = kind == "lines"
 	self.background:SetShown(lines)

@@ -427,6 +427,15 @@ local function LabelPage()
 	Slider("LABEL_SCALE", L.LABEL_SCALE, "label.scale", "%.1f", ns.RefreshAll)
 	Slider("LABEL_PADDING", L.LABEL_PADDING, "label.padding", "%d", ns.RefreshAll)
 	Under(Slider("LABEL_BG_OPACITY", L.LABEL_BG_OPACITY, "label.bgOpacity", "%d %%", ns.RefreshAll), enabled, labelOn)
+	-- (the windows are built once: a new look shows after a /reload, asked on Wanderer's card)
+	Dropdown("WINDOW_LOOK", L.WINDOW_LOOK, L.WINDOW_LOOK_DESC, "game",
+		{ { "game", L.WINDOW_LOOK_GAME }, { "wanderer", L.WINDOW_LOOK_WANDERER } },
+		function() return ns.db.label.windowLook or "game" end,
+		function(value)
+			if (ns.db.label.windowLook or "game") == value then return end
+			ns.db.label.windowLook = value
+			if ns.NeedReload then ns.NeedReload(L.WINDOW_LOOK) end
+		end)
 	-- (the game's windows dressed once: off, their own look comes back at the next /reload)
 	Yield(TableCheckbox("label", "gameSkins", L.LABEL_GAME_SKINS, L.LABEL_GAME_SKINS_DESC, ns.RefreshGameSkins), "gameSkins")
 

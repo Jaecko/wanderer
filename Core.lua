@@ -123,6 +123,7 @@ local DEFAULTS = {
 		textScale = 1,
 		offset = 22,
 		bgOpacity = 55,
+		windowLook = "game", -- Wanderer's windows: "game" (the game's own frames, buttons and parts) or "wanderer" (Skin.lua)
 		gameSkins = false, -- the game's windows Wanderer does not replace, in its colors (GameSkins.lua): asked for (off since 1.4.86: the game's own look by default)
 		padding = 8,
 		font = "default",

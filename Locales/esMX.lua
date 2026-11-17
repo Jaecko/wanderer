@@ -1580,4 +1580,8 @@ for key, text in pairs({
 	THREAT_COLORS = "La amenaza en el color de vida de los monstruos",
 	THREAT_COLORS_DESC = "En combate, la barra de vida de un monstruo dice a quién va: verde, está sobre ti; amarillo, lo pierdes o vas a tomarlo; rojo, está sobre otro. En las placas de nombre, la etiqueta y el marco del objetivo.",
 
+	WINDOW_LOOK = "Aspecto de las ventanas",
+	WINDOW_LOOK_DESC = "Cómo se dibujan las ventanas de Wanderer y de sus extensiones: con el diseño del juego (sus marcos, barras de título, cruces y botones) o con el de Wanderer. Visible tras recargar la interfaz.",
+	WINDOW_LOOK_GAME = "El del juego",
+	WINDOW_LOOK_WANDERER = "El de Wanderer",
 }) do L[key] = text end

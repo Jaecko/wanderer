@@ -1580,4 +1580,8 @@ for key, text in pairs({
 	THREAT_COLORS = "몬스터 생명력 색으로 위협 수준 표시",
 	THREAT_COLORS_DESC = "전투 중 몬스터의 생명력 바가 누구를 노리는지 알려 줍니다: 초록, 나를 노림; 노랑, 위협을 잃는 중이거나 곧 가져옴; 빨강, 다른 사람을 노림. 이름표, 라벨, 대상 프레임에 표시됩니다.",
 
+	WINDOW_LOOK = "창 모습",
+	WINDOW_LOOK_DESC = "Wanderer와 확장 창을 그리는 방식: 게임 본래 디자인(틀, 제목 표시줄, 닫기 단추, 버튼) 또는 Wanderer 디자인. 인터페이스를 다시 불러온 뒤 적용됩니다.",
+	WINDOW_LOOK_GAME = "게임 디자인",
+	WINDOW_LOOK_WANDERER = "Wanderer 디자인",
 }) do L[key] = text end

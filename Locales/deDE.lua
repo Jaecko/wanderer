@@ -1580,4 +1580,8 @@ for key, text in pairs({
 	THREAT_COLORS = "Bedrohung in der Lebensfarbe der Monster",
 	THREAT_COLORS_DESC = "Im Kampf zeigt die Lebensleiste eines Monsters, wen es angreift: grün, es ist auf dir; gelb, du verlierst es oder ziehst es gleich; rot, es ist auf jemand anderem. Auf den Namensplaketten, dem Etikett und dem Zielrahmen.",
 
+	WINDOW_LOOK = "Aussehen der Fenster",
+	WINDOW_LOOK_DESC = "Wie die Fenster von Wanderer und seinen Erweiterungen gezeichnet werden: im Design des Spiels (seine Rahmen, Titelleisten, Kreuze und Knöpfe) oder in dem von Wanderer. Sichtbar nach einem Neuladen der Oberfläche.",
+	WINDOW_LOOK_GAME = "Das des Spiels",
+	WINDOW_LOOK_WANDERER = "Das von Wanderer",
 }) do L[key] = text end
