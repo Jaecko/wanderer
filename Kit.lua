@@ -790,8 +790,8 @@ local function GameDropdown(parent, choices, get, set, placeholder, minimum, max
 		if self.OpenMenu then self:OpenMenu() end
 		return true
 	end
-	-- (the window's code says SetText to some lists: their words)
-	function box:SetText(text) if self.OverrideText then self:OverrideText(text) else self.caption:SetText(text) end end
+	-- (its words: the game's OverrideText writes them through SetText, so SetText only writes them, never back to it)
+	function box:SetText(text) self.caption:SetText(text or "") end
 	DropdownTip(box, box.caption, tip)
 	box:Refresh()
 	return box
