@@ -918,6 +918,7 @@ function Skin.Header(window, kickerText, titleText, extra, titleTemplate)
 		cog:SetPoint("TOPRIGHT", window, "TOPRIGHT", -30, -6)
 		cog:SetFrameLevel(window:GetFrameLevel() + 5)
 		window.settingsCog, window.cog = cog, cog
+		cog.padHeading = true -- (in the heading: never where the controller starts, Pad.lua)
 	end
 	local margin = Skin.Margin() + (extra or 8)
 	local kicker = Skin.CreateKicker(window, kickerText or "Wanderer")
@@ -2280,6 +2281,8 @@ function Skin.Help(window, text, corner)
 			help:SetPoint("TOPRIGHT", window, "TOPRIGHT", -30, -6)
 		end
 		help:SetFrameLevel(window:GetFrameLevel() + 5)
+		-- (in the heading: reachable, never where the controller starts; its words only when chosen on purpose)
+		help.padHeading = true
 		window.help = help
 		return help
 	end

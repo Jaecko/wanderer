@@ -326,7 +326,12 @@ local memory = setmetatable({}, { __mode = "k" }) -- window -> its button chosen
 
 -- The first button of a window: what the window is for when it says so (padFirst, its items), else the top left one.
 -- (a button beside its window, padOutside, is never where the controller starts)
-local function Rank(frame) return frame.padFirst and 2 or (frame.padPrimary ~= nil and not frame.padOutside) and 1 or 0 end
+-- (the heading's small buttons, its "?" and its cog, padHeading: last, so a window never opens on their tooltip)
+local function Rank(frame)
+	if frame.padFirst then return 2 end
+	if frame.padHeading then return -1 end
+	return (frame.padPrimary ~= nil and not frame.padOutside) and 1 or 0
+end
 
 local function First(found)
 	local best
