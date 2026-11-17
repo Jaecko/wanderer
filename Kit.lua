@@ -892,7 +892,64 @@ local function GameTab(owner)
 	return tab
 end
 
-function Skin.Choices(parent, list, onPick, height)
+-- The game look's row of choices: the game's round buttons (UIRadialButtonTemplate, the one of its menus), each with
+-- its words beside it; the one chosen ticked. The same bar's methods as the other looks.
+local function GameRadios(parent, list, onPick, height)
+	local bar = CreateFrame("Frame", nil, parent)
+	bar:SetHeight(height or 32)
+	bar.buttons = {}
+	local previous
+	for _, choice in ipairs(list) do
+		local key = choice[1]
+		local button = CreateFrame("Button", nil, bar)
+		button:SetHeight(height or 32)
+		local ok, radio = pcall(CreateFrame, "CheckButton", nil, button, "UIRadialButtonTemplate")
+		if not (ok and radio) then bar:Hide() return nil end
+		radio:SetSize(18, 18)
+		radio:SetPoint("LEFT", button, "LEFT", 0, 0)
+		radio:EnableMouse(false)
+		button.radio = radio
+		button.text = Skin.CreateText(button, "GameFontHighlightSmall")
+		button.text:SetPoint("LEFT", radio, "RIGHT", 4, 0)
+		if previous then button:SetPoint("LEFT", previous, "RIGHT", 14, 0) else button:SetPoint("LEFT", bar, "LEFT", 0, 0) end
+		button:SetScript("OnEnter", function(self) if self.radio.LockHighlight then self.radio:LockHighlight() end end)
+		button:SetScript("OnLeave", function(self) if self.radio.UnlockHighlight then self.radio:UnlockHighlight() end end)
+		button:SetScript("OnClick", function()
+			Skin.Play("click")
+			bar:Select(key)
+			onPick(key)
+		end)
+		button.key = key
+		bar.buttons[#bar.buttons + 1] = button
+		previous = button
+	end
+	function bar:SetLabels(labels)
+		local width = 0
+		for index, button in ipairs(self.buttons) do
+			button.text:SetText(labels[index] or "")
+			local w = 22 + U.Measure(button.text, "GetStringWidth", 40)
+			button:SetWidth(w)
+			width = width + w + (index > 1 and 14 or 0)
+		end
+		self:SetWidth(math.max(1, width))
+	end
+	function bar:Select(key)
+		self.chosen = key
+		for _, button in ipairs(self.buttons) do button.radio:SetChecked(button.key == key) end
+	end
+	local labels = {}
+	for index, choice in ipairs(list) do labels[index] = choice[2] end
+	bar:SetLabels(labels)
+	return bar
+end
+
+-- opts (optional): { tabs = true } for the game's tabs in the game look (a pair standing on a window's edge, as the
+-- bags' arrangement), its round buttons otherwise.
+function Skin.Choices(parent, list, onPick, height, opts)
+	if not (opts and opts.tabs) and Skin.Game("UIRadialButtonTemplate") then
+		local made = GameRadios(parent, list, onPick, height)
+		if made then return made end
+	end
 	if Skin.Game("MinimalTabTemplate") then
 		local bar = CreateFrame("Frame", nil, parent)
 		bar:SetHeight(height or 32)
@@ -1265,10 +1322,13 @@ end
 function Skin.CloseButton(window, onClose)
 	if Skin.Game("UIPanelCloseButtonNoScripts") then
 		-- (the game's red cross, where Forever puts it on its own windows: 28 by 28 at its top right)
-		-- (on the game's frame when there is one: in its title bar, over the window's top edge)
+		-- (a window of its own not dressed as one, a card beside another: the game's dialog frame, as its questions)
+		if not window.gameArt and not window.hudPiece and Skin.GameFrame then Skin.GameFrame(window, "DialogBorderTemplate") end
+		-- (on the game's frame: in its title bar over the window's top edge, or in a dialog frame's corner)
+		local inBar = window.gameBar ~= nil
 		local close = CreateFrame("Button", nil, window, "UIPanelCloseButtonNoScripts")
 		close:SetSize(28, 28)
-		close:SetPoint("TOPRIGHT", window.gameArt or window, "TOPRIGHT", 0, 3)
+		close:SetPoint("TOPRIGHT", window.gameArt or window, "TOPRIGHT", inBar and 0 or -4, inBar and 3 or -4)
 		-- (the game draws its frame's edges at level 500 and its title bar at 510: the cross over both)
 		close:SetFrameLevel(math.max(515, (window:GetFrameLevel() or 1) + 10))
 		close.gameCross = true

@@ -801,7 +801,19 @@ local function CharacterPage()
 	if barsCaption.SetWordWrap then barsCaption:SetWordWrap(false) end
 	barsCaption:SetText(L.WELCOME_BARS_SHOWN)
 	local bars = {}
+	-- (the game look: the game's own boxes, a number beside each, as its options show its bars)
+	local boxes = ns.Skin.GameWindows()
 	for bar = 2, 8 do
+		if boxes then
+			local label = rawget(_G, "OPTION_SHOW_ACTION_BAR")
+			local check = ns.Skin.Check(page, tostring(bar), function() return ns.ActionBarShown(bar - 1) end, function(on)
+				if not ns.SetActionBarShown(bar - 1, on) then ns.Skin.Play("refuse") end
+			end, label and label:format(bar) or nil)
+			check.isBox = true
+			bars[#bars + 1] = check
+		end
+	end
+	for bar = 2, boxes and 1 or 8 do
 		local card = Card(page, tostring(bar), "", 30)
 		card.title:ClearAllPoints()
 		card.title:SetPoint("LEFT", card, "LEFT", 10, 0)
@@ -835,10 +847,15 @@ local function CharacterPage()
 		local barWidth = math.floor((width - 6 * 6) / 7)
 		for index, card in ipairs(bars) do
 			card:SetShown(not forced)
-			card:SetWidth(barWidth)
 			card:ClearAllPoints()
-			card:SetPoint("TOPLEFT", barsCaption, "BOTTOMLEFT", -6 + (index - 1) * (barWidth + 6), -6)
-			card:SetChosen(ns.ActionBarShown(index))
+			if card.isBox then
+				card:SetPoint("TOPLEFT", barsCaption, "BOTTOMLEFT", (index - 1) * (barWidth + 6), -8)
+				card:Refresh()
+			else
+				card:SetWidth(barWidth)
+				card:SetPoint("TOPLEFT", barsCaption, "BOTTOMLEFT", -6 + (index - 1) * (barWidth + 6), -6)
+				card:SetChosen(ns.ActionBarShown(index))
+			end
 		end
 	end
 end
