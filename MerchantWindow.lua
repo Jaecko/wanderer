@@ -605,6 +605,8 @@ local function Visit(on)
 		wipe(known)
 		page, query = "goods", ""
 		if window and window.search then window.search:SetText("") end
+		-- (another merchant's goods: from the first one, not where the last visit was scrolled)
+		if list then list.offset = 0 end
 		swap:Start()
 		if swap:Wanderer() then
 			if not window then Create() end

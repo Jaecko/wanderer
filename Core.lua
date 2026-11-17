@@ -1819,7 +1819,11 @@ end
 
 -- Called by the key binding (Bindings.xml): "down" when pressed, "up" when released.
 function Wanderer_Reveal(keystate)
-	if not (ns.db and ns.db.enabled) then return end
+	-- (Wanderer turned off while the key was held: its release still lets the names go)
+	if not (ns.db and ns.db.enabled) then
+		if keystate == "up" and ns.revealing and ns.SetRevealing then ns.SetRevealing(false) end
+		return
+	end
 	if ns.db.revealMode == "toggle" then
 		if keystate == "down" then ns.SetRevealing(not ns.revealing) end
 	else

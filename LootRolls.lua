@@ -148,6 +148,8 @@ local function Paint(card, roll)
 	if roll.chosen then
 		local chosen
 		for _, spec in ipairs(BUTTONS) do if spec.key == roll.chosen then chosen = spec.words() end end
+		-- (the appearance roll is made on the Greed button, under its own word)
+		if roll.chosen == "transmog" then chosen = G("TRANSMOGRIFY") or L.ROLL_GREED end
 		parts[#parts + 1] = Skin.Colorize(L.ROLL_CHOSEN:format(chosen or "?"), "gold")
 	end
 	if info.bop then parts[#parts + 1] = Skin.Colorize(L.LOOT_BOP, "warn") end
@@ -220,7 +222,8 @@ function ns.DrawLootRolls()
 			card:Hide()
 		end
 	end
-	for index = shown + 1, #cards do cards[index]:Hide() end
+	-- (cards go by roll: one the game cannot read yet is hidden above, those after it stay)
+	for index = math.min(#rolls, SHOWN) + 1, #cards do cards[index]:Hide() end
 	local waiting = #rolls - shown
 	window.more:SetShown(waiting > 0)
 	window.more:SetText(waiting > 0 and U.Plural(waiting, L.ROLLS_MORE_ONE, L.ROLLS_MORE_MANY) or "")

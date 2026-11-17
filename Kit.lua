@@ -581,6 +581,8 @@ local function GameCheckBox(owner, size)
 	local ok, box = pcall(CreateFrame, "CheckButton", nil, owner, "MinimalCheckboxTemplate")
 	if not (ok and box) then return nil end
 	box:SetSize(size, size)
+	-- (the controller stops on the row only: the box is the row's own picture, never a second stop)
+	box.padPass = true
 	box:SetScript("OnClick", function(self)
 		-- (the row decides: the box drawn back as it was, then the row clicked)
 		self:SetChecked(not self:GetChecked())
@@ -788,7 +790,7 @@ local function GameDropdown(parent, choices, get, set, placeholder, minimum, max
 		box.caption:SetPoint("LEFT", box, "LEFT", 8, 0)
 		box.caption:SetPoint("RIGHT", box, "RIGHT", -22, 0)
 	end
-	box:SetupMenu(function(_, root)
+	local function Build(_, root)
 		for _, choice in ipairs(choices()) do
 			root:CreateRadio(choice.label, function() return get() == choice.id end, function()
 				set(choice.id)
@@ -797,6 +799,11 @@ local function GameDropdown(parent, choices, get, set, placeholder, minimum, max
 				C_Timer.After(0, function() box:Refresh() end)
 			end)
 		end
+	end
+	box:SetupMenu(Build)
+	-- (its window closed with the menu open: the menu goes with it)
+	box:HookScript("OnHide", function(self)
+		if self.IsMenuOpen and self.CloseMenu and self:IsMenuOpen() then pcall(self.CloseMenu, self) end
 	end)
 	function box:Fit()
 		local wanted = U.Measure(self.caption, "GetStringWidth", 60) + 34
@@ -811,9 +818,14 @@ local function GameDropdown(parent, choices, get, set, placeholder, minimum, max
 		if self.OverrideText then self:OverrideText(label) else self.caption:SetText(label) end
 		self:Fit()
 	end
-	-- (the pad's press opens the menu: the game's list opens on the mouse's press, not its click)
+	-- (the pad's press opens the menu: the game's list opens on the mouse's press, not its click; with the controller,
+	-- a card of ours, as every menu of the kit: the game's own menu opened by an addon blocks the game's actions, Pad.lua)
 	function box:padClick()
-		if self.OpenMenu then self:OpenMenu() end
+		if ns.Pad and ns.Pad.Menu and ns.Pad.On() then
+			ns.Pad.Menu(self, Build)
+		elseif self.OpenMenu then
+			self:OpenMenu()
+		end
 		return true
 	end
 	-- (its words: the game's OverrideText writes them through SetText, so SetText only writes them, never back to it)
@@ -918,6 +930,7 @@ local function GameRadios(parent, list, onPick, height)
 		radio:SetSize(18, 18)
 		radio:SetPoint("LEFT", button, "LEFT", 0, 0)
 		radio:EnableMouse(false)
+		radio.padPass = true -- (the row is the controller's stop, as the mouse's)
 		button.radio = radio
 		button.text = Skin.CreateText(button, "GameFontHighlightSmall")
 		button.text:SetPoint("LEFT", radio, "RIGHT", 4, 0)
@@ -1322,6 +1335,8 @@ function Skin.Header(window, kickerText, titleText, extra, titleTemplate)
 		if options.settings and window.cog then
 			window.cog:ClearAllPoints()
 			window.cog:SetPoint("TOPRIGHT", window, "TOPRIGHT", -6, -4)
+			-- (over the game frame's edges, drawn at level 500)
+			window.cog:SetFrameLevel(math.max(515, window:GetFrameLevel() + 5))
 		end
 	end
 	if titleText then title:SetText(titleText) end
@@ -1388,7 +1403,8 @@ function Skin.Resizable(window, opts)
 	local grip = CreateFrame("Button", nil, window)
 	grip:SetSize(16, 16)
 	grip:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -3, 3)
-	grip:SetFrameLevel(window:GetFrameLevel() + 20)
+	-- (the game look: over the game's frame edges, drawn at level 500, as the cross)
+	grip:SetFrameLevel(math.max(window:GetFrameLevel() + 20, window.gameArt and 515 or 0))
 	if ns.Pad then ns.Pad.Ignore(grip) end
 	grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
 	grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
@@ -2783,7 +2799,8 @@ function Skin.Help(window, text, corner)
 		else
 			help:SetPoint("TOPRIGHT", window, "TOPRIGHT", -30, -6)
 		end
-		help:SetFrameLevel(window:GetFrameLevel() + 5)
+		-- (over the game frame's edges in its look, drawn at level 500)
+		help:SetFrameLevel(window.gameArt and math.max(515, window:GetFrameLevel() + 5) or window:GetFrameLevel() + 5)
 		-- (in the heading: reachable, never where the controller starts; its words only when chosen on purpose)
 		help.padHeading = true
 		window.help = help

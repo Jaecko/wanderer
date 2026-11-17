@@ -850,7 +850,10 @@ function Pad.Cycle(step)
 		if stop == (gameTurn and "game" or active) then at = index end
 	end
 	local nextStop = stops[(at - 1 + step) % #stops + 1]
-	if nextStop == "game" then GiveToGame() else Focus(nextStop) end
+	if nextStop == "game" then return GiveToGame() end
+	Focus(nextStop)
+	-- (as a mouse's click on it: the window chosen comes in front, never left under another one)
+	if dressed[nextStop] and not nextStop.hudPiece and Skin.Managed and Skin.Managed(nextStop) and Skin.Front then Skin.Front(nextStop) end
 end
 
 local function Opened(window)
