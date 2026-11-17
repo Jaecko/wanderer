@@ -44,6 +44,11 @@ function ns.Swap(spec)
 		if not frame or frame == hooked then return end
 		hooked = frame
 		place = Skin.AsideGameWindow(frame, Away)
+		-- (a window the game opens then places again, the loot by its Edit Mode spot: out of sight as soon as its
+		-- opening is over, before it is drawn, never a frame in its spot)
+		if type(frame.Open) == "function" then
+			hooksecurefunc(frame, "Open", function() if place and Away() then place() end end)
+		end
 		if link then
 			link:ClearAllPoints()
 			local point = spec.point or { "BOTTOMRIGHT", "TOPRIGHT", 0, 4 }
