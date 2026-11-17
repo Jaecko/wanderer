@@ -1,74 +1,7 @@
-# Wanderer 1.4.85
-
-### New
-- A new welcome screen: one way, every step named on the side (seen ones ticked, a click on any goes there), and at once a choice: be guided, or keep the advised settings and see them at the end. Your screen's lighter interface and its look on one page, the action bars shown as boxes for this character, and each line of the final summary a click away from the step that sets it.
-- The action bars page has the game's own boxes: bars 2 to 8 shown, bars locked and the key that still picks a spell up, cooldown numbers. No more trip to the game's options.
-- In the world settings: the game's navigation marker on screen (toward the tracked quest or the map pin), on by default for everyone; unchecked, your own setting comes back.
-- Wanderer's colors now reach more of the game: the bag bar gets square icons on a dark ground with a thin edge, and the right click menus take the windows' ground. The action buttons keep the game's own look.
-- The game's windows Wanderer does not replace take Wanderer's colors: the character and its pages, spells and talents, professions book, collections, group finder, friends, guild and communities, adventure guide, achievements, trade, tabard, guild charter, macros, key bindings, addons list, game menu, help, sockets, upgrades, inspect, dressing room, the game's questions and the ready check, and the merchant, loot, mail, auction house, trainer, professions, flight master, guild bank and bank windows when you chose the game's one. The chosen style's dark ground and edge, Wanderer's cross, quiet tabs (the one shown in gold), buttons, lines to write in, lists, boxes to tick, thin scroll bars and item squares. Only the look changes: nothing in them moves and every button does what it did. A setting under Appearance turns it off (the game's look comes back after a /reload). Left to ElvUI (its skins on) and Aurora.
-- Merchants open in a Wanderer window: all his goods in one list (no pages), each with its price in gold or tokens, its lot, the stock left when he has few, and a mark when you cannot use it, already know it, it is better for you or your shopping list lacks it. A search and the game's class filter. A click on a row offers how many you want, each choice with its price; a right click buys one lot. The game's own confirmations still ask (tokens, items that cannot be returned, an expensive item). The buy back page, repairs (yours, the guild's, one item) with their cost, the junk sold on a click and the provisions' Fill up are in the same window. A right click on an item of your bags still sells it. A button brings the game's own window back, a link above it comes back (kept for this character; a setting too).
-- Loot opens in a Wanderer window when the game shows its own (auto loot off, or its key held): each thing with what it is worth, quest items, binds when picked up and better for you marked, the coins written plainly, Take all (what binds waits for your click, the game asks first). It stands under the mouse when the game's option asks for it. Master loot keeps the game's window.
-- Group loot rolls together in one Wanderer window: each item with its worth, whether it binds and whether it is better for you, the time left, and Need, Greed, Disenchant when offered and Pass (dimmed with the game's own reason when closed to you). The game still asks before an item binds. Closed by its cross, the game's own roll frames take the rest.
-- Unit frames, Ink lines look: a small sign of the side on the portrait while you or the unit shown is flagged for PvP (free for all too).
-- With a controller, a keyboard of its own for every line to write in Wanderer's windows (searches, names, letters, questions): choose the line and press, then write with the cross and the bottom button. The left button erases, the top one is Enter, the right one puts the keyboard away and keeps what is written. A question asking for words opens it by itself.
-- With a controller, an amount of money is one stop of the cross: left and right change it one gold at a time (faster the longer you hold), the bottom button switches to silver or copper, a gold line under the coin stepped.
-
-### Fixed
-- Conversation scenes: when the game would take a lone option by itself, it does again (no scene for it), and options show the game's "(Quest)" or "(Play movie)" and their own icon.
-- Merchant window: the repair one item button can be clicked again to stop repairing, as in the game.
-- Group loot rolls: a roll that ended during a loading screen leaves the window; the reason a Disenchant is closed tells the skill it needs.
-- Learn all is not offered at a hunter's pet trainer, whose prices are the pet's training points.
-- Wanderer's colors on the game's windows: the big red buttons (the game menu's, Escape, and the like elsewhere) take the look of the other buttons too.
-- Loot feed: the money you pick up shows even right after a fight (read from the game's own message), and the money taken from a letter shows too, like the items.
-- Loot window: coins no longer wear a quality border.
-- Merchant window: repairing with the guild's gold is offered only when your guild allowance covers the cost.
-- Turning the unit frame look off no longer leaves Wanderer's cast and points rows behind, and the game's damage trail comes back.
-- Switching between the controller and the keyboard during a fight no longer causes a blocked action.
-- The game's windows in Wanderer's colors: a tab showing an icon keeps it (the spell book's skill lines no longer show empty squares); only its frame goes.
-- With a controller, a question of the game's (gold to pay, an item that binds, a roll) is answered with the game's own buttons again: the Wanderer window behind it no longer takes the press, and gets the controller back once you answered.
-- With a controller, the merchant window takes the controller as it opens (it waited to be chosen), starting on his first goods; the loot window starts on the first thing to take.
-- The silver and copper boxes of an amount are wide enough for two digits again (27 silver no longer showed as 7).
-- At the bank, with Wanderer Bags: the game's bank window, out of sight, no longer comes back under your clicks when another window opens (the workbench answers again).
-- Conversation scenes: more than nine choices (a guard's directions, a guide) are no longer cut: all of them on the page, as the game shows them, the first nine numbered like your keys.
-- At a dungeon's door, more than four quests of your log there: the others are counted (+2).
-- The hover label reads every objective of a creature (a group's too), so its quest state is right. Three lines show, what is still to do first, the others counted; hold Shift to see them all.
-- Conversation scenes keep the text's paragraphs and line breaks, and a number like 1.5 is no longer cut.
-- Quest rewards: the ones to choose from and the ones you also receive are two groups with the game's own words; spells taught, honor and a title given by a quest are shown.
-- A quest that flags you for PvP asks first, as in the game, and is never accepted on its own; a quest accepted on its own offers only Close.
-- Choosing a merchant, a trainer, a flight master or the bank in a conversation closes the scene at once.
-- In every Wanderer list of items, Shift and a click link the item and Ctrl and a click try it on, as in the game.
-- A setting you cannot use shows clearly why, and the extension doing the job stays clickable.
-- Books on parchment: the close cross and the scroll bar are visible.
-- Item rows and squares everywhere take the game's modified clicks: Shift links, Ctrl tries on; a click the game does nothing with still chooses the row.
-- A link taken with Shift while you answer in Wanderer Chat's messages window lands there once.
-- The hover label's "Shift: all" also answers the controller's Shift.
-- Wanderer starts even when its saved settings were damaged or edited by hand: the broken parts start fresh.
-- Rare errors at merchants, in item tooltips and when talking to characters after a damaged save are gone.
-- The hover label no longer writes the second part of a two-word name twice (Wilat Stroke).
+# Wanderer 1.4.87
 
 ### Changed
-- A character marked with a raid symbol always shows its health bar over its head, enemy or ally, whatever the settings; in a dungeon or a raid, a marked member of your group turns the allies' bars on while the symbol stays.
-- Threat now shows in the health bar of the monsters you fight: green when it is on you, yellow when you are losing it or about to take it, red when it is on someone else. On the nameplates, the label over the head and the target frame. It replaces the threat share over the target frame and the line in the middle of the screen when a monster left you.
-- With a controller, the Shift, Ctrl and Alt the game lends your pad's buttons (its controller settings) reach Wanderer's windows: held, a press links an item or tries it on, as with a mouse.
-- With a controller, a press while you hold an item drops it on what is chosen (a letter's square, the merchant's list to sell it, a guild bank square).
-- Group loot rolls no longer take the controller from your spells when they appear: the touchpad goes to them (said under them), the right button leaves them, still waiting.
-- Every amount of money is typed in three boxes, gold, silver and copper, digits only: Tab goes to the next one, Escape gives back the amount before.
-- A minus sign among the small glyphs, for buttons that lower or zoom out.
-- A reward better or worse than what you wear is easier to see: a larger bright green or red arrow on its icon, a frame of the same color around it (gold for the one that sells for the most), and the item levels it gains or loses by its name (+5, -3).
-- Easier to see: the dot saying something waits is larger on the minimap button, the menu's tiles and rows; rewards not picked stay readable (less dimmed) while you still compare.
-- The settings' folds open with a chevron that turns down, as everywhere else.
-- A pencil among the small glyphs, for renaming.
-- Repeatable quests show the game's blue sign in conversations; a quest you looked at and left is no longer dimmed.
-- The minimap's zone name takes the game's color for sanctuary, friendly, hostile and contested lands, said in its tooltip too.
-- The label shows a player's PvP rank; the portrait's level takes the color of its difficulty, a skull for the strongest.
-- Junk sold on its own: the chat line says how many items went.
-- Long names on Wanderer's card and long reminders can be read in full on hover; the card opens and closes with a sound.
-- Right click on the minimap crest or the addon compartment opens the settings, a second right click closes them.
-- The parchment look is easier to read: darker window ground, darker gold ink; a chosen row under the mouse stays readable.
-- The provisions line under the merchant's tabs has a dark ground; the bar's pulse never fades its words away.
-- Both drawers of the bar close after the same delay.
-- New command /wanderer characters; /wanderer also lists each extension's short command.
-- Clearer words: "Not during a fight.", "Search the settings...", "Nothing found.", Delete on the profile button like its question.
-- The spell book in Wanderer's colors: its parchment goes, each spell takes the palette (its name light, quieter when not learned yet, gold when a trainer can teach it, categories in gold), a thin edge around its icon, the page number and arrows, the search and its settings arrow, and the button making the window larger or smaller drawn like Wanderer's cross. Icons, cooldowns and the game's tint of a spell you cannot cast now stay.
-- Side tabs with an icon (the character's panes, collections, group finder, professions, communities) take the same look: their icon kept, the one shown framed in gold.
-- The talents, specializations, guild info and news, and professions book pages lose their parchment only where every word reads on the dark; elsewhere the parchment stays.
+- The game's windows keep the game's own look again: Wanderer's colors on them stay one option away (Appearance), off.
+
+### Fixed
+- With a controller, a Wanderer window no longer opens on the "?" of its heading: its help tooltip no longer stays stuck on screen. The "?" is still reached on purpose.
