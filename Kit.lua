@@ -1235,9 +1235,10 @@ function Skin.Header(window, kickerText, titleText, extra, titleTemplate)
 			window.wandererTitle = text
 			if window.gameArt and window.gameArt.SetTitle then window.gameArt:SetTitle(text or "") end
 		end
+		-- (the cross in the game's title bar: the cog in the window's own top corner)
 		if options.settings and window.cog then
 			window.cog:ClearAllPoints()
-			window.cog:SetPoint("TOPRIGHT", window, "TOPRIGHT", -26, -1)
+			window.cog:SetPoint("TOPRIGHT", window, "TOPRIGHT", -6, -4)
 		end
 	end
 	if titleText then title:SetText(titleText) end
@@ -1248,9 +1249,12 @@ end
 function Skin.CloseButton(window, onClose)
 	if Skin.Game("UIPanelCloseButtonNoScripts") then
 		-- (the game's red cross, where Forever puts it on its own windows: 28 by 28 at its top right)
+		-- (on the game's frame when there is one: in its title bar, over the window's top edge)
 		local close = CreateFrame("Button", nil, window, "UIPanelCloseButtonNoScripts")
 		close:SetSize(28, 28)
-		close:SetPoint("TOPRIGHT", window, "TOPRIGHT", 0, 3)
+		close:SetPoint("TOPRIGHT", window.gameArt or window, "TOPRIGHT", 0, 3)
+		close:SetFrameLevel((window:GetFrameLevel() or 1) + 10)
+		close.gameCross = true
 		close.wandererClose = true
 		window.closeButton = close
 		function close:SetPaper() end
@@ -2683,8 +2687,11 @@ function Skin.Help(window, text, corner)
 		local help = Skin.CreateLink(window, "?", nil, text)
 		help.text:SetFontObject(Skin.FontFor("GameTooltipText"))
 		help:SetSize(18, 18)
-		local beside = window.cog or window.closeButton
-		if beside then
+		-- (beside the cog, else beside the cross; the game's cross stands in its title bar: in the top corner then)
+		local beside = window.cog or (window.closeButton and not window.closeButton.gameCross and window.closeButton)
+		if not beside and window.closeButton then
+			help:SetPoint("TOPRIGHT", window, "TOPRIGHT", -6, -4)
+		elseif beside then
 			help:SetPoint("RIGHT", beside, "LEFT", -2, 0)
 		else
 			help:SetPoint("TOPRIGHT", window, "TOPRIGHT", -30, -6)

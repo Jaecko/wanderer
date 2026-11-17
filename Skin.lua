@@ -513,18 +513,40 @@ Skin.StepAside, Skin.Hold = StepAside, Hold -- (tests)
 -- Escape. The cross closes directly (or calls onClose), never through the
 -- game's panel manager, locked during a fight. Returns the cross.
 -- The game's own window frame under a window (its metal edges, its rock ground, its title bar), Wanderer's
--- drawing put away. Its title is the heading's (Skin.Header). Nothing of the window moves.
+-- drawing put away. Its title is the heading's (Skin.Header). Nothing of the window moves: the game's title bar
+-- stands over the window's top edge (Skin.GAME_BAR high), never over what the window draws in its top, and drags
+-- the window as its own does.
 -- template: another of the game's frames (a question's DialogBorderTemplate), DefaultPanelTemplate unless said.
+Skin.GAME_BAR = 22
 local function GameFrame(window, template)
 	template = template or "DefaultPanelTemplate"
 	-- (a piece of the screen, a bar of emotes: no window frame around it, its own look stays)
 	if window.gameArt or window.hudPiece or not Skin.Game(template) then return window.gameArt end
 	local ok, art = pcall(CreateFrame, "Frame", nil, window, template)
 	if not (ok and art) then return nil end
-	art:SetAllPoints()
+	local bar = template == "DefaultPanelTemplate" and Skin.GAME_BAR or 0
+	art:SetPoint("TOPLEFT", window, "TOPLEFT", 0, bar)
+	art:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 0, 0)
 	art:SetFrameLevel(math.max((window:GetFrameLevel() or 1) - 1, 0))
 	art:EnableMouse(false)
 	window.gameArt = art
+	if bar > 0 then
+		-- (kept on the screen title bar and all; the bar drags the window, as the window's own ground does)
+		if window.SetClampRectInsets then window:SetClampRectInsets(0, 0, bar, 0) end
+		local handle = CreateFrame("Frame", nil, window)
+		handle:SetPoint("BOTTOMLEFT", window, "TOPLEFT", 0, 0)
+		handle:SetPoint("TOPRIGHT", window, "TOPRIGHT", -30, bar)
+		handle:EnableMouse(true)
+		handle:RegisterForDrag("LeftButton")
+		handle.padSkip = true
+		for _, script in ipairs({ "OnDragStart", "OnDragStop" }) do
+			handle:SetScript(script, function()
+				local run = window:GetScript(script)
+				if run then run(window) end
+			end)
+		end
+		window.gameBar = handle
+	end
 	if window.wandererTitle and art.SetTitle then art:SetTitle(window.wandererTitle) end
 	local skin = Skin.Get(window)
 	if skin then
