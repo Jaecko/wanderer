@@ -1445,7 +1445,6 @@ for key, text in pairs({
 	WELCOME_REVEAL_BOUND_DESC_PAD = "Suéltala y los nombres se desvanecen. Toma a alguien como objetivo para leer solo el suyo.",
 	PLAYSTYLES_DESC_PAD = "Tu forma de jugar: una pulsación ajusta lo que la acompaña, solo para este personaje. Tu tema, tus marcos de unidad y la etiqueta conservan su aspecto. Detente en una tarjeta para ver lo que cambia.",
 	SETTINGS_KEYS_DESC_PAD = "Estas teclas son de un teclado. Los botones del mando se configuran en los ajustes de mando del propio juego.",
-	WELCOME_REVEAL_PRESS_DESC_PAD = "La próxima tecla que pulses en un teclado será la elegida (con Mayús, Ctrl o Alt si quieres). Los botones de un mando se configuran en los ajustes de mando del propio juego. Esc: sin cambios.",
 	MSG_PHOTO_ON_PAD = "modo foto. El botón de menú de tu mando devuelve la interfaz.",
 	PHOTO_DESC_PAD = "Oculta toda la interfaz salvo la etiqueta de lo que miras. El botón de menú de tu mando la devuelve.",
 	NOTICES_SILENCED_DESC_PAD = "Los tipos de aviso que silenciaste para siempre en este personaje (botón superior en un aviso). Recupera uno aquí.",
@@ -1584,4 +1583,7 @@ for key, text in pairs({
 	WINDOW_LOOK_DESC = "Cómo se dibujan las ventanas de Wanderer y de sus extensiones: con el diseño del juego (sus marcos, barras de título, cruces y botones) o con el de Wanderer. Visible tras recargar la interfaz.",
 	WINDOW_LOOK_GAME = "El del juego",
 	WINDOW_LOOK_WANDERER = "El de Wanderer",
+	KEYS_KEYBOARD_ONLY = "Pulsa la tecla en un teclado: los botones del mando no se eligen aquí.",
+
+
 }) do L[key] = text end

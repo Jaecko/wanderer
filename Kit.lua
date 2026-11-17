@@ -306,6 +306,8 @@ end
 -- The standard tooltip, shown now beside owner (anchor: "ANCHOR_RIGHT" unless said). lines: a line, or lines
 -- ({ title, { words, r, g, b }, ... }: the first in gold, unless it is itself { words, r, g, b }), or a function
 -- of the owner giving either (nil or "": nothing shown). True when shown.
+-- Words alone (a hint, a help: a string) go on the help card (Skin.ShowHelp), in Wanderer's look and its size of
+-- words; lines (a table) stay on the game's tooltip, as their callers built them for it.
 function Skin.ShowTip(owner, lines, anchor)
 	local words = lines
 	if type(words) == "function" then
@@ -313,6 +315,12 @@ function Skin.ShowTip(owner, lines, anchor)
 		words = ok and made or nil
 	end
 	if words == nil or words == "" or (type(words) == "table" and words[1] == nil) then return false end
+	if type(words) ~= "table" and not U.IsSecret(words) and Skin.ShowHelp then
+		-- (one tip at a time: the game's own put away first)
+		if GameTooltip:IsShown() then GameTooltip:Hide() end
+		return Skin.ShowHelp(owner, tostring(words), anchor, owner.wandererHelpTitle or false)
+	end
+	Skin.HideHelp()
 	GameTooltip:SetOwner(owner, anchor or "ANCHOR_RIGHT")
 	if type(words) == "table" then
 		for index, line in ipairs(words) do
@@ -338,7 +346,277 @@ end
 -- A few words under the mouse (Skin.ShowTip's lines), gone when it leaves.
 function Skin.Tooltip(frame, text, anchor)
 	frame:HookScript("OnEnter", function(self) Skin.ShowTip(self, text, anchor) end)
-	frame:HookScript("OnLeave", function() GameTooltip:Hide() end)
+	frame:HookScript("OnLeave", function(self) Skin.HideTip(self, true) end)
+end
+
+-- The help card --------------------------------------------------------------------------------------------------
+-- What a window's "?" says, and every hint given as words: one small card in the tooltips' layer, beside its owner
+-- as a tooltip, never under the mouse's clicks. A title in gold, then the paragraphs (the help's lines, split on
+-- its line breaks) each on its own short line with a small dot before it and air between them; "Words: rest" (or
+-- "Mots : reste") gets its words in the label's color. Wanderer's font objects (they follow the size of words
+-- chosen), the style chosen in Wanderer's look, the game's tooltip frame and colors in the game's look. Clamped to
+-- the screen; gone when the mouse leaves its owner, the owner hides, or the game's tooltip is shown or hidden.
+-- With a controller, the chosen button's OnEnter shows it and its OnLeave hides it, as with the mouse.
+local HELP_WIDTH, HELP_PAD, HELP_GAP, HELP_DOT = 340, 12, 7, 8
+local HELP_POINTS = {
+	ANCHOR_RIGHT = { "BOTTOMLEFT", "TOPRIGHT", 4, 0 }, ANCHOR_LEFT = { "BOTTOMRIGHT", "TOPLEFT", -4, 0 },
+	ANCHOR_TOP = { "BOTTOM", "TOP", 0, 4 }, ANCHOR_BOTTOM = { "TOP", "BOTTOM", 0, -4 },
+	ANCHOR_TOPRIGHT = { "BOTTOMRIGHT", "TOPRIGHT", 0, 4 }, ANCHOR_TOPLEFT = { "BOTTOMLEFT", "TOPLEFT", 0, 4 },
+	ANCHOR_BOTTOMRIGHT = { "TOPLEFT", "BOTTOMRIGHT", 0, -4 }, ANCHOR_BOTTOMLEFT = { "TOPRIGHT", "BOTTOMLEFT", 0, -4 },
+}
+local helpCard
+
+-- A help's paragraphs: its lines, empty ones dropped ("\n", "\n\n" and the game's "|n" alike).
+local function HelpParagraphs(text)
+	local list = {}
+	if type(text) == "table" then
+		for _, line in ipairs(text) do
+			if type(line) == "table" or (type(line) == "string" and line ~= "") then list[#list + 1] = line end
+		end
+		return list
+	end
+	text = (tostring(text or ""):gsub("|n", "\n"))
+	for line in (text .. "\n"):gmatch("(.-)\r?\n") do
+		line = line:match("^%s*(.-)%s*$")
+		if line ~= "" then list[#list + 1] = line end
+	end
+	return list
+end
+
+-- A line's words before its colon ("Click: ...", "Clic : ...", "点击：..."), a few words only, with the rest; nil
+-- when the line has none (a sentence, an hour, colored words).
+local FULL_COLON = "\239\188\154"
+local function HelpLabel(line)
+	local words, rest = line:match("^([^:|]-[^%s:|])%s?:%s+(.+)$")
+	if not words then words, rest = line:match("^([^:|]-[^%s:|])%s?" .. FULL_COLON .. "%s*(.+)$") end
+	if not words or #words > 32 or words:find("^[%d%s]+$") then return nil end
+	-- (a few words: "Clic droit", "Shift-right-click"; more is a sentence)
+	local _, spaces = words:gsub("%s", "")
+	if spaces > 3 then return nil end
+	return line:sub(1, #line - #rest):match("^(.-)%s*$"), rest
+end
+Skin.HelpParagraphs, Skin.HelpLabel = HelpParagraphs, HelpLabel -- (tests)
+
+local function HelpLine(card, index)
+	local line = card.lines[index]
+	if line then return line end
+	line = { dot = Skin.Glyph(card, "dot", HELP_DOT), text = Skin.CreateText(card, "GameTooltipText") }
+	line.text:SetJustifyH("LEFT")
+	if line.text.SetWordWrap then line.text:SetWordWrap(true) end
+	card.lines[index] = line
+	return line
+end
+
+-- Gone when its owner is: hidden, or left by the mouse (a moment after); the controller's choice says itself.
+local function WatchHelp(self, elapsed)
+	self.wait = (self.wait or 0) - elapsed
+	if self.wait > 0 then return end
+	self.wait = 0.1
+	local owner = self.owner
+	if not (owner and owner.IsVisible and owner:IsVisible()) then return self:Hide() end
+	if U.UsingPad and U.UsingPad() then return end
+	-- (a fight may hide the answer: unknown counts as still over, the owner's leave and the tooltip's hide close it)
+	local over = owner.IsMouseOver and U.Clean(U.Safe(owner.IsMouseOver, owner))
+	if over == nil or over == true then
+		self.away = 0
+		return
+	end
+	self.away = (self.away or 0) + 0.1
+	if self.away >= 0.2 then self:Hide() end
+end
+
+function Skin.HelpCard()
+	if helpCard then return helpCard end
+	local card, skin = Skin.CreateWindow("WandererHelpCard", "TOOLTIP")
+	-- (a tip, not a window: the tooltips' least opacity, never brought in front nor reached by the controller)
+	skin.minOpacity, skin.isWindow = Skin.TOOLTIP_MIN_OPACITY, false
+	card.padSkip, card.noFadeIn = true, true
+	card:EnableMouse(false)
+	if card.SetClampedToScreen then card:SetClampedToScreen(true) end
+	card:SetFrameLevel(200)
+	card.title = Skin.CreateText(card, "GameTooltipHeaderText")
+	card.title:SetJustifyH("LEFT")
+	card.rule = Skin.Rule(card)
+	card.lines = {}
+	card:SetScript("OnUpdate", WatchHelp)
+	card:HookScript("OnHide", function(self) self.owner, self.away = nil, 0 end)
+	-- (the game's tooltip shown or put away: this card goes too, one tip at a time)
+	if GameTooltip and hooksecurefunc then
+		hooksecurefunc(GameTooltip, "Hide", function() if card:IsShown() then card:Hide() end end)
+		hooksecurefunc(GameTooltip, "SetOwner", function() if card:IsShown() then card:Hide() end end)
+	end
+	helpCard = card
+	return card
+end
+
+-- Placed as a tooltip: beside its owner by the anchor given (the game's ANCHOR_ words, its right unless said),
+-- on its left when the screen has no room on its right; at the mouse (or the controller's button) for a cursor.
+local function PlaceHelp(card, owner, anchor)
+	card:ClearAllPoints()
+	if anchor == "ANCHOR_CURSOR" or anchor == "ANCHOR_CURSOR_RIGHT" then
+		local x, y = Skin.CursorPoint()
+		local scale = card:GetEffectiveScale()
+		if x and y and scale and scale > 0 then
+			card:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale + 14, y / scale - 14)
+			return
+		end
+	end
+	local point = HELP_POINTS[anchor] or HELP_POINTS.ANCHOR_RIGHT
+	if point == HELP_POINTS.ANCHOR_RIGHT then
+		local ok, right = pcall(owner.GetRight, owner)
+		local screen = UIParent.GetRight and UIParent:GetRight()
+		right = ok and U.Clean(right) or nil
+		if right and screen and right * owner:GetEffectiveScale() + card:GetWidth() * card:GetEffectiveScale()
+			> screen * UIParent:GetEffectiveScale() then
+			point = HELP_POINTS.ANCHOR_LEFT
+		end
+	end
+	card:SetPoint(point[1], owner, point[2], point[3], point[4])
+end
+
+-- Shows the help card beside owner: text (the help's words, or lines as Skin.ShowTip takes them, or a function of
+-- the owner giving either), anchor (Skin.ShowTip's), title (its title; nil: the first line when short, else
+-- "Help"; false: none). True when shown.
+function Skin.ShowHelp(owner, text, anchor, title)
+	if type(text) == "function" then
+		local ok, made = pcall(text, owner)
+		text = ok and made or nil
+	end
+	if type(title) == "function" then
+		local ok, made = pcall(title, owner)
+		title = ok and made or nil
+	end
+	if not owner or text == nil or text == "" or U.IsSecret(text) then return false end
+	local paragraphs = HelpParagraphs(text)
+	if title == nil then
+		-- (the first line its title when it reads as one: short, no "Words: rest", no end of sentence)
+		local first = paragraphs[1]
+		if type(text) == "table" and type(first) == "string" then
+			title = table.remove(paragraphs, 1)
+		elseif paragraphs[2] and type(first) == "string" and #first <= 48 and not HelpLabel(first) and not first:find("[%.!?]$") then
+			title = table.remove(paragraphs, 1)
+		else
+			title = ns.L.HELP
+		end
+	end
+	if not paragraphs[1] and not title then return false end
+	local card = Skin.HelpCard()
+	card.owner, card.away, card.wait = owner, 0, 0.1
+	-- The look: the game's tooltip frame in the game's look; the style chosen in Wanderer's.
+	local skin = Skin.Get(card)
+	if skin then
+		if Skin.GameWindows() then skin:SetFixedStyle("blizzard", 95)
+		elseif skin.fixedStyle then skin:SetFixedStyle(nil, nil)
+		else skin:ApplyStyle() end
+	end
+	card:SetScale(Skin.Scale())
+	local textScale = ns.db and ns.db.label and ns.db.label.textScale or 1
+	local bodyFont, titleFont = Skin.FontFor("GameTooltipText"), Skin.FontFor("GameTooltipHeaderText")
+	local lineHeight = Skin.LineHeight(bodyFont)
+	local inner = math.floor(HELP_WIDTH * textScale) - HELP_PAD * 2
+	local bullets = (title and true or false) or paragraphs[2] ~= nil
+	local dot = math.floor(HELP_DOT * textScale + 0.5)
+	local indent = bullets and dot + 7 or 0
+	-- Words first, measured unbounded: the card as narrow as its longest line allows.
+	local width = 0
+	card.title:SetShown(title and true or false)
+	card.rule:SetShown(title and paragraphs[1] ~= nil and true or false)
+	if title then
+		card.title:SetFontObject(titleFont)
+		card.title:SetTextColor(Skin.RGB("gold"))
+		card.title:SetWidth(0)
+		card.title:SetText(title)
+		width = U.Measure(card.title, "GetStringWidth", 120)
+	end
+	for index, words in ipairs(paragraphs) do
+		local line = HelpLine(card, index)
+		line.text:SetFontObject(bodyFont)
+		local r, g, b = Skin.RGB("text")
+		if type(words) == "table" then
+			r, g, b = words[2] or r, words[3] or g, words[4] or b
+			words = words[1]
+		else
+			local label, rest = HelpLabel(words)
+			if label then words = Skin.Colorize(label, "label") .. " " .. rest end
+		end
+		line.text:SetTextColor(r, g, b)
+		line.text:SetWidth(0)
+		line.text:SetText(words or "")
+		width = math.max(width, U.Measure(line.text, "GetStringWidth", inner) + indent)
+		line.dot:SetSize(dot, dot)
+		line.dot:SetVertexColor(Skin.RGB("label", 0.85))
+		line.dot:SetShown(bullets)
+		line.text:Show()
+	end
+	for index = #paragraphs + 1, #card.lines do
+		card.lines[index].text:Hide()
+		card.lines[index].dot:Hide()
+	end
+	width = math.min(inner, math.max(math.floor(width + 1), 80))
+	-- Then laid out, top to bottom.
+	local y = HELP_PAD
+	if title then
+		card.title:ClearAllPoints()
+		card.title:SetPoint("TOPLEFT", card, "TOPLEFT", HELP_PAD, -y)
+		card.title:SetWidth(width)
+		y = y + U.Measure(card.title, "GetStringHeight", Skin.LineHeight(titleFont))
+		if paragraphs[1] then
+			card.rule:ClearAllPoints()
+			card.rule:SetPoint("TOPLEFT", card, "TOPLEFT", HELP_PAD, -(y + 5))
+			card.rule:SetPoint("TOPRIGHT", card, "TOPLEFT", HELP_PAD + width, -(y + 5))
+			y = y + 11
+		end
+	end
+	local gap = math.floor(HELP_GAP * textScale + 0.5)
+	for index = 1, #paragraphs do
+		local line = card.lines[index]
+		if index > 1 then y = y + gap end
+		line.text:ClearAllPoints()
+		line.text:SetPoint("TOPLEFT", card, "TOPLEFT", HELP_PAD + indent, -y)
+		line.text:SetWidth(width - indent)
+		line.dot:ClearAllPoints()
+		line.dot:SetPoint("TOPLEFT", card, "TOPLEFT", HELP_PAD, -(y + math.max(0, math.floor((lineHeight - 3 - dot) / 2))))
+		y = y + U.Measure(line.text, "GetStringHeight", lineHeight)
+	end
+	card:SetSize(width + HELP_PAD * 2, math.floor(y + HELP_PAD + 0.5))
+	PlaceHelp(card, owner, anchor)
+	card:Show()
+	if card.Raise then card:Raise() end
+	return true
+end
+
+-- The words the help card shows now (its title and lines, one per line), "" when hidden: for tests and debug.
+function Skin.HelpWords()
+	if not (helpCard and helpCard:IsShown()) then return "" end
+	local words = {}
+	if helpCard.title:IsShown() then words[#words + 1] = helpCard.title:GetText() or "" end
+	for _, line in ipairs(helpCard.lines) do
+		if line.text:IsShown() then words[#words + 1] = line.text:GetText() or "" end
+	end
+	return table.concat(words, "\n")
+end
+
+-- Whose help the card shows now (nil: none shown).
+function Skin.HelpOwner()
+	return helpCard and helpCard:IsShown() and helpCard.owner or nil
+end
+
+-- The help card put away: the one of owner only when given.
+function Skin.HideHelp(owner)
+	if helpCard and helpCard:IsShown() and (owner == nil or helpCard.owner == owner) then helpCard:Hide() end
+end
+
+-- A tip put away when its owner is left: the game's tooltip if it is the owner's (or always: all), the help card.
+function Skin.HideTip(owner, all)
+	if all or GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
+	Skin.HideHelp(owner)
+end
+
+-- A help under the mouse on frame (Skin.ShowHelp's words, anchor and title), gone when it leaves: for the hints
+-- that are a help rather than a name (the extensions' "?" of their own, a page's explanation).
+function Skin.HelpTip(frame, text, anchor, title)
+	frame:HookScript("OnEnter", function(self) Skin.ShowHelp(self, text, anchor, title) end)
+	frame:HookScript("OnLeave", function(self) Skin.HideHelp(self) end)
 end
 
 -- A sheet beside a window (a quest's, a creature's): on the window's right when the screen has room, else on its
@@ -776,7 +1054,7 @@ local function DropdownTip(box, caption, tip)
 		end
 		Skin.ShowTip(self, lines)
 	end)
-	box:HookScript("OnLeave", function(self) if GameTooltip:IsOwned(self) then GameTooltip:Hide() end end)
+	box:HookScript("OnLeave", function(self) Skin.HideTip(self) end)
 end
 
 -- The game's list (WowStyle1DropdownTemplate, its menu of round choices): the same box's methods.
@@ -1318,6 +1596,7 @@ function Skin.Header(window, kickerText, titleText, extra, titleTemplate)
 	local kicker = Skin.CreateKicker(window, kickerText or "Wanderer")
 	kicker:SetPoint("TOPLEFT", window, "TOPLEFT", margin, -margin)
 	local title = Skin.CreateText(window, titleTemplate or "GameTooltipHeaderText", Skin.RGB("gold"))
+	window.wandererHeading = title -- (its words are the help card's title, Skin.Help)
 	title:SetPoint("TOPLEFT", kicker, "BOTTOMLEFT", 0, -3)
 	if Skin.GameLook() and (window.gameArt or Skin.HasTemplate("DefaultPanelTemplate")) then
 		-- In the game's own frame: the title in its title bar, as the game's windows say theirs. The kicker and the
@@ -2314,7 +2593,7 @@ function Skin.Closable(card, name)
 	card:HookScript("OnShow", function(self) pcall(self.RegisterEvent, self, "GLOBAL_MOUSE_DOWN") end)
 	card:HookScript("OnHide", function(self)
 		self:UnregisterAllEvents()
-		if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+		Skin.HideTip(self)
 	end)
 	if name and UISpecialFrames then table.insert(UISpecialFrames, name) end
 	return card
@@ -2514,7 +2793,7 @@ do
 		end)
 		row:SetScript("OnLeave", function(self)
 			Color(self, false)
-			if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+			Skin.HideTip(self)
 		end)
 		row:SetScript("OnClick", function(self)
 			Skin.Play("click")
@@ -2785,9 +3064,30 @@ end
 -- A small "Help" word in a window's corner (bottom left unless said): what can be done there, under the mouse.
 -- corner "HEADING": a "?" at the heading's right, left of the window's cog (else its cross), for a window whose
 -- foot is full (window.help).
+-- Its words on the help card (Skin.ShowHelp), titled with the window's name (its heading's words); a hint
+-- given later as words on the same link (an extension's controller help) keeps that title.
+local function HelpTitle(window)
+	local frame = window
+	for _ = 1, 4 do
+		if not frame then break end
+		local heading = frame.wandererHeading
+		local words = heading and U.Clean(U.Safe(heading.GetText, heading))
+		if type(words) == "string" and words ~= "" then return words end
+		if type(frame.wandererTitle) == "string" and frame.wandererTitle ~= "" then return frame.wandererTitle end
+		frame = frame.GetParent and frame:GetParent()
+	end
+	return nil
+end
+local function HelpLink(window, label, text, anchor)
+	local help = Skin.CreateLink(window, label, nil, nil)
+	help.wandererHelpTitle = function() return HelpTitle(window) end
+	help:HookScript("OnEnter", function(self) Skin.ShowHelp(self, text, anchor, HelpTitle(window)) end)
+	help:HookScript("OnLeave", function(self) Skin.HideHelp(self) end)
+	return help
+end
 function Skin.Help(window, text, corner)
 	if corner == "HEADING" then
-		local help = Skin.CreateLink(window, "?", nil, text)
+		local help = HelpLink(window, "?", text, "ANCHOR_BOTTOMLEFT")
 		help.text:SetFontObject(Skin.FontFor("GameTooltipText"))
 		help:SetSize(18, 18)
 		-- (beside the cog, else beside the cross; the game's cross stands in its title bar: in the top corner then)
@@ -2806,8 +3106,9 @@ function Skin.Help(window, text, corner)
 		window.help = help
 		return help
 	end
-	local help = Skin.CreateLink(window, ns.L.HELP, nil, text)
 	corner = corner or "BOTTOMLEFT"
+	-- (above the link, over the window: toward its middle)
+	local help = HelpLink(window, ns.L.HELP, text, corner == "BOTTOMLEFT" and "ANCHOR_TOPLEFT" or "ANCHOR_TOPRIGHT")
 	help:SetPoint(corner, window, corner, corner == "BOTTOMLEFT" and Skin.Margin() + 2 or -(Skin.Margin() + 2), Skin.Margin() - 2)
 	return help
 end

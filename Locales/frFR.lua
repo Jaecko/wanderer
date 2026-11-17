@@ -1445,7 +1445,6 @@ for key, text in pairs({
 	WELCOME_REVEAL_BOUND_DESC_PAD = "Relâchez-la et les noms s'effacent. Ciblez quelqu'un pour ne lire que le sien.",
 	PLAYSTYLES_DESC_PAD = "Votre façon de jouer : une pression règle ce qui va avec, pour ce personnage seulement. Votre thème, vos cadres d'unité et l'étiquette gardent leur apparence. Arrêtez-vous sur une carte pour voir ce qu'elle change.",
 	SETTINGS_KEYS_DESC_PAD = "Ces touches sont celles d'un clavier. Les boutons de la manette se règlent dans les réglages de manette du jeu.",
-	WELCOME_REVEAL_PRESS_DESC_PAD = "La prochaine touche pressée sur un clavier sera la bonne (avec Maj, Ctrl ou Alt si vous voulez). Les boutons d'une manette se règlent dans les réglages de manette du jeu. Échap : rien ne change.",
 	MSG_PHOTO_ON_PAD = "mode photo. Le bouton menu de votre manette ramène l'interface.",
 	PHOTO_DESC_PAD = "Masque toute l'interface sauf l'étiquette de ce que vous regardez. Le bouton menu de votre manette la ramène.",
 	NOTICES_SILENCED_DESC_PAD = "Les genres d'avis que vous avez fait taire pour de bon sur ce personnage (bouton du haut sur un avis). Rétablissez-en un ici.",
@@ -1584,4 +1583,7 @@ for key, text in pairs({
 	WINDOW_LOOK_DESC = "Comment sont dessinées les fenêtres de Wanderer et de ses extensions : dans le design du jeu (ses cadres, barres de titre, croix et boutons), ou dans celui de Wanderer. Visible après un rechargement de l'interface.",
 	WINDOW_LOOK_GAME = "Celle du jeu",
 	WINDOW_LOOK_WANDERER = "Celle de Wanderer",
+	KEYS_KEYBOARD_ONLY = "Appuyez sur la touche d'un clavier : les boutons de la manette ne se choisissent pas ici.",
+
+
 }) do L[key] = text end

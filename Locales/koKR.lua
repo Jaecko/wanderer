@@ -1445,7 +1445,6 @@ for key, text in pairs({
 	WELCOME_REVEAL_BOUND_DESC_PAD = "키를 떼면 이름이 사라집니다. 누군가를 대상으로 잡으면 그 이름만 보입니다.",
 	PLAYSTYLES_DESC_PAD = "플레이 방식: 한 번 누르면 그에 맞는 설정을 이 캐릭터에만 적용합니다. 테마, 유닛 프레임, 라벨의 모습은 그대로입니다. 카드에 멈추면 무엇이 바뀌는지 볼 수 있습니다.",
 	SETTINGS_KEYS_DESC_PAD = "이 키들은 키보드용입니다. 게임패드 버튼은 게임 자체의 게임패드 설정에서 지정합니다.",
-	WELCOME_REVEAL_PRESS_DESC_PAD = "다음에 키보드에서 누르는 키가 지정됩니다 (원하면 Shift, Ctrl, Alt와 함께). 게임패드 버튼은 게임 자체의 게임패드 설정에서 지정합니다. Esc: 변경 없음.",
 	MSG_PHOTO_ON_PAD = "사진 모드. 게임패드의 메뉴 버튼으로 인터페이스가 돌아옵니다.",
 	PHOTO_DESC_PAD = "바라보는 대상의 라벨을 제외한 모든 인터페이스를 숨깁니다. 게임패드의 메뉴 버튼으로 되돌립니다.",
 	NOTICES_SILENCED_DESC_PAD = "이 캐릭터에서 영구히 꺼 둔 알림 종류입니다 (알림에서 위 버튼). 여기서 다시 켤 수 있습니다.",
@@ -1584,4 +1583,7 @@ for key, text in pairs({
 	WINDOW_LOOK_DESC = "Wanderer와 확장 창을 그리는 방식: 게임 본래 디자인(틀, 제목 표시줄, 닫기 단추, 버튼) 또는 Wanderer 디자인. 인터페이스를 다시 불러온 뒤 적용됩니다.",
 	WINDOW_LOOK_GAME = "게임 디자인",
 	WINDOW_LOOK_WANDERER = "Wanderer 디자인",
+	KEYS_KEYBOARD_ONLY = "키보드의 키를 누르세요. 게임패드 버튼은 여기서 지정하지 않습니다.",
+
+
 }) do L[key] = text end

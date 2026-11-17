@@ -352,7 +352,9 @@ function ns.DrawMerchantFoot()
 	cost = Clean(cost) or 0
 	local needed = repairs and Clean(canRepair) and cost > 0
 	foot.repair:SetShown(repairs)
-	foot.one:SetShown(repairs and G("ShowRepairCursor") ~= nil)
+	-- (one item: the game's hammer on the mouse, of no use with a controller; Repair all alone then)
+	local pad = U.UsingPad and U.UsingPad() and true or false
+	foot.one:SetShown(repairs and not pad and G("ShowRepairCursor") ~= nil)
 	foot.repair:SetLabel(needed and L.MERCHANT_REPAIR_ALL:format(U.Coins(cost)) or L.MERCHANT_REPAIR_NONE)
 	foot.repair:SetEnabled(needed and (Clean(Safe(GetMoney)) or 0) >= cost)
 	local guild = repairs and Clean(Safe(CanGuildBankRepair)) and true or false

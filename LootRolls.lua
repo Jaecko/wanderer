@@ -59,7 +59,8 @@ local function Reason(code, skill)
 end
 
 local function Choose(roll, kind)
-	if not Find(roll.id) then return end
+	-- (one roll per item: a choice made, the others wait greyed until the roll ends, never a second roll sent)
+	if not Find(roll.id) or roll.chosen then return end
 	roll.chosen = kind
 	Safe(G("RollOnLoot"), roll.id, ROLL[kind])
 	ns.DrawLootRolls()
@@ -164,10 +165,11 @@ local function Paint(card, roll)
 	for key, button in pairs(card.buttons) do
 		local open = key == "pass" or (key == "greed" and (info.greed or info.transmog)) or info[key]
 		button.closed = not open and Reason(info.reasons[key], info.skill) or nil
-		button:SetEnabled(open and true or false)
 		button.key = key == "greed" and greedKey or key
-		button:SetShown(key ~= "disenchant" or info.disenchant or (info.reasons.disenchant or 0) > 0)
 		local chosen = roll.chosen == button.key
+		-- (a choice made: the others greyed until the roll ends, the one chosen stays lit; Choose sends no second)
+		button:SetEnabled(open and (chosen or not roll.chosen) and true or false)
+		button:SetShown(key ~= "disenchant" or info.disenchant or (info.reasons.disenchant or 0) > 0)
 		if Skin.GameWindows() then
 			-- (the game look: the game's button keeps its own words, greyed when closed; the choice made stays lit)
 			if chosen and button.LockHighlight then button:LockHighlight() elseif button.UnlockHighlight then button:UnlockHighlight() end

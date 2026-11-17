@@ -927,7 +927,11 @@ local function KeysView()
 		holder.key:SetPoint("RIGHT", holder, "RIGHT", -26, 0)
 		-- (the kit's listening: Escape, the modifiers, a fight, one row at a time)
 		frame.listener = Skin.KeyListener(holder.key, {
-			onChange = function() frame:Refresh() end,
+			onChange = function(listening)
+				frame:Refresh()
+				-- (a controller in use: the key waited for is a keyboard's, said under the heading)
+				if U.UsingPad and U.UsingPad() then Said(listening and L.KEYS_KEYBOARD_ONLY or nil) end
+			end,
 			onKey = function(full)
 				Take(frame, full)
 				view:Refresh()

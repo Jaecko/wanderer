@@ -1445,7 +1445,6 @@ for key, text in pairs({
 	WELCOME_REVEAL_BOUND_DESC_PAD = "Rilascialo e i nomi svaniscono. Prendi qualcuno come bersaglio per leggere solo il suo.",
 	PLAYSTYLES_DESC_PAD = "Il tuo modo di giocare: una pressione regola ciò che lo accompagna, solo per questo personaggio. Il tuo tema, i riquadri delle unità e l'etichetta mantengono il loro aspetto. Fermati su una carta per vedere cosa cambia.",
 	SETTINGS_KEYS_DESC_PAD = "Questi tasti sono quelli di una tastiera. I pulsanti del controller si impostano nelle impostazioni del controller del gioco.",
-	WELCOME_REVEAL_PRESS_DESC_PAD = "Il prossimo tasto che premi su una tastiera sarà quello giusto (con Maiusc, Ctrl o Alt se vuoi). I pulsanti di un controller si impostano nelle impostazioni del controller del gioco. Esc: nessuna modifica.",
 	MSG_PHOTO_ON_PAD = "modalità foto. Il pulsante menu del controller riporta l'interfaccia.",
 	PHOTO_DESC_PAD = "Nasconde tutta l'interfaccia tranne l'etichetta di ciò che guardi. Il pulsante menu del controller la riporta.",
 	NOTICES_SILENCED_DESC_PAD = "I tipi di avviso che hai silenziato per sempre su questo personaggio (pulsante in alto su un avviso). Recuperane uno qui.",
@@ -1584,4 +1583,7 @@ for key, text in pairs({
 	WINDOW_LOOK_DESC = "Come vengono disegnate le finestre di Wanderer e delle sue estensioni: con il design del gioco (le sue cornici, barre del titolo, croci e pulsanti) o con quello di Wanderer. Visibile dopo un ricaricamento dell'interfaccia.",
 	WINDOW_LOOK_GAME = "Quello del gioco",
 	WINDOW_LOOK_WANDERER = "Quello di Wanderer",
+	KEYS_KEYBOARD_ONLY = "Premi il tasto su una tastiera: i pulsanti del controller non si scelgono qui.",
+
+
 }) do L[key] = text end

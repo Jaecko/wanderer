@@ -292,7 +292,9 @@ local tipHeld = false -- the game's tooltip shows the chosen button's words
 
 local function TipIsOurs(button)
 	local tip = _G.GameTooltip
-	return tip and tip.IsOwned and Clean(Safe(tip.IsOwned, tip, button)) == true or false
+	if tip and tip.IsOwned and Clean(Safe(tip.IsOwned, tip, button)) == true then return true end
+	-- (or the help card, Kit.lua: a hint given as words)
+	return ns.Skin.HelpOwner ~= nil and ns.Skin.HelpOwner() == button
 end
 local BindActions, SwitchHint
 

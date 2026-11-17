@@ -1445,7 +1445,6 @@ for key, text in pairs({
 	WELCOME_REVEAL_BOUND_DESC_PAD = "松开按钮，名字便隐去。将某人选为目标，只看他的名字。",
 	PLAYSTYLES_DESC_PAD = "你的游玩方式：按一下即可设置相应选项，仅限此角色。主题、单位框体和标签的外观保持不变。停在卡片上，查看它会改变什么。",
 	SETTINGS_KEYS_DESC_PAD = "这些是键盘的按键。手柄的按钮请在游戏自身的手柄设置中设置。",
-	WELCOME_REVEAL_PRESS_DESC_PAD = "你在键盘上按下的下一个键即为所选（可搭配 Shift、Ctrl 或 Alt）。手柄的按钮请在游戏自身的手柄设置中设置。Esc：不作更改。",
 	MSG_PHOTO_ON_PAD = "拍照模式。按手柄的菜单按钮恢复界面。",
 	PHOTO_DESC_PAD = "隐藏全部界面，只保留你所看对象的标签。按手柄的菜单按钮恢复。",
 	NOTICES_SILENCED_DESC_PAD = "你在此角色上永久屏蔽的提示类型（在提示上按上方按钮）。可在此恢复。",
@@ -1584,4 +1583,7 @@ for key, text in pairs({
 	WINDOW_LOOK_DESC = "Wanderer 及其扩展的窗口如何绘制：使用游戏原本的设计（边框、标题栏、关闭按钮和按钮），或使用 Wanderer 的设计。重新载入界面后生效。",
 	WINDOW_LOOK_GAME = "游戏的",
 	WINDOW_LOOK_WANDERER = "Wanderer 的",
+	KEYS_KEYBOARD_ONLY = "请在键盘上按下按键：手柄的按钮不在这里设置。",
+
+
 }) do L[key] = text end

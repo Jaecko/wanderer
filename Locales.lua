@@ -1459,7 +1459,6 @@ local L = {
 	WELCOME_REVEAL_BOUND_DESC_PAD = "Let go and the names fade again. Target anyone to read theirs alone.",
 	PLAYSTYLES_DESC_PAD = "How you play: one press sets the settings that go with it, for this character only. Your theme, unit frames and label keep their look. Stop on a card to see what it changes.",
 	SETTINGS_KEYS_DESC_PAD = "These keys are a keyboard's. The controller's buttons are set in the game's own controller settings.",
-	WELCOME_REVEAL_PRESS_DESC_PAD = "The next key pressed on a keyboard is the one (with Shift, Ctrl or Alt if you like). A controller's buttons are set in the game's own controller settings. Escape: no change.",
 	MSG_PHOTO_ON_PAD = "photo mode. The menu button of your controller brings the interface back.",
 	PHOTO_DESC_PAD = "Hides the whole interface except the label of what you look at. The menu button of your controller brings it back.",
 	NOTICES_SILENCED_DESC_PAD = "The kinds of notices you silenced for good on this character (the top button on a notice). Bring one back here.",
@@ -1598,6 +1597,9 @@ local L = {
 	WINDOW_LOOK_DESC = "How Wanderer's windows and those of its extensions are drawn: in the game's own design (its frames, title bars, crosses and buttons), or in Wanderer's. Shows after a reload of the interface.",
 	WINDOW_LOOK_GAME = "The game's",
 	WINDOW_LOOK_WANDERER = "Wanderer's",
+	KEYS_KEYBOARD_ONLY = "Press the key on a keyboard: a controller's buttons are not chosen here.",
+
+
 }
 
 

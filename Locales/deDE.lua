@@ -1445,7 +1445,6 @@ for key, text in pairs({
 	WELCOME_REVEAL_BOUND_DESC_PAD = "Lass los, und die Namen verblassen. Nimm jemanden ins Ziel, um nur seinen zu lesen.",
 	PLAYSTYLES_DESC_PAD = "Wie du spielst: ein Druck stellt die passenden Einstellungen ein, nur für diesen Charakter. Thema, Einheitenfenster und Schildchen behalten ihr Aussehen. Halte auf einer Karte an, um zu sehen, was sie ändert.",
 	SETTINGS_KEYS_DESC_PAD = "Diese Tasten gehören zu einer Tastatur. Die Knöpfe des Controllers legst du in den Controller-Einstellungen des Spiels fest.",
-	WELCOME_REVEAL_PRESS_DESC_PAD = "Die nächste Taste, die du auf einer Tastatur drückst, ist es (mit Umschalt, Strg oder Alt, wenn du willst). Die Knöpfe eines Controllers legst du in den Controller-Einstellungen des Spiels fest. Esc: keine Änderung.",
 	MSG_PHOTO_ON_PAD = "Fotomodus. Der Menüknopf deines Controllers holt die Oberfläche zurück.",
 	PHOTO_DESC_PAD = "Blendet die gesamte Oberfläche aus, außer dem Schildchen dessen, was du anschaust. Der Menüknopf deines Controllers holt sie zurück.",
 	NOTICES_SILENCED_DESC_PAD = "Die Arten von Hinweisen, die du auf diesem Charakter dauerhaft stummgeschaltet hast (oberer Knopf auf einem Hinweis). Hol hier einen zurück.",
@@ -1584,4 +1583,7 @@ for key, text in pairs({
 	WINDOW_LOOK_DESC = "Wie die Fenster von Wanderer und seinen Erweiterungen gezeichnet werden: im Design des Spiels (seine Rahmen, Titelleisten, Kreuze und Knöpfe) oder in dem von Wanderer. Sichtbar nach einem Neuladen der Oberfläche.",
 	WINDOW_LOOK_GAME = "Das des Spiels",
 	WINDOW_LOOK_WANDERER = "Das von Wanderer",
+	KEYS_KEYBOARD_ONLY = "Drück die Taste auf einer Tastatur: Die Knöpfe des Controllers werden hier nicht gewählt.",
+
+
 }) do L[key] = text end
