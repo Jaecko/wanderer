@@ -1600,6 +1600,29 @@ local L = {
 	KEYS_KEYBOARD_ONLY = "Press the key on a keyboard: a controller's buttons are not chosen here.",
 
 
+	ASSIST_SECTION = "Class assistant",
+	ASSIST_ENABLE = "Show the class assistant",
+	ASSIST_ENABLE_DESC = "Under your portrait, a row of your class's own icons, drawn like an action bar. In a fight: what lasts (a buff, a poison, a totem, your ammunition). Out of a fight: only what is missing, ending soon or running low; nothing when all is well. It never casts anything for you.",
+	ASSIST_SPARKS = "Sparks on the power bar",
+	ASSIST_SPARKS_DESC = "A fine spark runs along your power bar: the next energy tick (rogues, druids in cat form); for mana, the five seconds after a spell, then the next tick of regeneration.",
+	ASSIST_DRUID_MANA = "A druid's mana in forms",
+	ASSIST_DRUID_MANA_DESC = "In bear and cat form, a thin third bar under your power shows your mana; the health bar makes a little room for it.",
+	ASSIST_ACTIVE = "Active.",
+	ASSIST_ENDING = "Ends soon.",
+	ASSIST_MISSING = "Not active.",
+	ASSIST_GONE = "Worn off.",
+	ASSIST_LOW = "Running low.",
+	ASSIST_NONE = "None in your bags.",
+	ASSIST_COUNT = "In your bags: %d.",
+	ASSIST_MAIN_HAND = "Main hand",
+	ASSIST_OFF_HAND = "Off hand",
+	ASSIST_AMMO = "Ammunition",
+	ASSIST_PET_MOOD = "Your pet's mood",
+	ASSIST_PET_HAPPY = "Happy.",
+	ASSIST_PET_CONTENT = "Content: a meal would cheer it up.",
+	ASSIST_PET_UNHAPPY = "Unhappy: it fights less well, feed it.",
+	ASSIST_DUMP_START = "Class assistant: recording for %d seconds. Start a fight meanwhile, then /reload to keep it.",
+	ASSIST_DUMP_DONE = "Class assistant dump written: /reload to save it.",
 }
 
 

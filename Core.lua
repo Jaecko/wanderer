@@ -253,6 +253,13 @@ local DEFAULTS = {
 		frames = { player = true, target = true, focus = true, tot = true, pet = true, party = true, group = true, boss = true,
 			castBars = true },
 	},
+	-- The class assistant (ClassAssist.lua, 2026-11-18): your class's icons under your portrait, the sparks on your
+	-- power bar, a druid's mana in forms; with Wanderer's unit frames or the game's.
+	classAssist = {
+		enabled = true,
+		sparks = true, -- the next energy tick, the mana's five seconds and its next tick
+		druidMana = true, -- bear and cat form: a thin third bar, your mana
+	},
 	sparkles = {
 		nodes = true, -- the game's gathering icon over the herb or vein you come near: asked for
 		questObjects = true, -- and over quest objects: asked for
@@ -1338,7 +1345,7 @@ end
 local REFRESH = { "RefreshOptions", "RefreshLabel", "RefreshMinimapButton", "RefreshCinema", "RefreshTooltips", "RefreshTrainer",
 	"RefreshScreen", "RefreshSounds", "RefreshScene", "RefreshClean", "RefreshIcons", "RefreshBarSlots", "RefreshGameFrames",
 	"RefreshTargetInfo", "RefreshPlates", "RefreshDots", "RefreshHots", "RefreshAway", "RefreshMinimapLook", "RefreshTrackerLook", "RefreshCrafts",
-	"RefreshCurtain", "RefreshLootFeed", "RefreshMerchantWindow", "RefreshLootWindow", "RefreshGameSkins" }
+	"RefreshCurtain", "RefreshLootFeed", "RefreshMerchantWindow", "RefreshLootWindow", "RefreshGameSkins", "RefreshClassAssist" }
 
 -- (one failing is reported, the others still refreshed)
 function ns.RefreshAll()
@@ -1887,7 +1894,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		if not ns.initialized then
 			for _, init in ipairs({ "InitCompat", "InitLabel","InitOptions", "InitMinimapButton", "InitBar", "InitCinema", "InitTooltips",
 				"InitMerchant", "InitMerchantWindow", "InitLoot", "InitLootWindow", "InitLootRolls", "InitTrainer", "InitDialogues", "InitSocial", "InitScreen",
-				"InitTagging", "InitAcquaintances", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitTown", "InitScene", "InitReader", "InitCamera", "InitGestures", "InitCurtain", "InitCampfire", "InitAway", "InitClean", "InitMinimapLook", "InitLayer", "InitProvisions", "InitDots", "InitDotBars", "InitHots", "InitHotBars", "InitTrackerLook", "InitIcons", "InitHands", "InitCharacters", "InitWorth", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitGameFrames", "InitGameSkins", "InitBarSlots", "InitNews", "InitUnitFrames", "InitPortraits", "InitPreview", "InitSparkles", "InitLootFeed", "InitEmotes", "InitWelcome" }) do
+				"InitTagging", "InitAcquaintances", "InitPlates", "InitMarkers", "InitToast", "InitSounds", "InitFishing", "InitCrafts", "InitTodo", "InitThreshold", "InitTown", "InitScene", "InitReader", "InitCamera", "InitGestures", "InitCurtain", "InitCampfire", "InitAway", "InitClean", "InitMinimapLook", "InitLayer", "InitProvisions", "InitDots", "InitDotBars", "InitHots", "InitHotBars", "InitTrackerLook", "InitIcons", "InitHands", "InitCharacters", "InitWorth", "InitThreat", "InitMeter", "InitBuffs", "InitUpgrade", "InitReagents", "InitWeights", "InitTargetInfo", "InitGameFrames", "InitGameSkins", "InitBarSlots", "InitNews", "InitUnitFrames", "InitPortraits", "InitClassAssist", "InitPreview", "InitSparkles", "InitLootFeed", "InitEmotes", "InitWelcome" }) do
 				-- (one module failing at its start is reported, the others still start)
 				if ns[init] then ns.Util.Try(ns[init]) end
 			end
@@ -2028,6 +2035,9 @@ SlashCmdList.WANDERER = function(msg)
 	elseif msg == "frames dump" or msg == "cadres dump" then
 		-- (diagnostic: the unit frames as the game built them, into the saved data, for a look outside the game)
 		if ns.DumpUnitFrames and ns.DumpUnitFrames() then ns.Print(L.UF_DUMP_DONE) end
+	elseif msg == "classe dump" or msg == "class dump" then
+		-- (diagnostic: what the class assistant's readings answer, in and out of a fight, into the saved data)
+		if ns.DumpClassAssist then ns.DumpClassAssist() end
 	elseif msg == "debug" then
 		ns.debug = not ns.debug
 		ns.debugFrame = ns.debug and ns.DebugFrame(true) or nil

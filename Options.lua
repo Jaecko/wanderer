@@ -645,6 +645,13 @@ local function UnitFramesPage()
 	Choice("iconStyle", L.UF_ICONSTYLE, L.UF_ICONSTYLE_DESC, ns.UF_CHOICES.iconStyle)
 	Under(TableCheckbox("unitFrames", "greyDead", L.UF_GREY_DEAD, L.UF_GREY_DEAD_DESC, Apply), switch, on)
 
+	-- The class assistant (ClassAssist.lua): with Wanderer's frames or the game's, so under no switch of theirs.
+	Header(L.ASSIST_SECTION)
+	local function Assist() if ns.RefreshClassAssist then ns.RefreshClassAssist() end end
+	local assist = TableCheckbox("classAssist", "enabled", L.ASSIST_ENABLE, L.ASSIST_ENABLE_DESC, Assist)
+	Under(TableCheckbox("classAssist", "sparks", L.ASSIST_SPARKS, L.ASSIST_SPARKS_DESC, Assist), assist, IsOn("classAssist", "enabled"))
+	Under(TableCheckbox("classAssist", "druidMana", L.ASSIST_DRUID_MANA, L.ASSIST_DRUID_MANA_DESC, Assist), assist, IsOn("classAssist", "enabled"))
+
 	-- Folded: what each portrait shows, frame by frame; which frames; the rarer touches.
 	Header(L.UF_SECTION_SHOWS, { advanced = true })
 	for _, key in ipairs(ns.UF_SHOWS) do

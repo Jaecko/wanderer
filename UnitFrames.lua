@@ -214,6 +214,7 @@ function ns.UnitFramesCastColor(kind, look)
 end
 
 local function TexturePath(look) return TEXTURES[look.texture] or TEXTURES.smooth end
+ns.UnitFramesTexturePath = TexturePath
 
 -- The missing part's ground: r, g, b, a (faded: the bar's colour, dimmed).
 local function GroundColor(look, r, g, b, plain)
@@ -1084,6 +1085,7 @@ local SIZES = {
 }
 local LARGE = { player = true, target = true, boss = true }
 local function Sizes() return SIZES[UF().thickness] or SIZES.medium end
+ns.UnitFramesSizes = Sizes
 local function HealthHeight(entry) local size = Sizes() return LARGE[entry.kind] and size.health or size.small end
 local function PowerHeight(entry) local size = Sizes() return LARGE[entry.kind] and size.power or size.smallPower end
 
@@ -1946,7 +1948,9 @@ function Arrange(entry, parts, upper, lower, portrait, size, why)
 	local width = Clean(Safe(seen.GetWidth, seen))
 	if type(width) ~= "number" or width <= 0 then width = 124 end
 	local withPower = lower and lower:IsShown() and true or false
-	local health = size - 2 * px - (withPower and (Height(lower) + px) or 0)
+	-- (your own block: the class assistant's thin third bar under the power, a druid's mana in forms; 0 else)
+	local third = entry.kind == "player" and withPower and ns.ClassAssistThird and ns.ClassAssistThird() or 0
+	local health = size - 2 * px - (withPower and (Height(lower) + px) or 0) - (third > 0 and third + px or 0)
 	upper:ClearAllPoints()
 	if flip then
 		upper:SetPoint("TOPRIGHT", portrait, "TOPLEFT", -(ARRANGE_GAP + px), -px - drop)
@@ -1978,12 +1982,14 @@ function Arrange(entry, parts, upper, lower, portrait, size, why)
 		local bottom = withPower and lower or upper
 		local side = ARRANGE_GAP + 2 * px
 		points:ClearAllPoints()
+		-- (down to the third bar's bottom when there is one: the column keeps the block's full height)
+		local under = third > 0 and -(third + px) or 0
 		if flip then
 			points:SetPoint("TOPRIGHT", upper, "TOPLEFT", -side, 0)
-			points:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMLEFT", -side, 0)
+			points:SetPoint("BOTTOMRIGHT", bottom, "BOTTOMLEFT", -side, under)
 		else
 			points:SetPoint("TOPLEFT", upper, "TOPRIGHT", side, 0)
-			points:SetPoint("BOTTOMLEFT", bottom, "BOTTOMRIGHT", side, 0)
+			points:SetPoint("BOTTOMLEFT", bottom, "BOTTOMRIGHT", side, under)
 		end
 		points:SetWidth(UF().thickness == "thick" and 9 or 7)
 		points.vertical = true
@@ -2015,11 +2021,23 @@ function Arrange(entry, parts, upper, lower, portrait, size, why)
 		block.Place(true)
 		if block.link then block.link:Hide() end
 	end
+	-- Your composition told to the class assistant (ClassAssist.lua): its third bar, its row of icons under the
+	-- cast's place.
+	if entry.kind == "player" then
+		ns.UnitFramesPlayerBlock = { portrait = portrait, upper = upper, lower = withPower and lower or nil, third = third, px = px,
+			width = width, cast = (UF().castInBlock ~= false and FrameOn("castBars")) and CastHeight(entry) or 0 }
+		if ns.ClassAssistArranged then ns.ClassAssistArranged() end
+	end
 end
 
 Compose = function(entry, parts, upper, lower, look)
 	local mine = ourNames[entry.frame]
 	local game = parts.name
+	-- (your composition forgotten until it is arranged again: the class assistant falls back to the game's frame)
+	if entry.key == "player" and ns.UnitFramesPlayerBlock then
+		ns.UnitFramesPlayerBlock = nil
+		if ns.ClassAssistArranged then ns.ClassAssistArranged() end
+	end
 	if not upper then
 		arranged[entry.frame] = nil
 		if mine then mine.text:Hide() end
