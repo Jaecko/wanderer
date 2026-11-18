@@ -1120,6 +1120,7 @@ function Skin.Dropdown(parent, choices, get, set, placeholder, minimum, maximum,
 	end
 	local box
 	box = Skin.Button(parent, "", function(self)
+		-- (its window closed with the menu open: the menu goes with it, as the game's list does)
 		U.Menu(self, function(_, root)
 			for _, choice in ipairs(choices()) do
 				root:CreateRadio(choice.label, function() return get() == choice.id end, function()
@@ -1127,7 +1128,7 @@ function Skin.Dropdown(parent, choices, get, set, placeholder, minimum, maximum,
 					box:Refresh()
 				end)
 			end
-		end)
+		end, true)
 	end, nil, minimum)
 	box.arrow = Skin.Glyph(box, "down", 9, "OVERLAY")
 	box.arrow:SetPoint("RIGHT", box, "RIGHT", -8, 0)
@@ -2582,13 +2583,22 @@ function Skin.CardRow(parent)
 end
 
 -- A card made to close: in front of everything, closed by Escape (its name in the game's list), a click
--- anywhere else (not on its owner) or its owner hidden. card.owner: what opened it.
+-- anywhere else (not on its owner) or, card.followOwner set, its owner hidden (a list's window closed under it; a
+-- toast's or a pin's card stays when they go). card.owner: what opened it.
 function Skin.Closable(card, name)
 	card:EnableMouse(true)
 	card:SetClampedToScreen(true)
 	card:SetScript("OnEvent", function(self)
 		if self:IsMouseOver() or (self.owner and self.owner.IsMouseOver and self.owner:IsMouseOver()) then return end
 		self:Hide()
+	end)
+	-- (its owner looked at ten times a second, only while it follows one)
+	card:HookScript("OnUpdate", function(self, elapsed)
+		if not (self.followOwner and self.owner) then return end
+		self.ownerWait = (self.ownerWait or 0) - elapsed
+		if self.ownerWait > 0 then return end
+		self.ownerWait = 0.1
+		if self.owner.IsVisible and not self.owner:IsVisible() then self:Hide() end
 	end)
 	card:HookScript("OnShow", function(self) pcall(self.RegisterEvent, self, "GLOBAL_MOUSE_DOWN") end)
 	card:HookScript("OnHide", function(self)
@@ -2616,14 +2626,8 @@ function Skin.ActionCard(owner, spec)
 		actionCard.title = Skin.Caps(actionCard, "", "kicker")
 		actionCard.foot = Skin.Text(actionCard, "GameTooltipTextSmall", "muted")
 		actionCard.rows = {}
-		-- (spec.followOwner: its owner gone, a list's window closed under a controller's menu, the card goes with it)
-		actionCard:HookScript("OnUpdate", function(self, elapsed)
-			if not self.followOwner then return end
-			self.ownerWait = (self.ownerWait or 0) - elapsed
-			if self.ownerWait > 0 then return end
-			self.ownerWait = 0.1
-			if self.owner and self.owner.IsVisible and not self.owner:IsVisible() then self:Hide() end
-		end)
+		-- (spec.followOwner: its owner gone, a list's window closed under a controller's menu, the card goes with it:
+		-- Skin.Closable)
 	end
 	local card, m = actionCard, Skin.Margin() + 6
 	local width = spec.width or 240

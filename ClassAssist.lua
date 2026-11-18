@@ -313,12 +313,17 @@ local function Enchant(which)
 	if api and slot ~= nil then
 		local list = Safe(api, slot)
 		if type(list) == "table" and not IsSecret(list) then
+			-- (one entry hidden in a fight: not known, never "none")
+			local unknown = false
 			for _, each in pairs(list) do
-				if type(each) == "table" and not IsSecret(each) and Clean(each.hasEnchant) then
+				if IsSecret(each) or (type(each) == "table" and IsSecret(each.hasEnchant)) then
+					unknown = true
+				elseif type(each) == "table" and Clean(each.hasEnchant) then
 					local left = Clean(each.timeLeft)
 					return true, type(left) == "number" and left / 1000 or nil, Clean(each.charges), Clean(each.enchantIconID)
 				end
 			end
+			if unknown then return nil end
 			return false
 		end
 	end
@@ -458,16 +463,22 @@ end
 local enchantSeen = {} -- hand -> { item, start, length, left }
 local function EnchantItem(list, fight, which, opts)
 	local slot = which == 1 and 16 or 17
-	local weapon = Clean(Safe(GetInventoryItemID, "player", slot))
+	local held = Safe(GetInventoryItemID, "player", slot)
+	local weapon = Clean(held)
 	local seen = enchantSeen[which]
+	-- (your weapon hidden in a fight: the one seen before it, it cannot be changed meanwhile)
+	if weapon == nil and IsSecret(held) and seen then weapon = seen.item end
 	if not weapon then
 		enchantSeen[which] = nil
 		return
 	end
 	if seen and seen.item ~= weapon then seen, enchantSeen[which] = nil, nil end
 	local has, left, charges = Enchant(which)
+	-- (whether one is there hidden in a fight: the last state known before it, never a guess of a new one)
+	if has == nil and fight and seen then has = not seen.gone end
 	if has == nil then return end
-	local icon = Clean(Safe(GetInventoryItemTexture, "player", slot))
+	local texture = Safe(GetInventoryItemTexture, "player", slot)
+	local icon = IsSecret(texture) and texture or Clean(texture)
 	local title = which == 1 and L.ASSIST_MAIN_HAND or L.ASSIST_OFF_HAND
 	if has then
 		local now = GetTime()
@@ -485,9 +496,10 @@ local function EnchantItem(list, fight, which, opts)
 		local ending = left ~= nil and left < ENCHANT_SOON
 		if fight and not opts.fight then return end
 		if not fight and not ending then return end
+		-- (its time hidden: the icon alone, no sweep nor figure)
 		Add(list, { key = "enchant" .. which, icon = icon, state = ending and "ending" or "ok", title = title,
-			count = type(charges) == "number" and charges > 0 and charges or nil, start = seen.start, length = seen.length,
-			soon = ENCHANT_SOON, expires = left and now + left or nil })
+			count = type(charges) == "number" and charges > 0 and charges or nil, start = left and seen.start or nil,
+			length = left and seen.length or nil, soon = ENCHANT_SOON, expires = left and now + left or nil })
 	elseif seen then
 		seen.gone = true
 		if not fight and opts.gone then Add(list, { key = "enchant" .. which, icon = icon, state = "missing", title = title, words = L.ASSIST_GONE }) end
@@ -614,6 +626,7 @@ ns.ClassAssistItems = Collect -- (tests, the dump)
 local third -- a druid's mana in forms
 local sparkFrame -- the spark on your power bar
 local petIcon -- a hunter's pet mood
+local holder -- where your portrait's frame stands, the game's frame hidden by another addon (ElvUI...): the row held there
 
 local function Pixel(frame)
 	local pixel = _G.PixelUtil
@@ -850,6 +863,11 @@ local function Build()
 	row = CreateFrame("Frame", "WandererClassAssist", player)
 	row.padSkip = true
 	row:SetSize(1, 1)
+	-- (its home when the game's frame is hidden by another addon: on the interface itself, faded with your portrait
+	-- by Cinema.lua, gone with the interface in the curtain and the photo)
+	holder = CreateFrame("Frame", "WandererClassAssistHolder", UIParent)
+	holder.padSkip = true
+	holder:SetSize(1, 1)
 	pool = {}
 	for index = 1, POOL do pool[index] = MakeIcon(row) end
 	-- The druid's mana: one of Wanderer's bars, dressed in the look.
@@ -888,11 +906,68 @@ local function Lowest(candidates, always)
 	return lowest
 end
 
+-- The game's frame hidden by another addon (ElvUI, a unit frame addon): the row on the interface where that frame
+-- stands (read even hidden), else where it was last read, else the game's own first place for it.
+local DEFAULT_SPOT = { x = -19, y = -4, width = 232, height = 100 } -- (from the screen's top left)
+local spot -- left, top, width, height in the frame's own measure; scale against the interface's
+local function ReadSpot(player)
+	local left, top = Clean(Safe(player.GetLeft, player)), Clean(Safe(player.GetTop, player))
+	local width, height = Clean(Safe(player.GetWidth, player)), Clean(Safe(player.GetHeight, player))
+	local scale, base = Clean(Safe(player.GetEffectiveScale, player)), Clean(Safe(UIParent.GetEffectiveScale, UIParent))
+	for _, value in ipairs({ left, top, width, height, scale, base }) do
+		if type(value) ~= "number" then return end
+	end
+	if scale <= 0 or base <= 0 or width <= 0 then return end
+	spot = spot or {}
+	spot.left, spot.top, spot.width, spot.height, spot.scale = left, top, width, height, scale / base
+end
+
+-- Nothing to hold the row: the game's frame not shown (your composition is drawn on it), the interface itself shown.
+local function Stray(player)
+	if Clean(Safe(player.IsVisible, player)) then return false end
+	return Clean(Safe(UIParent.IsVisible, UIParent)) and true or false
+end
+
+local function Hold()
+	holder:ClearAllPoints()
+	if spot then
+		-- (its measure the frame's own: the place read is used as it is)
+		holder:SetScale(spot.scale)
+		holder:SetSize(spot.width, spot.height)
+		holder:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", spot.left, spot.top)
+	else
+		holder:SetScale(1)
+		holder:SetSize(DEFAULT_SPOT.width, DEFAULT_SPOT.height)
+		holder:SetPoint("TOPLEFT", UIParent, "TOPLEFT", DEFAULT_SPOT.x, DEFAULT_SPOT.y)
+	end
+end
+
+-- The left of your portrait in the game's frame (read even hidden), else the game's own.
+local function PortraitX(player)
+	local portrait = ns.UnitFramePortrait and ns.UnitFramePortrait(player)
+	if portrait then
+		local left, frameLeft = Clean(Safe(portrait.GetLeft, portrait)), Clean(Safe(player.GetLeft, player))
+		if type(left) == "number" and type(frameLeft) == "number" then return left - frameLeft end
+	end
+	return 24
+end
+
 local function Place()
 	if not row then return end
 	local block = ns.UnitFramesPlayerBlock
 	local player = _G.PlayerFrame
+	ReadSpot(player)
+	-- (moved from one home to the other out of a fight only: the game's frame is protected)
+	if not Clean(Safe(InCombatLockdown)) then
+		local home = Stray(player) and holder or player
+		if row:GetParent() ~= home then row:SetParent(home) end
+	end
 	row:ClearAllPoints()
+	if row:GetParent() == holder then
+		Hold()
+		row:SetPoint("TOPLEFT", holder, "BOTTOMLEFT", PortraitX(player), 0)
+		return
+	end
 	if block and block.portrait and ns.UnitFramesLines and ns.UnitFramesLines() then
 		local px = block.px or 1
 		local down = GAP + px + ((block.cast or 0) > 0 and block.cast + GAP + px or 0)
@@ -900,12 +975,7 @@ local function Place()
 		return
 	end
 	-- (the game's frame: below the lowest of its own pieces under it, at its portrait's left)
-	local portrait = ns.UnitFramePortrait and ns.UnitFramePortrait(player)
-	local x = 24
-	if portrait then
-		local left, frameLeft = Clean(Safe(portrait.GetLeft, portrait)), Clean(Safe(player.GetLeft, player))
-		if type(left) == "number" and type(frameLeft) == "number" then x = left - frameLeft end
-	end
+	local x = PortraitX(player)
 	-- (the game's cast bar locked under its frame in Edit Mode: its place kept even between two casts, the row
 	-- never jumping while you cast)
 	local cast = _G.PlayerCastingBarFrame

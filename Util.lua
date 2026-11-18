@@ -1262,9 +1262,32 @@ function Util.ItemClick(link)
 end
 
 -- A menu of the game's (MenuUtil) at a frame; false when the game has none. With a controller, a card of ours (Pad.lua).
-function Util.Menu(owner, build)
+-- followOwner: closed with its owner (a list whose window closes under its open menu; the controller's card always
+-- is); without it, the menu stays when its owner goes (a toast's, a pin's).
+local openMenu = {} -- the last menu opened here to follow its owner: menu, owner
+local menuHooked = setmetatable({}, { __mode = "k" }) -- owner -> true once its OnHide is watched
+local function CloseWithOwner(owner)
+	if openMenu.owner ~= owner then return end
+	local menu = openMenu.menu
+	openMenu.menu, openMenu.owner = nil, nil
+	if type(menu) ~= "table" or Util.IsSecret(menu) then return end
+	if not (menu.IsShown and Util.Clean(Util.Safe(menu.IsShown, menu))) then return end
+	-- (the game's frame given to another menu meanwhile: never closed for ours)
+	local region = menu.GetOwnerRegion and Util.Safe(menu.GetOwnerRegion, menu)
+	if region ~= nil and region ~= owner then return end
+	if menu.Close then pcall(menu.Close, menu) else pcall(menu.Hide, menu) end
+end
+function Util.Menu(owner, build, followOwner)
 	if ns.Pad and ns.Pad.On() then return ns.Pad.Menu(owner, build) end
 	if not (MenuUtil and MenuUtil.CreateContextMenu) then return false end
-	MenuUtil.CreateContextMenu(owner, build)
+	local menu = MenuUtil.CreateContextMenu(owner, build)
+	openMenu.menu, openMenu.owner = nil, nil
+	if followOwner and type(owner) == "table" and type(menu) == "table" then
+		openMenu.menu, openMenu.owner = menu, owner
+		if not menuHooked[owner] and owner.HookScript then
+			menuHooked[owner] = true
+			owner:HookScript("OnHide", CloseWithOwner)
+		end
+	end
 	return true
 end

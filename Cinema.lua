@@ -21,8 +21,9 @@ local FADE_OUT_TIME, FADE_IN_TIME = 1.8, 0.45
 
 -- Frames of the default interface that may fade. Missing ones are skipped.
 local FADED_FRAMES = {
-	-- Portraits
-	"PlayerFrame", "PetFrame", "TargetFrame", "FocusFrame",
+	-- Portraits (and the class assistant's row where your portrait is, the game's frame hidden by another addon:
+	-- faded with your portrait, ClassAssist.lua)
+	"PlayerFrame", "WandererClassAssistHolder", "PetFrame", "TargetFrame", "FocusFrame",
 	-- Action bars
 	"MainActionBar", "MainMenuBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBarRight", "MultiBarLeft",
 	"MultiBar5", "MultiBar6", "MultiBar7", "StanceBar", "PetActionBar", "PossessActionBar",
@@ -167,7 +168,7 @@ end
 -- Applies the fade level to every managed frame, keeping their own alpha.
 local function ApplyLevel()
 	for _, target in ipairs(managedList) do
-		local wanted = target == _G.PlayerFrame and playerLevel or level
+		local wanted = (target == _G.PlayerFrame or target == _G.WandererClassAssistHolder) and playerLevel or level
 		if sceneOnly[target] then wanted = ns.sceneActive and level or 1 end
 		if wanted < 1 and not IsKept(target) then
 			if not baseAlpha[target] then baseAlpha[target] = target:GetAlpha() end
