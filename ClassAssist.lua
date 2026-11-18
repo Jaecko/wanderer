@@ -120,10 +120,11 @@ local function SpellIcon(id)
 	return Clean(Safe(get, id))
 end
 local function KnownSpell(id)
-	for _, check in ipairs({ _G.IsPlayerSpell, _G.IsSpellKnown, C_SpellBook and C_SpellBook.IsSpellKnown }) do
-		if type(check) == "function" and Clean(Safe(check, id)) then return true end
-	end
-	return false
+	-- (the three checks named, no list made per call: read for every rank every second)
+	local spellBook = C_SpellBook and C_SpellBook.IsSpellKnown
+	if type(_G.IsPlayerSpell) == "function" and Clean(Safe(_G.IsPlayerSpell, id)) then return true end
+	if type(_G.IsSpellKnown) == "function" and Clean(Safe(_G.IsSpellKnown, id)) then return true end
+	return type(spellBook) == "function" and Clean(Safe(spellBook, id)) and true or false
 end
 -- The highest rank of a list you know, or nil.
 local function Known(list)
@@ -157,6 +158,7 @@ end
 local instances = {} -- family -> its aura's instance id, kept through a fight
 local icons = {} -- family -> its aura's icon, last seen
 local pending = {} -- family -> when you cast it last (an unreadable aura added then is that one)
+local lengths = {} -- family -> its full time when last read (0: lasts until removed), for its hidden times
 
 -- Your helpful auras as read now: family -> { spell, instance, icon, expires, duration, count, name }, and whether
 -- the reading was whole (false: the game hides them now).
@@ -375,13 +377,18 @@ local function Ammo()
 end
 
 -- A totem slot (1 fire, 2 earth, 3 water, 4 air): present (nil: hidden and never seen), name, start, length,
--- icon (each maybe hidden: passed on as they come).
+-- icon (each maybe hidden: passed on as they come), and the game's own answer when it is hidden (the icon's
+-- alpha takes it: a totem destroyed or replaced in a fight leaves, one put down in it comes).
 local totemSeen = {}
+local row, pool -- our frame under your portrait, its icons (made in Build below)
+local function BoolAlpha() return pool and pool[1] and type(pool[1].SetAlphaFromBoolean) == "function" or false end
 local function Totem(slot)
 	if not _G.GetTotemInfo then return nil end
 	local have, name, start, length, icon = Safe(_G.GetTotemInfo, slot)
 	if IsSecret(have) then
-		return totemSeen[slot], name, start, length, icon
+		local present = totemSeen[slot]
+		if BoolAlpha() then present = true end
+		return present, name, start, length, icon, have
 	end
 	totemSeen[slot] = have and true or false
 	return have and true or false, name, start, length, icon
@@ -401,7 +408,8 @@ local function Mood()
 	if not Clean(hunterPet) then return nil end
 	local api = (_G.C_PetInfo and _G.C_PetInfo.GetPetHappiness) or _G.GetPetHappiness
 	local level = Clean(Safe(api))
-	return type(level) == "number" and level or nil
+	-- (only the three moods drawn: any other answer, none)
+	return (level == 1 or level == 2 or level == 3) and level or nil
 end
 
 -- What each class shows ------------------------------------------------------------------------------------------
@@ -428,8 +436,12 @@ local function AuraItem(list, fight, found, family, opts)
 	local info = found[family]
 	local known = Known(ids)
 	if info then
-		local left, soon = Left(info.expires), SoonFor(info.duration)
-		local ending = left ~= nil and left < soon
+		-- (its threshold from its full time, as read now or last; hidden and never read, or lasting until removed
+		-- like an aura or an aspect: none, its edge never guessed)
+		if type(info.duration) == "number" then lengths[family] = info.duration end
+		local length = lengths[family]
+		local left, soon = Left(info.expires), type(length) == "number" and length > 0 and SoonFor(length) or nil
+		local ending = left ~= nil and soon ~= nil and left < soon
 		if fight and not opts.fight then return end
 		if not fight and not (opts.ending and ending) then return end
 		Add(list, { key = family, icon = info.icon or icons[family] or SpellIcon(info.spell or known or ids[1]),
@@ -538,10 +550,10 @@ end
 CLASSES.SHAMAN = function(list, fight, found)
 	if fight then
 		for slot = 1, 4 do
-			local have, name, start, length, icon = Totem(slot)
+			local have, name, start, length, icon, hidden = Totem(slot)
 			if have then
 				Add(list, { key = "totem" .. slot, icon = icon, state = "ok", title = name, totem = slot, element = ELEMENTS[slot],
-					start = start, length = length })
+					start = start, length = length, present = hidden })
 			end
 		end
 	end
@@ -599,7 +611,6 @@ ns.ClassAssistItems = Collect -- (tests, the dump)
 
 -- The row ---------------------------------------------------------------------------------------------------------
 
-local row, pool -- our frame under your portrait, its icons
 local third -- a druid's mana in forms
 local sparkFrame -- the spark on your power bar
 local petIcon -- a hunter's pet mood
@@ -645,7 +656,10 @@ local function Edges(frame)
 	end
 	function frame.Tint(r, g, b, a)
 		for _, edge in ipairs(frame.edges) do pcall(edge.SetVertexColor, edge, r, g, b, a or 1) end
-		frame.tint = { r, g, b, a }
+		-- (kept in one table: drawn again every second)
+		local tint = frame.tint or {}
+		tint[1], tint[2], tint[3], tint[4] = r, g, b, a
+		frame.tint = tint
 	end
 end
 
@@ -798,7 +812,14 @@ local function Draw(icon, item, size, px)
 	icon.count:ClearAllPoints()
 	icon.count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
 	local count = item.count
-	if IsSecret(count) or (type(count) == "number" and (count > 1 or item.items or (item.charges and count > 0))) then
+	-- (charges hidden in a fight: the game's own words for them by the aura's instance, empty at none)
+	local display = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
+	if (count == nil or IsSecret(count)) and item.charges and item.instance and display then
+		local words = Safe(display, item.unit or "player", item.instance, 1)
+		if IsSecret(words) or type(words) == "string" then count = words end
+	end
+	if IsSecret(count) or (type(count) == "string" and count ~= "")
+		or (type(count) == "number" and (count > 1 or item.items or (item.charges and count > 0))) then
 		pcall(icon.count.SetText, icon.count, count)
 		icon.count:Show()
 	else
@@ -813,6 +834,10 @@ local function Draw(icon, item, size, px)
 	end
 	-- (an aura's hidden time: its ending edge from the game's curve)
 	if item.state == "ok" and not item.element and item.soon and Clean(item.expires) == nil then CurveTint(icon, item.soon) end
+	-- (a totem's presence hidden: the game's answer as the icon's alpha, never read)
+	if not (IsSecret(item.present) and icon.SetAlphaFromBoolean and pcall(icon.SetAlphaFromBoolean, icon, item.present, 1, 0)) then
+		icon:SetAlpha(1)
+	end
 	icon:Show()
 end
 
@@ -852,10 +877,10 @@ end
 
 -- Where the row goes: under your composition (Ink lines: below the cast's place, from the portrait's outer
 -- edge), else under the game's frame.
-local function Lowest(candidates)
+local function Lowest(candidates, always)
 	local lowest, bottom
 	for _, frame in ipairs(candidates) do
-		if type(frame) == "table" and not IsSecret(frame) and Clean(Safe(frame.IsShown, frame)) then
+		if type(frame) == "table" and not IsSecret(frame) and (frame == always or Clean(Safe(frame.IsShown, frame))) then
 			local at = Clean(Safe(frame.GetBottom, frame))
 			if type(at) == "number" and (not bottom or at < bottom) then lowest, bottom = frame, at end
 		end
@@ -881,7 +906,13 @@ local function Place()
 		local left, frameLeft = Clean(Safe(portrait.GetLeft, portrait)), Clean(Safe(player.GetLeft, player))
 		if type(left) == "number" and type(frameLeft) == "number" then x = left - frameLeft end
 	end
-	local under = Lowest({ _G.TotemFrame, _G.ComboPointPlayerFrame, rawget(player, "classPowerBar") })
+	-- (the game's cast bar locked under its frame in Edit Mode: its place kept even between two casts, the row
+	-- never jumping while you cast)
+	local cast = _G.PlayerCastingBarFrame
+	local attached = type(cast) == "table" and not IsSecret(cast) and (Clean(rawget(cast, "attachedToPlayerFrame"))
+		or Clean(Safe(cast.IsAttachedToPlayerFrame, cast))) and cast or nil
+	local candidates = { attached or false, _G.TotemFrame or false, _G.ComboPointPlayerFrame or false, rawget(player, "classPowerBar") or false }
+	local under = Lowest(candidates, attached)
 	if under then
 		row:SetPoint("TOP", under, "BOTTOM", 0, -GAP)
 		row:SetPoint("LEFT", player, "LEFT", x, 0)
@@ -890,11 +921,13 @@ local function Place()
 	end
 end
 
--- The game's Edit Mode open, a vehicle: nothing of ours shown.
+-- The game's Edit Mode open, a vehicle, you dead: nothing of ours shown.
 local function Hidden()
 	local edit = _G.EditModeManagerFrame
 	if type(edit) == "table" and Clean(Safe(edit.IsShown, edit)) then return true end
 	if Clean(Safe(_G.UnitHasVehicleUI, "player")) then return true end
+	-- (dead or a ghost: every buff gone with you, nothing to tell until you are back)
+	if Clean(Safe(_G.UnitIsDeadOrGhost, "player")) then return true end
 	return false
 end
 
@@ -970,7 +1003,10 @@ local function PlaceThird()
 		end
 	else
 		local bar = PowerBar()
-		if not bar then
+		-- (the game's frame already showing your mana in this form: one bar, not two)
+		local own = _G.AlternatePowerBar or _G.PlayerFrameAlternateManaBar
+		local gameShows = type(own) == "table" and not IsSecret(own) and Clean(Safe(own.IsShown, own))
+		if not bar or gameShows then
 			third:Hide()
 			return
 		end
@@ -1080,6 +1116,12 @@ local function MoveSpark()
 		return
 	end
 	local height = rawget(bar, "wandererHeight") or Clean(Safe(bar.GetHeight, bar)) or 8
+	-- (our frame on its bar: a frame placed nowhere draws nothing; set again only when the bar changed)
+	if sparkFrame.on ~= bar then
+		sparkFrame.on = bar
+		sparkFrame:ClearAllPoints()
+		sparkFrame:SetAllPoints(bar)
+	end
 	sparkFrame:SetFrameLevel(Clean(Safe(bar.GetFrameLevel, bar)) and bar:GetFrameLevel() + 4 or 10)
 	sparkFrame.spark:ClearAllPoints()
 	sparkFrame.spark:SetPoint("CENTER", bar, "LEFT", math.floor(width * at + 0.5), 0)
@@ -1091,7 +1133,8 @@ local function SyncSpark()
 	if not sparkFrame then return end
 	if SparksOn() and not Hidden() and Class() ~= "WARRIOR" then
 		sparkFrame:Show()
-		sparkFrame:SetScript("OnUpdate", function() MoveSpark() end)
+		-- (one function, set once: SyncSpark runs every second)
+		if not sparkFrame:GetScript("OnUpdate") then sparkFrame:SetScript("OnUpdate", MoveSpark) end
 		MoveSpark()
 	else
 		sparkFrame:SetScript("OnUpdate", nil)
@@ -1142,6 +1185,21 @@ end
 
 -- Everything drawn again ----------------------------------------------------------------------------------------
 
+-- The third bar wanted now and the room your composition made for it differ (out of a vehicle, Edit Mode or
+-- death, which no restyle of the frames follows): your composition arranged again, once per change.
+local asked
+local function AskRoom()
+	local block = ns.UnitFramesPlayerBlock
+	if not (block and block.lower and ns.UnitFramesLines and ns.UnitFramesLines() and ns.UnitFramesSoon) then return end
+	local wanted = ns.ClassAssistThird()
+	if wanted == (block.third or 0) then
+		asked = nil
+	elseif asked ~= wanted then
+		asked = wanted
+		ns.UnitFramesSoon()
+	end
+end
+
 local shown = {} -- the items drawn last (tests, the dump)
 ns.ClassAssistShown = function() return shown end
 
@@ -1160,6 +1218,7 @@ local function Update()
 	if not Build() then return end
 	Place()
 	PlaceThird()
+	AskRoom()
 	DrawMood()
 	SyncSpark()
 	wipe(shown)
@@ -1302,6 +1361,11 @@ local function Sample(lines, label)
 	for position, item in ipairs(list) do
 		Line(("shown %d: %s state=%s count=%s expires=%s"):format(position, item.key, item.state, Word(item.count), Word(item.expires)))
 	end
+	-- (the client's pieces the hidden readings lean on, and the game's own pieces under its frame)
+	local cast, alt = _G.PlayerCastingBarFrame, _G.AlternatePowerBar or _G.PlayerFrameAlternateManaBar
+	Line("apis: alphaFromBoolean=" .. tostring(BoolAlpha()) .. " displayCount=" .. type(C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount)
+		.. " castAttached=" .. Word(type(cast) == "table" and (rawget(cast, "attachedToPlayerFrame") or Safe(cast.IsAttachedToPlayerFrame, cast)) or nil)
+		.. " altManaShown=" .. Word(type(alt) == "table" and Safe(alt.IsShown, alt) or nil))
 	local bar, width = PowerBar()
 	Line("spark: bar=" .. tostring(bar ~= nil) .. " width=" .. Word(width) .. " at=" .. Word(SparkAt(now)) .. " third=" .. Word(ns.ClassAssistThird()))
 end
@@ -1331,7 +1395,8 @@ end
 local EVENTS = { "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "UNIT_AURA", "UNIT_INVENTORY_CHANGED",
 	"BAG_UPDATE_DELAYED", "PLAYER_TOTEM_UPDATE", "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "UNIT_PET", "UNIT_HAPPINESS",
 	"PET_UI_UPDATE", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "WEAPON_ENCHANT_CHANGED",
-	"PLAYER_EQUIPMENT_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE", "GROUP_ROSTER_UPDATE", "SPELLS_CHANGED" }
+	"PLAYER_EQUIPMENT_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE", "GROUP_ROSTER_UPDATE", "SPELLS_CHANGED",
+	"PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "EDIT_MODE_LAYOUTS_UPDATED" }
 
 function ns.InitClassAssist()
 	local frame = CreateFrame("Frame")

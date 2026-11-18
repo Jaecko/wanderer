@@ -1040,7 +1040,8 @@ function Pad.Menu(owner, build)
 	for _, entry in ipairs(rows) do
 		if not entry.disabled then shown[#shown + 1] = entry end
 	end
-	Skin.ActionCard(owner, { title = title, rows = shown })
+	-- (its list's window closed meanwhile: the menu goes with it)
+	Skin.ActionCard(owner, { title = title, rows = shown, followOwner = true })
 	return true
 end
 

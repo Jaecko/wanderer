@@ -2601,7 +2601,7 @@ end
 
 -- A small card of choices beside what asked for it (owner; at the cursor when spec.atCursor): a title, its
 -- rows ({ text, glyph, hint, onClick, role, right }: a click chooses and closes; run: onClick's other name, as
--- Skin.Card's rows had it), a muted line at its foot.
+-- Skin.Card's rows had it), a muted line at its foot; followOwner: gone as soon as its owner is (a controller's menu).
 -- One at a time; Skin.ActionCard(nil) closes it.
 local actionCard
 function Skin.ActionCard(owner, spec)
@@ -2616,11 +2616,19 @@ function Skin.ActionCard(owner, spec)
 		actionCard.title = Skin.Caps(actionCard, "", "kicker")
 		actionCard.foot = Skin.Text(actionCard, "GameTooltipTextSmall", "muted")
 		actionCard.rows = {}
+		-- (spec.followOwner: its owner gone, a list's window closed under a controller's menu, the card goes with it)
+		actionCard:HookScript("OnUpdate", function(self, elapsed)
+			if not self.followOwner then return end
+			self.ownerWait = (self.ownerWait or 0) - elapsed
+			if self.ownerWait > 0 then return end
+			self.ownerWait = 0.1
+			if self.owner and self.owner.IsVisible and not self.owner:IsVisible() then self:Hide() end
+		end)
 	end
 	local card, m = actionCard, Skin.Margin() + 6
 	local width = spec.width or 240
 	card:SetSize(width, 10)
-	card.owner = owner
+	card.owner, card.followOwner, card.ownerWait = owner, spec.followOwner and owner ~= nil or nil, 0.1
 	card.title:SetText(spec.title and U.Upper(spec.title) or "")
 	card.title:ClearAllPoints()
 	card.title:SetPoint("TOPLEFT", card, "TOPLEFT", m, -m)
